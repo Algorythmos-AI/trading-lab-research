@@ -77,6 +77,31 @@ wt.ops.publish                            POST /api/ingest            (productio
   `chart_grade`, `premarket_price`) draw the regime scale, the scorecard, the pick cards and the week strip; an
   edition without them still renders, with fewer pictures.
   It has no expected windows, so the watchdog never pages for it.
+  The page leads with the **Radar pipeline** card: one badge that says where the session's edition stands ("On
+  time", "Late by 3 h 7 min", "Built by hand", "Building now", "No session today"), a rail of seven stages (levels and
+  focus pick the session day before, build, edition stored, evidence kept and desk file, pre-open prices, card saved,
+  open) each with its state and time and a mark for now, the last 20 sessions with the on-time rate, the selection
+  funnel's counts for the session, and the four cloud routines with their ids.
+  - `src/lib/radar-pipeline.ts` is pure: one observation per session (times, a trigger, closed codes, counts) and the
+    clock give the rows, the badge and the strip, on the server, in the browser as the clock moves
+    (`src/components/client/radar-pipeline.tsx`, redrawn every 10 seconds from the server render's time) and in the
+    tests. Session days come from the exchange calendar and each stage's deadline from the feed watch's own row
+    (`feed-watch.ts`), so a holiday is "no session" and "on time" means stored by the radar row's deadline. The clock
+    times and the routine ids are in `src/lib/radar-pipeline-slots.ts`, outside the hash closures.
+  - `src/lib/radar-pipeline-run.ts` writes `ops/radar-pipeline.json` (the session in view and the 20 before it)
+    beside the 10-minute watchdog (`GET /api/cron/watchdog`, started like the edition-copy repair: never awaited by
+    the ticks, never throws, one `radar-pipeline.refresh` log line). Per session it reads the run beacons
+    (`loadRadarRun`), the first receipt time of the radar edition and of the options edition (from the paths of
+    `radar/copies/<date>/` and `options/copies/<date>/`), the desk file, the kept pre-market check, the ledger's
+    morning document and the funnel's document, and for the session in view the ingest's last radar refusal. Each run
+    looks again only at the session in view and the one before it (plus up to six sessions it does not hold yet or
+    has never read whole, so a first run fills in over a few ticks), and a time once seen is kept: the ledger's and
+    the options edition's documents are replaced later in the day. A session is "never stored" only after a look in
+    which every read worked. A stage nothing was seen for reads "no record"; a
+    session with no run beacon says "no build record". The page makes one read of that file and parses every field
+    on its own; with no file it draws the schedule alone.
+  - In fixture mode the summary is made in memory (`src/lib/radar-pipeline-fixture.ts`); the `radar-building`,
+    `radar-late`, `radar-hand`, `radar-refused` and `radar-holiday` flags bend the session in view.
 - **Options** (`/options`): the after-close options levels editions (support and resistance for the next session,
   close strength, expected move, optional recent daily bars for the level map, and the paper record of the probation
   entry rules), signed with key id `radar` and
@@ -201,8 +226,8 @@ wt.ops.publish                            POST /api/ingest            (productio
   again is a `duplicate`; a later `as_of` replaces (a stage's end replaces its start, also at the very same
   instant); an earlier one is `older` (409); one dated ahead of the clock is refused. Stages never order each other.
   `loadRadarRun(session)` in `src/lib/snapshot.ts` reads a session's stages, each checked against the schema again.
-  Display only: no page shows it yet, it has no feed row, and a refusal is logged but leaves no
-  `ops/ingest-rejects` record.
+  Display only: the Radar page's pipeline card draws it (above), it has no feed row, and a refusal is logged but
+  leaves no `ops/ingest-rejects` record.
 - **Economic calendar** (`stocksdelta/calendar`, schema `src/lib/calendar.schema.json`; `calendar.types.ts` is
   generated): the release dates the Calendar page shows, published once a week (Fri 21:30 New York) by the trading
   host's `econ-calendar` job (`src/wt/ops/econ_calendar.py`) through the same signed `POST /api/ingest`, never with

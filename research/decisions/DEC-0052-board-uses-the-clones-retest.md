@@ -287,3 +287,10 @@ text above is otherwise unchanged.
 Viewed before this note: the owner trade DEC-0052 names, entered on a side the board had re-armed after a failed break
 at the same level, and its result; that session's 2-minute bars and the board's recorded states; that session read by
 DEC-0052's rule as written; everything DEC-0052 lists as seen (DEC-0053, "What has already been seen").
+
+## Note on DEC-0065 (added 2026-11-19)
+
+DEC-0065, proposed on 2026-11-19, amends EXP-0035 before its run, once it is accepted. The session list becomes every
+session with a DEC-0044 server record from 2026-11-12 through 2027-01-29, the owner-trade session excluded. The old
+list ended at the release and held 2 sessions against a need for 10. The replay runs once, after the 2027-01-29
+session is sealed. Section 1 of this record is unchanged. The text above is otherwise unchanged.

@@ -2,7 +2,7 @@
 
 - **Decision:** DEC-0064.
 - **Trials:** HYP-0029 (`retest`), HYP-0030 (`rejection`) and HYP-0031 (`nearest`), each run again on the new feed
-  as a new trial. Family O goes from 47 to 50.
+  as a new trial. Family O goes from 48 to 51 (the 48 counts DEC-0065's proposed trial).
 - **Design only.** Nothing here is a result, and no session on the new feed existed when this was written.
 - **The report is written once,** when a trial reaches 30 trades and 20 sessions, by:
 

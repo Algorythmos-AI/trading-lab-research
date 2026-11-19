@@ -118,13 +118,17 @@ test("a live quote older than 30 seconds reads as stale", async ({ page }) => {
 
 test("the radar leads with the brief: the day, SPY's open, the session, your names, the week", async ({ page }) => {
   await page.goto("/radar");
-  // The update card leads: where the newest edition stands, the day's timeline, and the cloud jobs behind it.
-  await expect(page.getByRole("status", { name: /^Radar schedule: (Up to date|Building|Late)$/ })).toBeVisible();
-  await expect(page.getByRole("list", { name: /^The schedule for / }).getByRole("listitem")).toHaveCount(6);
+  // The pipeline card leads: where the session's edition stands, the seven stages of the morning's run, the last
+  // twenty sessions, the funnel's counts, and the cloud jobs behind it. The fixture is a clean run so far at whatever
+  // time this runs, so the badge is never a late or a failed one.
+  await expect(page.getByRole("status", { name: /^Radar pipeline: (On time|Building now|Waiting for the edition|Not due yet|No session today)$/ })).toBeVisible();
+  await expect(page.getByRole("list", { name: /^The Radar pipeline for / }).getByRole("listitem")).toHaveCount(7);
+  await expect(page.getByRole("img", { name: /^The last 20 sessions, oldest first: / })).toBeVisible();
+  await expect(page.getByRole("list", { name: "How many names each stage left" }).getByRole("listitem")).toHaveCount(3);
   const jobs = page.getByRole("list", { name: "The cloud jobs behind the Radar, in order" });
-  await expect(jobs.getByRole("listitem")).toHaveCount(3);
+  await expect(jobs.getByRole("listitem")).toHaveCount(4);
   await expect(jobs).toContainText("Radar build");
-  await expect(jobs).toContainText("trig_01B1TN3d4x7dZ3Wxad2LmYgb");
+  for (const id of ["trig_01PW2UvCBejb4UxCEB58PEVp", "trig_015qsK3nrRQgscNZh6strL4F", "trig_01B1TN3d4x7dZ3Wxad2LmYgb", "trig_01WyzH7k8xAUgj8RZsakUDW7"]) await expect(jobs).toContainText(id);
   await expect(page.getByRole("group", { name: /^The day: ((Normal|Careful|Event) day|Not fully checked)$/ })).toBeVisible();
   await expect(page.getByRole("img", { name: /^SPY close 778\.55, expected move ±5\.85\. Levels: PML 749\.60/ })).toBeVisible();
   await expect(page.getByRole("img", { name: /^The New York session on 2026-09-21: no entries 09:30 to 09:35/ })).toBeVisible();
@@ -143,6 +147,45 @@ test("the radar leads with the brief: the day, SPY's open, the session, your nam
   await expect(page.getByRole("heading", { name: "SUPPORT PLAYS", exact: true })).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
+});
+
+
+// The pipeline's states, each pinned at the fixture's frozen time (11:01 New York on Monday 2026-10-12), and a market
+// holiday. The badge never says "On time" for an edition that came late or that a person built.
+for (const [flag, badge, build] of [
+  ["frozen", "On time", "done"],
+  ["frozen.radar-late", "Late by 3 h 7 min", "done"],
+  ["frozen.radar-hand", "Built by hand", "done"],
+  ["frozen.radar-refused", "Edition refused", "done"],
+  ["frozen.radar-building", /^Radar pipeline: Late by /, "current"],
+] as const) {
+  test(`the radar pipeline under ${flag}`, async ({ page, context, baseURL }) => {
+    await context.addCookies([{ name: "fx", value: flag, url: baseURL! }]);
+    await page.goto("/radar");
+    await expect(page.getByRole("status", { name: typeof badge === "string" ? `Radar pipeline: ${badge}` : badge })).toBeVisible();
+    const stages = page.getByRole("list", { name: "The Radar pipeline for Mon 12 Oct" }).getByRole("listitem");
+    await expect(stages).toHaveCount(7);
+    await expect(stages.nth(1)).toHaveAttribute("data-rail-state", build);
+    await expect(stages.nth(2)).toHaveAttribute("data-rail-state", flag === "frozen.radar-refused" ? "failed" : flag === "frozen.radar-building" ? "late" : "done");
+  });
+}
+
+test("the radar pipeline on a market holiday says there is no session, and nothing is late", async ({ page, context, baseURL }) => {
+  await context.addCookies([{ name: "fx", value: "radar-holiday", url: baseURL! }]);
+  await page.goto("/radar");
+  const badge = page.getByRole("status", { name: "Radar pipeline: No session today" });
+  await expect(badge).toBeVisible();
+  await expect(badge).toContainText("Thanksgiving");
+  const stages = page.getByRole("list", { name: /^The Radar pipeline for / }).getByRole("listitem");
+  await expect(stages).toHaveCount(7);
+  await expect(page.locator('[data-rail-state="late"], [data-rail-state="failed"]')).toHaveCount(0);
+});
+
+test("with no stored documents the radar page still shows the pipeline's schedule", async ({ page, context, baseURL }) => {
+  await context.addCookies([{ name: "fx", value: "empty", url: baseURL! }]);
+  await page.goto("/radar");
+  await expect(page.getByRole("status", { name: /^Radar pipeline: (Schedule only|No session today)$/ })).toBeVisible();
+  await expect(page.getByRole("list", { name: /^The Radar pipeline for / }).getByRole("listitem")).toHaveCount(7);
 });
 
 test("today draws the session clock and the open paper position", async ({ page }) => {

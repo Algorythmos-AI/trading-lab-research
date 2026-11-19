@@ -5,12 +5,17 @@
 # written (DEC-0053, "What has already been seen"); the report says so beside its verdict.
 # Frozen with DEC-0053. Before the run a decision record may amend it, saying what was viewed; after the run a changed
 # value is a new experiment with new trials.
+# Amended by DEC-0065 (proposed 2026-11-19), before the run: a fixed session list through 2027-01-29 (the old list
+# ended at the release and held 2 sessions against a need for 10), and a secondary trial, HYP-0068, splitting the
+# removed ENTERs by how fast the break failed. Seen first, with no outcome: the group sizes on the five logged sessions
+# (DEC-0065, "What has already been seen").
 experiment: EXP-0036
 status: registered                   # DEC-0053 accepted on 2026-11-17; no results file until the run writes it once
 decision: DEC-0053
 family: O                            # the options desk's entry rules and their filters; total 38 (config/trial_registry.yaml)
 trials:                              # the difference is a minus b
   - {hypothesis: HYP-0061, trial: BOARD-FAILED-BREAK-LOCK, a: kept_by_lock, b: removed_by_lock, unit: enter, role: primary}
+  - {hypothesis: HYP-0068, trial: BOARD-LOCK-SLOW-FAILURE, a: removed_by_lock_slow_failure, b: kept_by_lock, unit: enter, role: secondary, seed: 20261168, too_few: {slow_removed_enters: 10, kept_enters: 20, sessions_on_the_list: 10}}   # DEC-0065
 
 engines:                             # each is replayed by the board's own code at its engine, never a re-implementation
   without_lock: "trade-state.ts at the commit that merged the board's pull request for DEC-0052 (eaa2ab52), engine label e-d6053c7fdd0a"
@@ -20,9 +25,11 @@ engines:                             # each is replayed by the board's own code 
 
 inputs:
   sessions: >-
-    EXP-0035's session list, extended to the last session before the release that ships DEC-0053 section 1, less the
-    session of the owner trade DEC-0052 names, which DEC-0053 names too: one session (its date is in the owner's PRIVATE notes, not here); the
-    list is written into README.md before the run
+    every session with a DEC-0044 server record from 2026-11-12 through 2027-01-29 (New York dates, half days
+    included), less the session of the owner trade DEC-0052 names, which DEC-0053 names too: one session (its date is
+    in the owner's PRIVATE notes, not here). Both engines run every session on the list, whichever engine production
+    ran that day. Run once, after the 2027-01-29 session is sealed; one states-only interim count of group sizes is
+    allowed on or after 2026-12-17 (DEC-0065 section 1). The list is written into README.md before the run
   names: "the focus names of each session's edition only (DEC-0051 section 5.1)"
   bars: "SIP 2-minute bars: EXP-0035's saved files and sha256s where they exist, the rest fetched once and saved with a sha256 per session before either engine runs"
   edition: "options/copies/: the edition each session's board read (the copy that was latest at 09:30 New York)"
@@ -34,6 +41,8 @@ groups:
   removed_by_lock: "ENTERs without the lock where, at that slot, the side with the lock reads plan_off with a failure time, or watch with a failure time after an ended lock on a break made inside it"
   removed_unseen: "ENTERs without the lock where the side with the lock reads GET READY with lockUnseen: counted apart, left out of the test"
   faults: "any other removal, and any ENTER only with the lock: expected 0; counted and reported"
+  removed_by_lock_slow_failure: "removed_by_lock ENTERs whose lock (the side's failedAt at that slot) was set by a slow failure: failedAt minus the brokeAt the side carried while it read plan_off with that failedAt is more than FAIL_WITHIN_BARS (3) two-minute bars (DEC-0065)"
+  by_half: "every removed ENTER is also labelled by its failing bar's end, by 13:00 or after: counts and shares reported beside the tests, not tested (DEC-0065)"
 
 outcome:                             # on the stock, from the card (DEC-0035, frozen there and in DEC-0051 section 8)
   entry: open_of_first_2min_bar_starting_at_or_after_the_enter_slot_evaluation_time

@@ -61,6 +61,11 @@ export const VARIANT_COOKIE = "fx";
  *   fill. With `chain-opra` and `quotes-script` the manage card shows its live value. Off by default.
  * - `journal-option-stop`: as `journal-option-lot`, but one contract bought at $17.00, so the fixture's sample bid
  *   ($12.11) is under its −25% stop ($12.75) and the card's premium stop fires (held-marks.ts). Off by default.
+ * - `radar-building`, `radar-late`, `radar-hand`, `radar-refused`: the Radar page's pipeline for the session in view
+ *   (radar-pipeline-fixture.ts): a build that has started and not ended; an edition stored 3 h 7 min behind by the
+ *   catch-up; the same started by a person; an edition the ingest refused. Without one, a clean run so far.
+ * - `radar-holiday`: the Radar page's pipeline is drawn for 10:00 New York on Thanksgiving 2026, a day the market is
+ *   shut. Off by default.
  */
 export const VARIANT_FLAGS = [
   "empty",
@@ -108,6 +113,11 @@ export const VARIANT_FLAGS = [
   "flow-range",
   "journal-option-lot",
   "journal-option-stop",
+  "radar-building",
+  "radar-late",
+  "radar-hand",
+  "radar-refused",
+  "radar-holiday",
 ] as const;
 export type VariantFlag = (typeof VARIANT_FLAGS)[number];
 

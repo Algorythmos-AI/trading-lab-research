@@ -79,7 +79,8 @@ on 32.
    2026-11-18 reconstruction, are not decided here.
 6. **A new experiment, EXP-0050.**
    - The clone's three trials (HYP-0029 `retest`, HYP-0030 `rejection`, HYP-0031 `nearest`) run again on SIP as
-     three new trials. Family O goes from 47 to **50**.
+     three new trials. Family O goes from 48 to **51**. The 48 is the 47 accepted trials plus the one DEC-0065
+     proposes (HYP-0068), counted here so that the family's total never decreases whichever record is accepted first.
    - **The cutover session** is the first session whose `armed` journal line names the stock feed as `sip`. The
      pull request that moves the clone adds that field.
    - EXP-0040 closes at the session before the cutover, with however many sessions it has. It cannot reach 20, so
