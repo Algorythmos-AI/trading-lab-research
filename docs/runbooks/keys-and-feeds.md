@@ -61,9 +61,9 @@ without fixing it. Read the records themselves for what they decide.
 | Paper runner B, signal bars (host, `paper-b`) | 1-minute bars | sip | `STOCK_FEED` in `runner_b.py` | DEC-0064 | DEC-0037 |
 | Paper runner B, latest quotes (host) | latest quote of the signal and trade names | sip | `STOCK_FEED` in `runner_b.py` | DEC-0064 | DEC-0024 |
 | Paper runner B, sigma (host) | 1-minute bars of the 14 prior sessions | sip | literal | none | none: set in code |
-| Options clone, stock minute bars (host, `paper-o`) | 1-minute bars of its names and SPY | iex | literal in `runner_o.py` | set in code, no record binds it | DEC-0031 |
+| Options clone, stock minute bars (host, `paper-o`) | 1-minute bars of its names and SPY, and the 04:00 to 09:30 pre-market range (read again after the open) | sip, the only value the runner accepts | `feeds.stock` in `config/options_clone.yaml` | DEC-0064 | DEC-0031 |
 | Options clone, levels (host) | daily bars | sip | literal | none | DEC-0033 |
-| Options clone, option quotes and chains (host) | option snapshots | indicative, or opra | `feeds.option` in `config/options_clone.yaml`; the file `var/options/switches/opra` selects opra | DEC-0030 section 4 | none |
+| Options clone, option quotes and chains (host) | option snapshots | opra | `feeds.option` in `config/options_clone.yaml` (the file `var/options/switches/opra` also selects opra and is no longer needed) | DEC-0064 | DEC-0030 section 4 |
 | Paper positions (host, `options-live`) | stock snapshots (last close) | iex | literal in `options/live.py` | none | none |
 | Paper positions, rules and hourly blocks (host) | daily and 30-minute bars | sip | literal | none | EXP-0023 |
 | Pipeline check (host) | daily bars; snapshots | sip; iex | literals in `pipeline_check.py` | none | none |
