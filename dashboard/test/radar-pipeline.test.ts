@@ -59,6 +59,7 @@ function clean(over: Partial<SessionObs> = {}): SessionObs {
     preopen_at: "2026-11-19T13:52:00.000Z",
     card_at: "2026-11-19T14:12:00.000Z",
     funnel: null,
+    complete: true,
     ...over,
   };
 }
@@ -339,7 +340,7 @@ describe("reading what the store holds", () => {
     expect(Object.keys(s.beacons)).toEqual(["build"]);
     expect(s).not.toHaveProperty("note");
     expect(s.funnel?.focus?.kept).toBe(4);
-    expect(f.sessions[0]).toEqual(emptyObs(P));
+    expect(f.sessions[0]).toEqual({ ...emptyObs(P), complete: false });
     for (const bad of [null, "", "{", "[]", '{"v":2,"generated_at":"2026-11-19T15:00:00Z","sessions":[]}', '{"v":1,"sessions":[]}', '{"v":1,"generated_at":"x","sessions":[]}']) expect(parsePipelineFile(bad)).toBeNull();
     expect(parsePipelineFile(serializePipelineFile(f))).toEqual(f);
   });
@@ -420,7 +421,8 @@ describe("the summary the cron writes", () => {
     expect(await refreshRadarPipeline(m.deps)).toBe("written");
     const f = m.file();
     expect(f.generated_at).toBe("2026-11-19T14:20:00.000Z");
-    expect(f.sessions).toHaveLength(21);
+    // A first run reads the session in view, the one before it and the six newest of the rest.
+    expect(f.sessions).toHaveLength(8);
     const s = f.sessions.at(-1)!;
     expect(s).toMatchObject({
       session: S,
@@ -436,7 +438,7 @@ describe("the summary the cron writes", () => {
     expect(s.funnel?.focus).toMatchObject({ judged: 12, kept: 4 });
     // Nothing of any document's content is carried: only the fields the summary names.
     expect(m.docs.get(RADAR_PIPELINE_PATH)).not.toContain("ZZZZ");
-    expect(m.state.logs.at(-1)).toMatchObject({ outcome: "written", sessions: 21, looked: 21, failed_reads: 0 });
+    expect(m.state.logs.at(-1)).toMatchObject({ outcome: "written", sessions: 8, looked: 8, failed_reads: 0 });
     // The refusal is asked about for the session in view only.
     expect(m.calls.refusal).toBe(1);
   });
@@ -445,7 +447,8 @@ describe("the summary the cron writes", () => {
     const m = memory("2026-11-19T14:20:00Z");
     m.docs.set(`radar/copies/${S}/20261119T104400000Z-r1.json`, "{}");
     m.docs.set(`ledger/editions/${P}.json`, JSON.stringify({ session: P, as_of: "2026-11-19T14:12:00Z" }));
-    await refreshRadarPipeline(m.deps);
+    for (let i = 0; i < 4; i++) await refreshRadarPipeline(m.deps);
+    expect(m.file().sessions).toHaveLength(21);
     m.reset();
     // Later in the day the ledger's document is replaced by the after-close one: the morning's time must stay.
     m.state.now = t("2026-11-19T21:40:00Z");
@@ -501,11 +504,40 @@ describe("the summary the cron writes", () => {
     expect(m.state.logs.at(-1)).toMatchObject({ outcome: "written", failed_reads: 3 });
   });
 
+  it("a past session whose first look had a failed read is not said to have missed, and is read again until whole", async () => {
+    const m = memory("2026-11-19T14:20:00Z");
+    const old = "2026-11-16";
+    m.docs.set(`radar/copies/${old}/20261116T104400000Z-r1.json`, "{}");
+    m.broken.add(`radar/copies/${old}/`);
+    await refreshRadarPipeline(m.deps);
+    const first = m.file().sessions.find((s) => s.session === old)!;
+    expect(first).toMatchObject({ stored_at: null, complete: false });
+    expect(sessionMark(old, first, m.state.now)).toBe("no_record");
+    m.broken.clear();
+    await refreshRadarPipeline(m.deps);
+    const second = m.file().sessions.find((s) => s.session === old)!;
+    expect(second).toMatchObject({ stored_at: "2026-11-16T10:44:00.000Z", complete: true });
+    expect(sessionMark(old, second, m.state.now)).toBe("on_time");
+    // Whole now, it is not read a third time.
+    m.reset();
+    await refreshRadarPipeline(m.deps);
+    expect(m.calls.beacons).not.toContain(old);
+  });
+
+  it("with the listing of editions on file unreadable, no session is whole and none is said to have missed", async () => {
+    const m = memory("2026-11-19T14:20:00Z");
+    m.broken.add("radar/editions/");
+    await refreshRadarPipeline(m.deps);
+    const f = m.file();
+    expect(f.sessions.every((s) => !s.complete)).toBe(true);
+    expect(f.sessions.map((s) => sessionMark(s.session, s, m.state.now))).not.toContain("missed");
+  });
+
   it("an unreadable summary is started again; a failed write is an error that never rejects", async () => {
     const m = memory("2026-11-19T14:20:00Z");
     m.docs.set(RADAR_PIPELINE_PATH, "not json");
     expect(await refreshRadarPipeline(m.deps)).toBe("written");
-    expect(m.file().sessions).toHaveLength(21);
+    expect(m.file().sessions).toHaveLength(8);
     m.broken.add(`write:${RADAR_PIPELINE_PATH}`);
     expect(await refreshRadarPipeline(m.deps)).toBe("error");
     expect(m.state.logs.at(-1)).toMatchObject({ outcome: "error", error: "Error" });

@@ -35,6 +35,7 @@ function ran(session: string, trigger: Trigger, storedLateMin = 4): SessionObs {
       radar: { evidence: "present", kept_at: at(kept), judged: null, kept: 42, flagged: 0, replay: "not_run" },
       focus: { evidence: "present", kept_at: at(t.levels.scheduled + 8 * MIN), judged: 12, kept: 4, flagged: 2, replay: "match" },
     },
+    complete: true,
   };
 }
 

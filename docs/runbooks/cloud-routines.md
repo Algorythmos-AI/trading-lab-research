@@ -1,6 +1,6 @@
 # Cloud routines
 
-Nine scheduled Claude routines feed the dashboard, the release flow and the weekly report. They run in Claude's cloud, not on the host
+Ten scheduled Claude routines feed the dashboard, the release flow and the weekly report. They run in Claude's cloud, not on the host
 and not from this repository's code (except where noted), so `systemctl` and the deploy gate know nothing about them.
 Each posts into its own thread on claude.ai. Each replies only when something needs the owner; a normal run updates
 its status line and stays quiet.

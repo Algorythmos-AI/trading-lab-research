@@ -79,6 +79,11 @@ export interface SessionObs {
   /** The ledger's morning document was stamped. */
   card_at: string | null;
   funnel: FunnelObs | null;
+  /**
+   * Some look at the session read everything it asked for. False while every look so far had a read that failed: what
+   * is missing may then be there unseen, so the session is looked at again and is never said to have missed.
+   */
+  complete: boolean;
 }
 
 export interface PipelineFile {
@@ -89,7 +94,7 @@ export interface PipelineFile {
 }
 
 export function emptyObs(session: string): SessionObs {
-  return { session, levels_at: null, beacons: {}, stored_at: null, edition_on_file: false, refused_at: null, desk_at: null, preopen_at: null, card_at: null, funnel: null };
+  return { session, levels_at: null, beacons: {}, stored_at: null, edition_on_file: false, refused_at: null, desk_at: null, preopen_at: null, card_at: null, funnel: null, complete: true };
 }
 
 // ---- reading, defensively -------------------------------------------------------------------------------------------
@@ -212,6 +217,7 @@ function parseObs(v: unknown): SessionObs | null {
     preopen_at: iso(v.preopen_at),
     card_at: iso(v.card_at),
     funnel: funnel && (funnel.radar || funnel.focus) ? funnel : null,
+    complete: v.complete === true,
   };
 }
 
@@ -265,6 +271,7 @@ export function mergeObs(prev: SessionObs | null, next: SessionObs, read: { beac
     preopen_at: prev.preopen_at ?? next.preopen_at,
     card_at: prev.card_at ?? next.card_at,
     funnel: next.funnel ?? prev.funnel,
+    complete: prev.complete || next.complete,
   };
 }
 
@@ -531,8 +538,8 @@ export function pipelineStale(file: PipelineFile | null, nowMs: number): boolean
 // ---- the last sessions ----------------------------------------------------------------------------------------------
 
 /** on_time and late go by the receipt time against the deadline; by_hand whenever a person started the run; missed:
- * the deadline passed and no edition was ever stored; no_record: stored, receipt time unknown, or never read;
- * pending: the deadline has not passed. */
+ * the deadline passed and a look that read everything found no edition; no_record: stored with its receipt time
+ * unknown, never read, or not yet read whole; pending: the deadline has not passed. */
 export type SessionMark = "on_time" | "late" | "by_hand" | "missed" | "no_record" | "pending";
 
 export function sessionMark(session: string, obs: SessionObs | null, nowMs: number): SessionMark {
@@ -540,8 +547,8 @@ export function sessionMark(session: string, obs: SessionObs | null, nowMs: numb
   if (!obs) return nowMs <= t.deadline ? "pending" : "no_record";
   const stored = ms(obs.stored_at);
   if (stored !== null) return byHand(obs) ? "by_hand" : stored <= t.deadline ? "on_time" : "late";
-  if (obs.edition_on_file) return "no_record";
-  return nowMs <= t.deadline ? "pending" : "missed";
+  if (nowMs <= t.deadline) return obs.edition_on_file ? "no_record" : "pending";
+  return obs.edition_on_file || !obs.complete ? "no_record" : "missed";
 }
 
 export interface Reliability {

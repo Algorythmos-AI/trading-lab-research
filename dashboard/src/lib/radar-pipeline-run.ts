@@ -43,6 +43,8 @@ export const PIPELINE_BUDGET_MS = 20_000;
 export const PIPELINE_READ_MS = 4_000;
 /** How many sessions are read side by side. */
 const BATCH = 3;
+/** How many sessions beyond the one in view and the one before it a run looks at: a first run fills in over a few ticks. */
+export const PIPELINE_CATCH_UP = 6;
 
 export interface PipelineDeps {
   /** A stored document's text, or null when there is none. Throws when the store fails. */
@@ -121,8 +123,10 @@ export async function observeSession(
   previous: string,
   have: SessionObs | null,
   opts: { inView: boolean; editionDates: ReadonlySet<string> | null },
-  failed: { n: number } = { n: 0 },
+  total: { n: number } = { n: 0 },
 ): Promise<SessionObs> {
+  // This look's own failed reads: one of them, and the look is not a whole one.
+  const failed = { n: 0 };
   const doc = async (path: string) => {
     const r = await attempt(() => deps.read(path), failed);
     return r.ok ? json(r.value) : null;
@@ -162,6 +166,9 @@ export async function observeSession(
     const t = Date.parse(refusal.value.at);
     if (Number.isFinite(t) && nyNow(new Date(t)).day === session) next.refused_at = new Date(t).toISOString();
   }
+  // Without the listing of the editions on file, "none on file" is not known either.
+  next.complete = failed.n === 0 && opts.editionDates !== null;
+  total.n += failed.n;
   return mergeObs(have, next, { beacons: beacons.ok, refusal: refusal === null ? false : refusal.ok });
 }
 
@@ -173,7 +180,9 @@ async function refreshOnce(deps: PipelineDeps): Promise<{ outcome: PipelineOutco
   const failed = { n: 0 };
   const prevText = await attempt(() => deps.read(RADAR_PIPELINE_PATH), failed);
   const prev = new Map((prevText.ok ? (parsePipelineFile(prevText.value)?.sessions ?? []) : []).map((s) => [s.session, s]));
-  const look = days.sessions.filter((s) => !prev.has(s) || s === days.focus || s === days.previous);
+  // The session in view and the one before it every time; then the newest of those not held, or never read whole.
+  const owed = days.sessions.filter((s) => s !== days.focus && s !== days.previous && prev.get(s)?.complete !== true).reverse();
+  const look = [...new Set([days.focus, days.previous, ...owed.slice(0, PIPELINE_CATCH_UP)])];
   // One listing says which sessions have an edition on file at all (radar/editions/<date>.json).
   const dated = await attempt(() => deps.list(RADAR_PATHS.history), failed);
   const editionDates = dated.ok ? new Set(dated.value.flatMap((p) => /(\d{4}-\d{2}-\d{2})\.json$/.exec(p)?.[1] ?? [])) : null;

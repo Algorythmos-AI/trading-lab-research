@@ -94,8 +94,10 @@ wt.ops.publish                            POST /api/ingest            (productio
     (`loadRadarRun`), the first receipt time of the radar edition and of the options edition (from the paths of
     `radar/copies/<date>/` and `options/copies/<date>/`), the desk file, the kept pre-market check, the ledger's
     morning document and the funnel's document, and for the session in view the ingest's last radar refusal. Each run
-    looks again only at the session in view and the one before it, and a time once seen is kept: the ledger's and the
-    options edition's documents are replaced later in the day. A stage nothing was seen for reads "no record"; a
+    looks again only at the session in view and the one before it (plus up to six sessions it does not hold yet or
+    has never read whole, so a first run fills in over a few ticks), and a time once seen is kept: the ledger's and
+    the options edition's documents are replaced later in the day. A session is "never stored" only after a look in
+    which every read worked. A stage nothing was seen for reads "no record"; a
     session with no run beacon says "no build record". The page makes one read of that file and parses every field
     on its own; with no file it draws the schedule alone.
   - In fixture mode the summary is made in memory (`src/lib/radar-pipeline-fixture.ts`); the `radar-building`,
