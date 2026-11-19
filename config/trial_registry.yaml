@@ -34,6 +34,7 @@ families:
     - {decision: DEC-0054, total: 41, status: accepted}   # EXP-0037: HYP-0062 to HYP-0064, three clone rule gaps each replayed against the frozen clone, blind forward
     - {decision: DEC-0056, total: 44, status: accepted}   # EXP-0039: the clone's three trials again without the open-interest floor
     - {decision: DEC-0058, total: 47, status: accepted}   # EXP-0040: the clone's three trials again with QQQ a standing name
+    - {decision: DEC-0065, total: 48, status: proposed}   # EXP-0036: HYP-0068 BOARD-LOCK-SLOW-FAILURE, the lock's removals split by how fast the break failed (secondary)
   M:                                                      # the owner's own trades, labelled by the board (DEC-0045)
     - {decision: DEC-0045, total: 3, status: accepted}    # EXP-0031: HYP-0048 OWN-ONPLAN, HYP-0049 OWN-CAUTION, HYP-0050 OWN-EARLY
     - {decision: DEC-0050, total: 6, status: accepted}    # EXP-0033: the three asked again on SIP bars (HYP-0056 to HYP-0058)
