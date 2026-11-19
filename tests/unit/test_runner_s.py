@@ -574,3 +574,44 @@ def test_production_refuses_when_the_two_accounts_are_one(env, monkeypatch):
     with pytest.raises(SystemExit, match="this is sleeve Q's account"):
         runner_s.run(DAY, environ={"APCA_S_KEY_ID": "PKS", "APCA_S_SECRET_KEY": "x", "APCA_API_KEY_ID": "PKQ",
                                    "APCA_API_SECRET_KEY": "y"}, now_fn=lambda: at(9, 0), sleep_fn=lambda s: None)
+
+
+# ---- parity with the batch simulation (DEC-0066 section 5, item 3, the CI half) -----------------------------------------
+def simulated(after: list[tuple]):
+    """The registered batch path on the same day: the detector, then wt.backtest.engine.simulate with the reversal
+    exit, sized from the same US$600 book. Returns the Trade, or None when the simulation takes no trade."""
+    from wt.backtest.engine import Costs, simulate
+    from wt.backtest.management import REGISTRY
+    from wt.live import setups_live as sl
+    from wt.signals.spec_setups import reversal_long
+
+    bars = minute_bars(day_rows(after))
+    prev = minute_bars(flat(390, 50.0, v=2_000, spread=0.05), day=str(PREV))
+    ctx = sl.rev_context(prev, [390 * 2_000.0], np.linspace(1 / 390, 1.0, 390))
+    sig = reversal_long(bars, ctx, start=66)                           # the name joined the universe at 10:35
+    assert sig is not None
+    costs = Costs(slippage_per_share=max(0.01, 0.02 / 2))              # the tape's spread is two cents
+    return simulate(bars, sig, REGISTRY["REV5"](), costs, "ABC", str(DAY), risk_dollars=6.0, cash=600.0,
+                    max_notional=600.0, flatten_idx=380)               # 15:50: ten minutes before the close
+
+
+@pytest.mark.parametrize("name, after", [("target", TO_TARGET), ("stop", STOPPED), ("stagnation", STALLED),
+                                         ("held to the close", HOLDS)])
+def test_the_runner_and_the_batch_simulation_take_the_same_trade(env, name, after):
+    sim = simulated(after)
+    b = session(tape_of({"ABC": day_rows(after)}))
+    j = journal(env)
+    placed, closed = one(j, "entry_placed"), one(j, "trade_closed")
+    entry_fill = b.fills[0]
+    assert entry_fill.t == pd.Timestamp(sim.entry_time)                 # the same entry bar
+    assert entry_fill.price == pytest.approx(sim.entry, abs=1e-9)       # the same entry, to the cent
+    assert placed["stop"] == pytest.approx(sim.stop0, abs=1e-9)         # the same stop
+    assert entry_fill.qty == sim.qty                                    # the same size from the same book
+    assert closed["reason"] == sim.exits[-1][3]                         # the same exit reason
+    assert len(sim.exits) == 1                                          # one exit: the whole position at once
+
+
+def test_where_the_simulation_takes_no_trade_the_runner_has_no_fill(env):
+    assert simulated(GAPPED) is None                                   # opened over the collar
+    b = session(tape_of({"ABC": day_rows(GAPPED)}))
+    assert [f for f in b.fills] == [] and not events(journal(env), "trade_closed")
