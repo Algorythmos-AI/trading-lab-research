@@ -98,6 +98,22 @@ from web research and the Stocklake connector, which was not available to the ne
 | `trig_01PW2UvCBejb4UxCEB58PEVp` (build) | `705cebe0810b87cafa55e30811293773502d2f761c38f602d628606ca23e24b0` |
 | `trig_015qsK3nrRQgscNZh6strL4F` (catch-up) | `e968d0fa141ff8b7f4f0448fb8de073c527f364fcb3fdd79c648e9a5c5c304ac` |
 
+**2026-11-19, 11:45 UTC, after the build for session 2026-11-19 and before the one for 2026-11-20. The news rule
+is tightened (prompt v4).** The first build under the news read ran both reads (about 150 market items, 30 symbol
+items). Two feed leads reached the edition. Neither was confirmed at its source, and one of them was the reason a
+name left a list and went on the avoid list. Both were printed as NOT VERIFIED. At the owner's instruction:
+
+- A lead not confirmed at its source may no longer add, remove or move a name on a list or the avoid list, or change
+  a ranking. It may appear only in the research notes, marked NOT VERIFIED.
+- Each run prints the count line of both reads, and the report carries one line with the counts and which leads were
+  and were not confirmed.
+- Session 2026-11-19 is the only one built under the looser v3 wording.
+
+| Routine | Prompt sha256 from this change |
+|---|---|
+| `trig_01PW2UvCBejb4UxCEB58PEVp` (build) | `fd70b4358e7f7e792daa78a6072dc6cec166d1f7333ff82bcb47d083ea492171` |
+| `trig_015qsK3nrRQgscNZh6strL4F` (catch-up) | `4720e66409a8484ba9b8f66bb647cbb42d591d54e0115d69849a58756afee905` |
+
 ## Results
 
 None. Written once, by the read.
