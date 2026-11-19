@@ -613,3 +613,32 @@ def test_where_the_simulation_takes_no_trade_the_runner_has_no_fill(env):
     assert simulated(GAPPED) is None                                   # opened over the collar
     b = session(tape_of({"ABC": day_rows(GAPPED)}))
     assert [f for f in b.fills] == [] and not events(journal(env), "trade_closed")
+
+
+# ---- order ids ----------------------------------------------------------------------------------------------------------
+def test_a_second_attempt_in_the_same_name_sends_its_own_order_ids(env):
+    # A book with enough settled cash for two trades in a day (the US$600 book has not, which is why no replay had
+    # reached a second attempt). 10:50 fills and stops out; a second signal forms when the 12:59 bar closes.
+    va = runner_s.SleeveAccount(settled_cash=5_000.0)
+    va.save(runner_s.VA_PATH)
+    rows = STOPPED + [(40.62, 40.64, 40.60, 40.62, 20_000)] * 108 + second_flush(40.62)
+    b = session(tape_of({"ABC": day_rows(rows)}))
+    j = journal(env)
+    placed = events(j, "entry_placed")
+    assert [p["attempt"] for p in placed] == [1, 2] and not events(j, "entry_not_placed")
+    assert len(b.placed) == len(set(b.placed))                         # the broker saw no id twice
+    entries = [c for c in b.placed if b.orders[c].side == "buy"]
+    assert len(entries) == 2
+    flat_and_clean(b)
+
+
+def test_each_plan_takes_its_order_ids_from_its_own_block():
+    from wt.core.ids import coid
+    assert runner_s.plan_seq(1) != runner_s.plan_seq(2) and runner_s.plan_seq(0) == 0
+    first = coid("2026-11-20", "S", "ABC", "entry", runner_s.plan_seq(1))
+    second = coid("2026-11-20", "S", "ABC", "entry", runner_s.plan_seq(2))
+    assert first != second
+    from wt.oms.manager import TradePlan
+    p = TradePlan(date="2026-11-20", strategy="S", symbol="ABC", qty=1, trigger=1.0, limit=1.1, stop=0.9, target=1.2,
+                  attempt=2, seq=runner_s.plan_seq(2) + 7)
+    assert runner_s.orders_sent(p) == 7                                # the day's order count ignores the block

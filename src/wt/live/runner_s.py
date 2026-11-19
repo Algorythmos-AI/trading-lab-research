@@ -79,6 +79,7 @@ FALLBACK_STOP_PCT = 1.0         # protective stop for a position no plan account
 HELD_EXIT_RETRY_S = 300         # an adopted position that failed to exit is retried at most every 5 minutes
 ARM_LEAD = dt.timedelta(hours=3, minutes=15)
 ENTRY_CUTOFF_MIN = 30           # no new entry in the last half hour before the close
+SEQ_BLOCK = 1000                # each plan's order ids come from its own block of sequence numbers (see plan_seq)
 BAR_PAGES = 20
 CONNECT_TRIES, CONNECT_WAIT_S = 5, 15.0
 
@@ -309,6 +310,19 @@ class Store:
         return out
 
 
+def plan_seq(attempt: int) -> int:
+    """Where a new plan's order sequence starts. An order id is made from the date, the strategy, the symbol, the
+    leg and the sequence number (wt.core.ids), and a new plan would otherwise start at 0 like the one before it: a
+    second attempt in the same name on the same day would send the first attempt's entry id again, and the broker
+    refuses a repeated id. Found on 2026-11-20 by the order smoke test on the paper account."""
+    return max(int(attempt), 0) * SEQ_BLOCK
+
+
+def orders_sent(p: TradePlan) -> int:
+    """How many orders a plan has sent: its sequence number without the block it started from."""
+    return p.seq % SEQ_BLOCK
+
+
 def staged_note(s: sl.Staged) -> list[Any]:
     return ["staged", s.signal_t.isoformat(), s.expires_at.isoformat(), s.attempt, s.spread, s.target]
 
@@ -481,7 +495,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
     store = Store()
     plans = store.load_all()
     today = [p for p in plans if p.date == day.isoformat()]
-    orders_before = sum(p.seq for p in today)
+    orders_before = sum(orders_sent(p) for p in today)
     plan: TradePlan | None = next((p for p in today if p.active and p.origin == "entry"), None)
     staged: sl.Staged | None = staged_of(plan) if plan is not None else None
     held: list[TradePlan] = [p for p in plans if p.active and p is not plan]     # earlier days, and orphans
@@ -496,7 +510,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                        open_orders=broker.open_orders(), kill=KILL.exists(), latched=va.latched,
                        session_open=open_dt, session_close=close_dt,
                        entries_today=va.trades_by_day.get(day.isoformat(), 0),
-                       orders_today=orders_before + sum(p.seq for p in made))
+                       orders_today=orders_before + sum(orders_sent(p) for p in made))
 
     def on_entry(p: TradePlan) -> None:
         nonlocal account_unsaved
@@ -572,8 +586,8 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         n = sum(1 for p in plans + made if p.origin == "orphan" and p.date == day.isoformat())
         stop = round(avg * (1 - FALLBACK_STOP_PCT / 100), 2)
         o = TradePlan(date=day.isoformat(), strategy=STRATEGY, symbol=sym, qty=qty, trigger=avg, limit=avg, stop=stop,
-                      target=stop, attempt=n, filled_qty=qty, avg_entry=avg, state="in_position", entry_counted=True,
-                      origin="orphan")
+                      target=stop, attempt=n, seq=plan_seq(n), filled_qty=qty, avg_entry=avg, state="in_position",
+                      entry_counted=True, origin="orphan")
         made.append(o)
         store.save(o)
         try:
@@ -809,7 +823,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             log("signal_blocked", blockers=blockers, **row)
             return
         p = TradePlan(date=day.isoformat(), strategy=STRATEGY, symbol=sym, qty=qty, trigger=s.trigger, limit=s.limit,
-                      stop=s.stop, target=s.target, attempt=s.attempt)
+                      stop=s.stop, target=s.target, attempt=s.attempt, seq=plan_seq(s.attempt))
         p.log.append(staged_note(s))
         made.append(p)
         store.save(p)
