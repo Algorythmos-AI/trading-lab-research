@@ -64,9 +64,9 @@ without fixing it. Read the records themselves for what they decide.
 | Options clone, stock minute bars (host, `paper-o`) | 1-minute bars of its names and SPY, and the 04:00 to 09:30 pre-market range (read again after the open) | sip, the only value the runner accepts | `feeds.stock` in `config/options_clone.yaml` | DEC-0064 | DEC-0031 |
 | Options clone, levels (host) | daily bars | sip | literal | none | DEC-0033 |
 | Options clone, option quotes and chains (host) | option snapshots | opra | `feeds.option` in `config/options_clone.yaml` (the file `var/options/switches/opra` also selects opra and is no longer needed) | DEC-0064 | DEC-0030 section 4 |
-| Paper positions (host, `options-live`) | stock snapshots (last close) | iex | literal in `options/live.py` | none | none |
+| Paper positions (host, `options-live`) | stock snapshots (last close) | sip | literal in `options/live.py` | DEC-0064 | none |
 | Paper positions, rules and hourly blocks (host) | daily and 30-minute bars | sip | literal | none | EXP-0023 |
-| Pipeline check (host) | daily bars; snapshots | sip; iex | literals in `pipeline_check.py` | none | none |
+| Pipeline check (host) | daily bars; snapshots | sip; sip | literals in `pipeline_check.py` | DEC-0064 | none |
 | Pre-market routine (host, `routine`) | 1-minute bars, news | hybrid: sip to 16 minutes ago, iex after | `HybridFeed` names both; `--feed` overrides | DEC-0023 | none |
 | Forward test (host, `forward`) | daily and 1-minute bars | sip | `AlpacaREST.bars` default argument `feed="sip"` | DEC-0009 | none |
 | Selection bundles (`python -m wt.options.select_fetch`; no job runs it yet) | Stage 1: split-adjusted daily bars. Stage 2: raw daily bars, 1-minute bars, split-adjusted 5-minute bars, snapshots; corporate actions and news (counts only) take no feed | sip | literal in `select_fetch.py` | DEC-0046 | none |

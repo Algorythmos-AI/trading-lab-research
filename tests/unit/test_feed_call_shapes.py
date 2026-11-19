@@ -255,14 +255,14 @@ OWN_SESSIONS = {
         f"{P}/v2/options/contracts", f"{P}/v2/options/contracts"]),            # a range of expiries
     "src/wt/options/live.py": (live, _options_live_helper, [
         f"{P}/v2/positions", f"{P}/v2/clock",                                  # paper host, no params
-        f"{D}/v2/stocks/snapshots",                                            # closes (iex)
+        f"{D}/v2/stocks/snapshots",                                            # closes (sip)
         f"{D}/v2/stocks/bars", f"{D}/v2/stocks/bars",                          # daily bars, two pages (sip)
         f"{D}/v2/stocks/bars", f"{D}/v2/stocks/bars",                          # half-hour bars, two pages (sip)
         f"{P}/v2/options/contracts", f"{P}/v2/options/contracts"]),            # listings, two pages
     "src/wt/options/pipeline_check.py": (pipeline_check, _pipeline_check_helper, [
         f"{D}/v2/stocks/bars", f"{D}/v2/stocks/bars", f"{D}/v2/stocks/bars",   # bars: a blip, its retry, page 2 (sip)
         f"{P}/v2/options/contracts", f"{P}/v2/options/contracts",              # one listing per name
-        f"{D}/v2/stocks/snapshots"]),                                          # the snapshot (iex)
+        f"{D}/v2/stocks/snapshots"]),                                          # the snapshot (sip)
 }
 
 
@@ -304,3 +304,12 @@ def test_robot_b_reads_its_bars_and_quotes_from_the_consolidated_tape() -> None:
     _runner_b(sent)
     assert [p["feed"] for _, p in sent] == ["sip", "sip"] and runner_b.STOCK_FEED == "sip"
     assert [u.rsplit("/v2/stocks/", 1)[1] for u, _ in sent] == ["bars", "quotes/latest"]
+
+
+def test_paper_positions_and_the_pipeline_check_read_their_snapshots_from_the_consolidated_tape() -> None:
+    """DEC-0064 point 10: no stock request of either module names another feed than sip."""
+    for drive in (_options_live, _pipeline_check):
+        sent: Sent = []
+        drive(sent)
+        stock = [(u, p) for u, p in sent if "/v2/stocks/" in u]
+        assert stock and all(dict(p)["feed"] == "sip" for _, p in stock), [dict(p).get("feed") for _, p in stock]
