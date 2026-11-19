@@ -2,7 +2,7 @@ id: HYP-0070
 trial: "REV-1C"
 family: S                       # Robot B sleeve S (DEC-0066): forward-only paper trials, counted apart from the global 87; total 2
 spec: SPEC-0001 v1.0.1          # the reversal rule is HYP-0019's, unchanged; only the day's universe differs
-status: proposed                # DEC-0066 (PROPOSED 2026-11-19); pre-registered when that record is accepted. NOT blind: REV-1's five forward trades had been seen (DEC-0066 "Disclosure")
+status: pre-registered          # DEC-0066 (ACCEPTED 2026-11-20). NOT blind: REV-1's five forward trades had been seen (DEC-0066 "Disclosure")
 arm: paper                      # traded by sleeve S; also replayed nightly on SIP by the same code once the runner exists
 statement: "The reversal rule of HYP-0019 (SCN-REV, long side, 09:35-15:30, exit at the 5-minute EMA9 target with the stagnation stop), applied to a universe chosen only from what is known at the time of each scan, has positive mean R per closed trade after costs."
 rule: rev1_causal_universe

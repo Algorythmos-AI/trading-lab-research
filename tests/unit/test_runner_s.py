@@ -352,24 +352,22 @@ def test_the_day_stop_blocks_entries_after_three_losers_or_two_r(env):
 
 
 # ---- the guards --------------------------------------------------------------------------------------------------------
-def test_the_real_record_is_proposed_so_nothing_is_ordered(env, monkeypatch):
-    monkeypatch.undo()                                                 # the real DEC-0066; then the sandbox again
-    real = runner_s.RECORD
-    assert real.exists() and not runner_s.accepted(real)
-    record = env / "DEC-0066.md"
-    record.write_text(real.read_text())
-    monkeypatch.setenv("MODE", "paper")
-    state = env / "var" / "smallcap"
-    for name, value in (("DIR", state), ("PLANS", state / "plans"), ("KILL", state / "KILL"),
-                        ("VA_PATH", state / "virtual_account.json"),
-                        ("JOURNAL", env / "live" / "smallcap_journal.jsonl"), ("RECORD", record), ("MIN_FREE_GB", 0.0)):
-        monkeypatch.setattr(runner_s, name, value)
-    monkeypatch.setattr(runner_s, "detector_curve", lambda: np.linspace(1 / 390, 1.0, 390))
+def test_a_record_that_is_only_proposed_orders_nothing(env):
+    runner_s.RECORD.write_text("# DEC-0066\n\n- **Status: PROPOSED on 2026-11-19.** It takes effect when a pull "
+                               "request changes this line to ACCEPTED and the owner merges it.\n")
     b = session(tape_of({"ABC": day_rows(TO_TARGET)}))
     j = journal(env)
     assert one(j, "armed")["record_accepted"] is False
     assert one(j, "signal_blocked")["blockers"] == ["entries_off:DEC-0066 does not read ACCEPTED"]
     assert b.placed == []
+
+
+def test_the_real_record_is_read_from_the_repository_and_says_what_its_status_line_says():
+    import importlib
+    real = importlib.reload(importlib.import_module("wt.live.runner_s")).RECORD
+    assert real.name == "DEC-0066-robot-b-sleeve-s-paper-desk.md" and real.exists()
+    status = next(line for line in real.read_text().splitlines() if line.startswith("- **Status:"))
+    assert runner_s.accepted(real) is status.startswith("- **Status: ACCEPTED")
 
 
 def test_an_unreadable_record_is_not_an_accepted_one(tmp_path):

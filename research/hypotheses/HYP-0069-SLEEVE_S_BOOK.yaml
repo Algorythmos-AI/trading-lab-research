@@ -2,7 +2,7 @@ id: HYP-0069
 trial: "S-BOOK"
 family: S                       # Robot B sleeve S (DEC-0066): forward-only paper trials, counted apart from the global 87; total 2
 spec: SPEC-0001 v1.0.1          # every entry and exit rule comes from spec.yaml; this record adds only the book around them
-status: proposed                # DEC-0066 (PROPOSED 2026-11-19); pre-registered when that record is accepted. NOT blind: see DEC-0066 "Disclosure"
+status: pre-registered          # DEC-0066 (ACCEPTED 2026-11-20). NOT blind: see DEC-0066 "Disclosure"
 arm: paper                      # paper orders on sleeve S's own paper account; never sleeve Q's
 statement: "The round-3 rules of SPEC-0001 that DEC-0066 has switched on, traded as paper orders in one US$600 virtual account (T+1 settled cash, 1% of equity at risk per trade) with a day stop across all of them (entries stop after three consecutive losers or at -2R realised), have positive mean R per closed trade after the fills the paper broker actually gives."
 rule: sleeve_s_book             # the registered rules, one account, one day stop (DEC-0066 section 3)
