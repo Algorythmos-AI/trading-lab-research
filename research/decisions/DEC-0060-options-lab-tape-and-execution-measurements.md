@@ -1,9 +1,9 @@
 # DEC-0060: The options lab records the focus names' option tape on the trading host, and measures execution on it
 
-- **Status: PROPOSED.** The owner approved the plan this record implements on 2026-11-18 (the Options Research Lab,
-  which replaces the DEC-0041 arms), and chose in chat on 2026-11-18 which names are recorded (section 2). A later
-  pull request that changes this line to ACCEPTED accepts it, after the probe passes and before the first recorded
-  session.
+- **Status: ACCEPTED (2026-11-19).** Proposed 2026-11-18. The owner approved the plan this record implements on
+  2026-11-18 (the Options Research Lab, which replaces the DEC-0041 arms), chose in chat on 2026-11-18 which names are
+  recorded (section 2), and accepted this record in chat on 2026-11-19, after the probe passed (EXP-0041's README,
+  dated line) and before the first recorded session.
 - **Written before any tape exists.** No session has been recorded and no statistic of EXP-0041 exists. What the
   author had seen is listed in "Disclosure".
 - **Amends nothing.** No rule, gate, exit, limit or latch of any desk changes; no blind is narrowed; no file the desk,
