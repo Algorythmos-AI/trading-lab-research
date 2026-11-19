@@ -43,3 +43,5 @@ families:
     - {decision: DEC-0047, total: 5, status: accepted}    # EXP-0032: HYP-0051 SEL-PICKED, HYP-0053 SEL-FIXED (co-primary for the action), HYP-0052, HYP-0054, HYP-0055 (Holm across the three)
   R:                                                      # the pre-market Radar's selection, forward from sealed editions (DEC-0055)
     - {decision: DEC-0055, total: 3, status: proposed}    # EXP-0038: HYP-0065 RADAR-DAILY-1D (primary), HYP-0066 RADAR-DAILY-5D, HYP-0067 RADAR-SMALL-1D (Holm over the two)
+  S:                                                      # Robot B sleeve S, the stock desk's paper book (DEC-0066): forward only, no development data read
+    - {decision: DEC-0066, total: 2, status: proposed}    # EXP-0051: HYP-0069 S-BOOK (the book and its day stop), HYP-0070 REV-1C (the reversal rule on a causal universe)
