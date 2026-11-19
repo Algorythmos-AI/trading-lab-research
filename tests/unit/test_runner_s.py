@@ -516,3 +516,61 @@ def test_an_entry_resumed_without_its_staged_terms_is_cancelled(env):
     j = journal(env)
     assert events(j, "entry_cancelled")[-1]["why"] == "staged_unreadable" and not events(j, "entry_filled")
     flat_and_clean(b)
+
+
+# ---- production wiring: the only path that picks real keys ----------------------------------------------------------
+def test_production_builds_its_broker_and_data_client_from_sleeve_s_keys_only(env, monkeypatch):
+    import wt.brokers.alpaca_paper as paper
+    import wt.brokers.alpaca_read as read
+    import wt.data.alpaca as data
+    from wt.ops import locks
+    built: dict[str, dict] = {}
+
+    class FakeBroker:
+        def __init__(self, **kw):
+            built["broker"] = kw
+            self.account_number = "PA3SLEEVES"
+
+    class FakeREST:
+        def __init__(self, **kw):
+            built["rest"] = kw
+
+    class FakeReader:
+        def account_number(self):
+            built["q_read"] = {}
+            return "PA3SLEEVEQ"
+
+    seen = {}
+    monkeypatch.setattr(paper, "AlpacaPaperBroker", FakeBroker)
+    monkeypatch.setattr(data, "AlpacaREST", FakeREST)
+    monkeypatch.setattr(read, "AccountReader", FakeReader)
+    monkeypatch.setattr(locks, "LOCK_DIR", env / "locks")
+    monkeypatch.setattr(runner_s, "_session", lambda day, poll_s, broker, rest, clock, sleep: seen.update(
+        broker=broker, rest=rest))
+    environ = {"APCA_S_KEY_ID": "PKS-TEST", "APCA_S_SECRET_KEY": "s-secret", "APCA_API_KEY_ID": "PKQ-TEST",
+               "APCA_API_SECRET_KEY": "q-secret"}
+    runner_s.run(DAY, environ=environ, now_fn=lambda: at(9, 0), sleep_fn=lambda s: None)
+    assert built["broker"] == {"key_id": "PKS-TEST", "secret": "s-secret"}
+    assert built["rest"]["key_id"] == "PKS-TEST" and built["rest"]["secret"] == "s-secret"
+    assert "q-secret" not in repr(built) and "PKQ-TEST" not in repr(built)      # sleeve Q's pair goes nowhere
+    assert "q_read" in built and isinstance(seen["broker"], FakeBroker)         # and the accounts were compared
+
+
+def test_production_refuses_when_the_two_accounts_are_one(env, monkeypatch):
+    import wt.brokers.alpaca_paper as paper
+    import wt.brokers.alpaca_read as read
+    import wt.data.alpaca as data
+    from wt.ops import locks
+
+    class FakeBroker:
+        def __init__(self, **kw):
+            self.account_number = "PA3SAME"
+
+    monkeypatch.setattr(paper, "AlpacaPaperBroker", FakeBroker)
+    monkeypatch.setattr(data, "AlpacaREST", lambda **kw: object())
+    monkeypatch.setattr(read, "AccountReader", lambda: type("R", (), {"account_number": lambda self: "PA3SAME"})())
+    monkeypatch.setattr(locks, "LOCK_DIR", env / "locks")
+    monkeypatch.setattr(runner_s, "_session", lambda *a: pytest.fail("the session must not start"))
+    with pytest.raises(SystemExit, match="this is sleeve Q's account"):
+        runner_s.run(DAY, environ={"APCA_S_KEY_ID": "PKS", "APCA_S_SECRET_KEY": "x", "APCA_API_KEY_ID": "PKQ",
+                                   "APCA_API_SECRET_KEY": "y"}, now_fn=lambda: at(9, 0), sleep_fn=lambda s: None)
