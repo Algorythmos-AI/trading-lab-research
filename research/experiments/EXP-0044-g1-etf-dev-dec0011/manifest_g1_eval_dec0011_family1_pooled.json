@@ -1,0 +1,114 @@
+{
+ "args": {
+  "control_exp": "EXP-0046-g1-etf-controls-dedup",
+  "dsr_trials": 87,
+  "exp": "EXP-0044-g1-etf-dev-dec0011",
+  "family_fields": 1,
+  "method": "dec0011",
+  "n_trials_override": null
+ },
+ "argv": [
+  "scripts/g1_eval.py",
+  "EXP-0044-g1-etf-dev-dec0011",
+  "EXP-0046-g1-etf-controls-dedup",
+  "--method",
+  "dec0011"
+ ],
+ "config_sha256": {
+  "config/catalysts.yaml": "4bdc5b7587fc5acabb5872e8ea12cc32847691721cc9c8e66b9411b4abe7d771",
+  "config/catalysts_spec.yaml": "96411f7a9016c3b8aee4ef2a6981a8c8bef9f6dd7943c6710fc6b2cf015d157f",
+  "config/dashboard.yaml": "83300b6649af139f7a7935062c75bdad32ae24fc2b096cd25eacec578eddb5b3",
+  "config/generated/hod_scanner.yaml": "e9fc483b5193efe02576fdb5ec2461ea8424a6b865a851aac89a5d24cfa128b1",
+  "config/generated/ranking_warrior.yaml": "263cd76ae460adf78e33e2788f84bf0ee660aabdb526ed3c19a4614e1eed2ea1",
+  "config/generated/reversal_scanner.yaml": "85ab35300674049d39d115749ff486bf8e9b2708d4a7d595dd1a2b5dcec1de93",
+  "config/legacy_positions.yaml": "6dab786663de0d056311484cfed089f74b0df394f65111bcb89cbed697180831",
+  "config/options_clone.yaml": "350c8d9557c71727552763b553840921ea7820ef367fe120828102005d39ab79",
+  "config/options_desk.yaml": "21bfebbb59bdfb18e7564bdc1e9f63df3b86f4c0cb53006842c4b92583d76351",
+  "config/options_select.yaml": "f61935d9be5c068f26f7f4d087e6d7a086ff16e96a102ab3da22f1299843e3ef",
+  "config/options_select_stage2.yaml": "0f80a06f3dd4de140e22678d60dbaccab6ce909d9e40831bfa969b20459d411f",
+  "config/ranking.yaml": "9fdbc9ba329fac28fbf8824cce95c93b649d6f9e8e8f48280895015afc468f02",
+  "config/risk.yaml": "b5f10616d910ce157b5783765aec313e8232401bffdc0f073fc8763a9ab3ba2b",
+  "config/trial_registry.yaml": "43131e575e291328fd41f4ac5f7db60eaa13d94940f4563bdb9be74ff8a79d53"
+ },
+ "created_utc": "2026-11-18T14:51:08+00:00",
+ "data": {
+  "bytes": 5153296,
+  "missing": [],
+  "n_files": 2,
+  "roots": [
+   "research/experiments/EXP-0044-g1-etf-dev-dec0011/results.json",
+   "research/experiments/EXP-0046-g1-etf-controls-dedup/results.json"
+  ],
+  "sha256": "9f5a225166baaaa9a6c92800ba703dcf7f93ba8875a6fed7addc13d5b8fa982b"
+ },
+ "environment": {
+  "n": 46,
+  "packages": [
+   "alpaca-py==0.44.0",
+   "annotated-types==0.8.0",
+   "attrs==26.1.0",
+   "certifi==2026.10.19",
+   "charset-normalizer==3.5.1",
+   "exchange-calendars==4.13.2",
+   "idna==3.20",
+   "iniconfig==2.3.0",
+   "jsonschema-specifications==2025.9.1",
+   "jsonschema==4.25.1",
+   "korean-lunar-calendar==0.4.0",
+   "msgpack==1.2.4",
+   "mypy-extensions==1.1.0",
+   "mypy==1.18.2",
+   "numpy==2.5.3",
+   "packaging==26.3",
+   "pandas==3.0.6",
+   "pathspec==1.1.1",
+   "pluggy==1.6.0",
+   "py-spy==0.4.2",
+   "pyarrow==25.0.1",
+   "pydantic-core==2.46.5",
+   "pydantic==2.13.5",
+   "pygments==2.21.0",
+   "pyluach==2.3.0",
+   "pymupdf==1.28.2",
+   "pytest==9.1.1",
+   "python-dateutil==2.9.0.post0",
+   "python-dotenv==1.2.3",
+   "pytz==2026.4",
+   "pyyaml==6.0.3",
+   "referencing==0.37.0",
+   "requests==2.34.2",
+   "rpds-py==2026.6.3",
+   "ruff==0.16.9",
+   "scipy==1.18.1",
+   "six==1.17.0",
+   "sseclient-py==1.9.0",
+   "toolz==1.2.0",
+   "types-pyyaml==6.0.12.20260906",
+   "types-requests==2.33.0.20260906",
+   "typing-extensions==4.16.0",
+   "typing-inspection==0.4.4",
+   "tzdata==2026.6",
+   "urllib3==2.8.0",
+   "websockets==17.1"
+  ],
+  "sha256": "33f9bb3831f98738be60038758e30ad8975fb8488e0ccd9e9a5882999d3b3c48",
+  "source": "uv pip freeze"
+ },
+ "git": {
+  "dirty": false,
+  "dirty_paths": [],
+  "sha": "66041c3e6a9ce8f12029f0c3af8c326194be734a",
+  "untracked_code": []
+ },
+ "lockfile_sha256": {
+  "requirements-dev.lock.txt": "c892d70763d3ef35d12815dbf1a72d0c2ceec289f3feabf4ab33f5d752943ae5",
+  "requirements.lock.txt": "667dbb37a49ae270dbc1b80bcd6b166ae2d81fd583a3a26e0794b25898f69578"
+ },
+ "platform": "macOS-26.6.2-arm64-arm-64bit",
+ "python": "3.12.13",
+ "schema": 1,
+ "spec": {
+  "id": "SPEC-0001",
+  "sha256": "ccf1eb586ab6237402b977fb4d266f2b2fc4b29380ec18a5e413fe9f8204ebba"
+ }
+}

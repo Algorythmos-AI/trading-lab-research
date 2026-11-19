@@ -1,0 +1,15 @@
+# EXP-0045: the one re-score of the consumed EXP-0011 holdout (DEC-0011 sections 2 and 3; DEC-0061 3.1, cap C1).
+# It can demote B, never promote it. No parameter of B changes because of it.
+experiment: EXP-0045
+status: registered
+decision: DEC-0061
+carries_out: DEC-0011 section 2 (re-score of the EXP-0011 holdout) and section 3
+trials: 0
+baseline: EXP-0011-holdout-B-qqqm
+change: only the data (duplicates removed); parameters frozen exactly as EXP-0011 ran them (legacy method, M3,
+  0.022 slippage per QQQ share, risk 6, sigma 14 sessions)
+driver: python scripts/holdout_b.py --rescore EXP-0045-holdout-B-rescore
+data: data/minute_etf, snapshot hash in manifest.json
+span: [2025-09-26, 2026-09-25]
+cap_c1: {rule: "mean below +0.091R recorded AND CI95 lower bound <= 0 -> verdict no better than V2", keys: [summary.expectancy_R, summary.ci95_expectancy]}
+outputs: [results.json, manifest.json]

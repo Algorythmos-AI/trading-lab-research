@@ -148,7 +148,7 @@ export function PaperBody({ result, clone, live, q, now }: { result: PaperOption
           <ManualSection doc={doc} live={live} filter={filter} now={now} />
         </PaneBoundary>
       </Group>
-      <Group group="arms" intro="Variations of the clone's rules, run beside it as simulated trades. No order is ever sent for them; each is a hypothesis of its own.">
+      <Group group="arms" intro="Variations of the clone's rules, run beside it as simulated trades until 17 Nov 2026. Counting ended then with too few sessions; each trial closes on 5 Nov 2027 with no verdict. No order was ever sent for them.">
         <PaneBoundary name="Research arms">
           <ArmsSection doc={doc} filter={filter} now={now} />
         </PaneBoundary>
@@ -317,7 +317,7 @@ function Top({ doc, filter, now }: { doc: PaperOptions; filter: Filter; now: Dat
           ) : (
             <p className="text-muted-foreground text-xs">{arms ? "No simulated trades in this view." : "The arms' simulated trades are not being sent yet."}</p>
           )}
-          <p className="text-muted-foreground text-[0.6875rem] leading-snug max-sm:text-xs">Simulated, one contract each; each arm is its own trial and they are not added up.</p>
+          <p className="text-muted-foreground text-[0.6875rem] leading-snug max-sm:text-xs">Simulated, one contract each; not added up. Counting ended 17 Nov 2026, no verdict.</p>
         </EnvFrame>
       </div>
       <Filters filter={filter} symbols={symbols.sort()} />
@@ -594,6 +594,11 @@ function OpenPositions({ live, now }: { live: OptionsLiveResult; now: Date }) {
   );
 }
 
+/** Why fills in the account are missing from this section: the clone bot made them, and they are in its own section. */
+export function cloneFillsLeftOut(n: number): string {
+  return `${count(n, "fill")} in this account ${n === 1 ? "was" : "were"} the clone bot's own, from when it traded here: ${n === 1 ? "it is" : "they are"} left out, and counted in its section above.`;
+}
+
 function ManualSection({ doc, live, filter, now }: { doc: PaperOptions | null; live: OptionsLiveResult; filter: Filter; now: Date }) {
   const env = "paper" as const;
   const whole = doc ? manualBook(doc) : null;
@@ -613,7 +618,10 @@ function ManualSection({ doc, live, filter, now }: { doc: PaperOptions | null; l
           The trading host reads the paper account&apos;s filled orders and matches them into round trips. Until it does, only what is open shows here.
         </Empty>
       ) : !s ? (
-        <Empty title={whole.trades.length === 0 ? "No closed hand-placed trades yet" : "No hand-placed trades in this view"}>{whole.trades.length === 0 ? "A round trip shows here within a few minutes of its close." : "Pick another period, ticker or kind above."}</Empty>
+        <Empty title={whole.trades.length === 0 ? "No closed hand-placed trades yet" : "No hand-placed trades in this view"}>
+          {whole.trades.length === 0 ? "A round trip shows here within a few minutes of its close." : "Pick another period, ticker or kind above."}
+          {whole.trades.length === 0 && excluded > 0 ? ` ${cloneFillsLeftOut(excluded)}` : ""}
+        </Empty>
       ) : (
         <>
           {whole.skipped > 0 ? (
@@ -625,7 +633,7 @@ function ManualSection({ doc, live, filter, now }: { doc: PaperOptions | null; l
           <p className="text-muted-foreground max-w-prose text-xs">
             Before fees: the paper account charges none. Filled orders are matched first in, first out, so one round trip can be several rows; a contract left to expire closes at zero.
             {gaps > 0 ? ` ${count(gaps, "position")} left by exercise or assignment, not a sale: no result is booked for ${gaps === 1 ? "it" : "them"}.` : ""}
-            {excluded > 0 ? ` ${count(excluded, "fill")} of the clone's own in the same account ${excluded === 1 ? "is" : "are"} left out.` : ""}
+            {excluded > 0 ? ` ${cloneFillsLeftOut(excluded)}` : ""}
           </p>
           <Panel id="manual-curve" title="Running total" icon={ChartLine} means="Every closed hand-placed trade added up, day by day. The shaded band is how far the total stood below its best so far.">
             <PnlCurve points={days.map((d) => ({ day: d.day, pnl: d.pnl, cum: d.cum, dd: d.dd, trades: d.trades }))} />
@@ -682,8 +690,8 @@ function ArmsSection({ doc, filter, now }: { doc: PaperOptions | null; filter: F
   if (!arms || arms.length === 0) {
     return (
       <EnvFrame env="shadow" label={PAPER_FRAMES.arms}>
-        <Empty icon={Inbox} title={arms ? "No research arm has a simulated trade yet" : "The arms' simulated trades are not being sent yet"}>
-          Each arm runs beside the clone and books a simulated fill where its own rule would have traded.
+        <Empty icon={Inbox} title={arms ? "No research arm trade was counted before 17 Nov 2026" : "The arms' simulated trades are not being sent yet"}>
+          The arms ran beside the clone until 17 Nov 2026, booking a simulated fill where their own rule would have traded.
         </Empty>
       </EnvFrame>
     );

@@ -80,17 +80,18 @@ def test_what_is_not_an_option_fill_is_left_out_and_nothing_of_the_account_is_ke
     assert len(got["trades"]) == 1 and got["_other"] == 1
 
 
-def test_the_clones_fills_in_a_shared_account_are_left_out_by_contract_and_day() -> None:
+def test_the_clones_fills_are_left_out_by_contract_and_day() -> None:
     raw = [fill(1, "buy", 1, 1.0), fill(2, "sell", 1, 1.5, at="2026-11-18T15:30:00Z"),
            fill(3, "buy", 1, 2.0, symbol=P), fill(4, "sell", 1, 2.5, symbol=P, at="2026-11-18T15:30:00Z"),
            fill(5, "buy", 1, 1.0, at="2026-11-19T15:00:00Z"), fill(6, "sell", 1, 1.1, at="2026-11-19T15:30:00Z")]
     plans = {"2026-11-18-O-1": {"symbol": C}, "not-a-trade-id": {"symbol": P}, "2026-11-18-O-2": {"symbol": "junk"}}
     assert paper_manual.clone_days(plans) == {(C, "2026-11-18")}
-    got = paper_manual.block(paper_manual.clean(raw), True, plans)
+    got = paper_manual.block(paper_manual.clean(raw), plans)
     assert got["excluded_clone_fills"] == 2 and [(t["contract"], t["pnl_usd"]) for t in got["trades"]] == [(P, 50.0), (C, 10.0)]
     assert "_other" not in got
-    own = paper_manual.block(paper_manual.clean(raw), False, plans)
-    assert own["excluded_clone_fills"] == 0 and len(own["trades"]) == 3
+    assert paper_manual.clone_days({}, [{"trade_id": "2026-11-19-O-1", "symbol": C}, {"trade_id": "2026-11-19-O-2"}, "junk"]) == {(C, "2026-11-19")}
+    none = paper_manual.block(paper_manual.clean(raw), {})
+    assert none["excluded_clone_fills"] == 0 and len(none["trades"]) == 3
 
 
 def test_the_newest_trades_are_kept_over_the_cap(monkeypatch: pytest.MonkeyPatch) -> None:

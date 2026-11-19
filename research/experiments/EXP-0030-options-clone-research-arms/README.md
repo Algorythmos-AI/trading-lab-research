@@ -42,3 +42,10 @@ The exact rule and every number of each arm are in its hypothesis record (`state
 - Each report is written once, by a verdict script added with the arms' code, into this folder. It refuses to write
   over an existing report. No split of the control's trades by tag and no shadow result is read before it.
 - A pass changes no rule. A number changed after a result is seen means a new experiment and new trials.
+
+## Booking stopped by DEC-0059 (appended 2026-11-18, before any affected result is read)
+
+- Counting ended at the 2026-11-17 session: DEC-0056 point 6 changed EXP-0029's config from the 2026-11-18 session,
+  which ends every arm under DEC-0041 point 5, with at most 9 sessions; each closes with no verdict on 2027-11-05.
+- DEC-0059 ends the booking (`research_arms.enabled: false`) and shows each arm on the Paper options page only up to
+  2026-11-17. The verdict script and its rules are unchanged.

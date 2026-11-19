@@ -122,6 +122,24 @@ def test_the_newest_trades_are_kept_when_the_list_is_over_the_cap(tmp_path: Path
     assert [t["trade_id"] for t in doc["clone"]["trades"]] == ["2026-11-18-O-3", "2026-11-18-O-4", "2026-11-18-O-5"]
 
 
+def test_the_clones_old_fills_in_the_hand_account_are_left_out_whatever_its_keys_say(tmp_path: Path) -> None:
+    # 2026-11-18: the clone had traded in the hand-placed account before it had keys of its own, and those trades were
+    # sent a second time as hand-placed, because only a clone still sharing the account was left out.
+    theirs, mine = "SPY261118C00581000", "NVDA261127P00185000"
+    plan(tmp_path / "state", "2026-11-18-O-1", symbol=theirs)
+    acts = [{"id": f"a{n}", "type": "FILL", "at": f"2026-11-18T15:0{n}:00+00:00", "symbol": sym, "side": side, "qty": 1.0, "price": px}
+            for n, (sym, side, px) in enumerate([(theirs, "buy", 2.0), (theirs, "sell", 2.5), (mine, "buy", 1.0), (mine, "sell", 1.5)])]
+    journal = write(tmp_path / "journal.jsonl", [closed("2026-11-18-O-1")])
+    for env in (ENV, {"APCA_OPTIONS_KEY_ID": "k", "APCA_OPTIONS_SECRET_KEY": "x"}, {}):
+        doc = paper_site.build(NOW, "run-1", journal, tmp_path / "state", CFG, env, acts)
+        assert [t["contract"] for t in doc["manual"]["trades"]] == [mine] and doc["manual"]["excluded_clone_fills"] == 2
+        assert paper_site.validate(doc) == []
+    # A trade whose plan file is gone is still the clone's: its journal row names the contract.
+    (tmp_path / "state" / "plans" / "plan_2026-11-18-O-1.json").unlink()
+    doc = paper_site.build(NOW, "run-1", journal, tmp_path / "state", CFG, ENV, acts)
+    assert [t["contract"] for t in doc["manual"]["trades"]] == [mine] and doc["manual"]["excluded_clone_fills"] == 2
+
+
 def test_the_account_is_the_clones_own_shared_or_unknown(tmp_path: Path) -> None:
     assert build(tmp_path, [], {"APCA_OPTIONS_KEY_ID": "k", "APCA_OPTIONS_SECRET_KEY": "x"})["clone"]["own_account"] is False
     assert build(tmp_path, [], {})["clone"]["own_account"] is None
@@ -169,6 +187,24 @@ def test_the_arms_closed_virtual_trades_go_out_by_hypothesis_with_hashed_ids(tmp
     for word in ("trap", "reclaim", "runner", "retest", "rejection", "level name", "release"):
         assert word not in text
     assert all(x["vid"].startswith("2026-11-12-V") for a in doc["arms"] for x in a["trades"])
+
+
+def test_the_arms_show_only_stamped_trades_up_to_the_last_counted_session(tmp_path: Path) -> None:
+    """DEC-0059 point 2: one fixed cut for every arm (2026-11-17), and only rows a known release wrote."""
+    assert paper_site.ARMS_LAST_SESSION == review.SPREAD5_END == "2026-11-17"
+    shadow = tmp_path / "state" / "shadow"
+    for day in ("2026-11-06", "2026-11-17", "2026-11-18", "2026-11-19"):
+        write(shadow / f"{day}.jsonl", [virtual(f"{day}-trap-SPY-10:42-call-x", "trap", "trap", ts=f"{day}T16:00:00+00:00",
+                                                filled_at=f"{day}T15:00:00+00:00", exit_at=f"{day}T15:40:00+00:00")])
+    write(shadow / "2026-11-10.jsonl", [virtual("2026-11-10-trap-a", "trap", "trap", release="unknown"),
+                                        virtual("2026-11-10-trap-b", "trap", "trap", release=None)])
+    doc = build(tmp_path, [])
+    assert paper_site.validate(doc) == []
+    assert [(a["hyp"], [t["session"] for t in a["trades"]]) for a in doc["arms"]] == [("HYP-0046", ["2026-11-06", "2026-11-17"])]
+    for day in ("2026-11-06", "2026-11-17"):
+        (shadow / f"{day}.jsonl").unlink()
+    (shadow / "2026-11-10.jsonl").unlink()
+    assert build(tmp_path, [])["arms"] == []                     # only later sessions: the block is sent, empty
 
 
 def test_every_document_the_builder_can_make_passes_the_dashboards_schema_and_a_fault_in_it_is_caught(tmp_path: Path) -> None:

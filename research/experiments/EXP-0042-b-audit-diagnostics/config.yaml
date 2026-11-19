@@ -1,0 +1,70 @@
+# EXP-0042: Robot B (strategy B, QQQ signal / QQQM orders) audit diagnostics. Descriptive: no hypothesis, no trial.
+# Frozen before scripts/b_audit.py first runs. A changed value is a new experiment (append-only).
+experiment: EXP-0042
+status: registered
+decision: DEC-0061                  # proposed in the same pull request as the first results
+family: none
+trials: 0                           # selects nothing and tunes nothing; the global count stays as the registry says
+evidence_label: pre-correction      # every input predates the DEC-0011 R-C1 re-runs, which have not been run
+
+inputs:                             # committed files only; sha256 of each is written into results.json
+  dev_results: research/experiments/EXP-0005b-g1-etf-dev-realcost/results.json
+  dev_walkforward: research/experiments/EXP-0005b-g1-etf-dev-realcost/g1_eval.json
+  controls: research/experiments/EXP-0006b-g1-etf-controls-realcost/results.json
+  holdout: research/experiments/EXP-0011-holdout-B-qqqm/results.json      # summary and monthly sums only
+  cost_stress: research/experiments/EXP-0005-g1-etf-dev/cost_stress_B.json
+  cost_stress_traded: research/experiments/EXP-0005-g1-etf-dev/cost_stress_B_traded_etf.json
+  trial_registry: config/trial_registry.yaml
+  paper_aggregate:                  # the published scorecard line only; no per-trade paper or forward R is read
+    file: research/forward/archive/2026-W46/scorecard_2026-11-13.md
+    fields: [trades_closed, sessions_armed, mean_R, cum_R]
+
+frozen_rule: B|QQQ|noise|M3         # the configuration the paper runner trades (B_intraday_momentum_qqqm.yaml)
+family_prefix: B|QQQ
+dev_span: [2019-01-02, 2025-09-25]
+timezone: America/New_York          # entry_time in the inputs is UTC
+
+seed: 7
+bootstrap: {draws: 5000, blocks: [trade, day]}
+
+reconcile:                          # recomputed from the inputs; any miss is reported with its cause and fails the run
+  walk_forward: {n: 415, expectancy_R: 0.117274463731226, dsr_prob: 0.7074144598935209, dsr_trials: 65,
+                 fold_picks_from: dev_walkforward}
+  frozen_rule_dev: {n: 479}
+  holdout: {n: 57, expectancy_R: 0.09128486411062388}
+  tolerance_abs: 1.0e-9             # dsr: 1.0e-6
+  tolerance_dsr: 1.0e-6
+
+metrics:
+  distribution: [n, win_rate, avg_win_R, avg_loss_R, expectancy_R, profit_factor, skew, kurtosis, per_trade_sharpe,
+                 ci95_trade, ci95_day, max_drawdown_R, max_drawdown_trades, longest_losing_run,
+                 top5_share_of_R, top10_share_of_R, expectancy_without_top10]
+  splits: [year, entry_mark_et, exit_reason]
+  exit_quality: [share_reaching_2R_mfe, mean_mfe_R_of_losers, mean_R_over_mfe_of_winners]
+  runner_parity: {entry_mark_excluded: "15:30"}     # the runner places no entry at or after flatten minus 20 minutes
+  dsr: {trials: [65, registry], sr_variance: [one_over_n, across_dev_variants]}
+  pbo:
+    method: cscv                    # Bailey, Borwein, Lopez de Prado, Zhu (2017)
+    universe: [all_dev_configs, family]           # the family has 2 configs: reported, marked uninformative
+    series: daily_R_zero_filled     # per config, every development session on which any config traded
+    blocks: 16                      # C(16,8) = 12870 splits
+    metric: mean_daily_R
+  cost: {slope_from: cost_stress, break_even_multiple: linear}
+  controls: {random_control_p_against: frozen_rule_dev}
+  power:
+    alpha_one_sided: 0.05
+    power: 0.80
+    sd_from: frozen_rule_dev
+    edges: [frozen_rule_dev, half_frozen_rule_dev, holdout]
+    trades_per_session_from: paper_aggregate
+    sessions_per_year: 252
+    g2b_trades: 50
+  min_track_record: {sharpe_from: frozen_rule_dev, benchmark_sharpe: 0.0, confidence: 0.95}
+  sprt:                             # designed only; not applied to any paper trade in this experiment
+    h0_mean_R: 0.0
+    h1_mean_R: half_frozen_rule_dev
+    sd_from: frozen_rule_dev
+    alpha: 0.05
+    beta: 0.20
+
+outputs: [results.json, report.md, manifest_b_audit.json]

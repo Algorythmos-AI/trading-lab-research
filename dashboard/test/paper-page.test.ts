@@ -131,6 +131,20 @@ describe("the filters", () => {
   });
 });
 
+describe("the research arms ended (DEC-0059)", () => {
+  it("says counting ended on 17 Nov 2026 with no verdict, at a glance and in the arms section", () => {
+    const body = text(render({}));
+    expect(body).toContain("Counting ended 17 Nov 2026, no verdict.");
+    expect(body).toContain("Counting ended then with too few sessions; each trial closes on 5 Nov 2027 with no verdict.");
+  });
+
+  it("says the same when the arms block is sent with no trade in it", () => {
+    const body = text(render({}, { result: { status: "ok", doc: paper((d) => { d.arms = []; }), source: "fixture" } }));
+    expect(body).toContain("No research arm trade was counted before 17 Nov 2026");
+    expect(body).toContain("The arms ran beside the clone until 17 Nov 2026");
+  });
+});
+
 describe("what the page does without its documents", () => {
   it("still draws today's clone session and the open positions before any history is sent", () => {
     const body = text(render({}, { result: { status: "missing" }, live: live([{ contract: "NVDA261127P00230000", qty: 1, avg_price: 3.4, price: 2.9, market_value: 290, unrealized_pl: -50 }]) }));
@@ -157,6 +171,15 @@ describe("what the page does without its documents", () => {
     expect(body).toContain("Your closed paper trades are not being sent yet");
     expect(body).toContain("The arms' simulated trades are not being sent yet");
     assertOnlyEnvs(html, ["paper", "shadow"]);
+  });
+
+  it("says why the hand-placed section is empty when every fill in the account was the clone's", () => {
+    const d = paper();
+    d.manual = { ...d.manual!, trades: [], gaps: [], excluded_clone_fills: 34 };
+    const body = text(frame(render({}, { result: { status: "ok", doc: d, source: "fixture" } }), PAPER_FRAMES.manual));
+    expect(body).toContain("No closed hand-placed trades yet");
+    expect(body).toContain("34 fills in this account were the clone bot's own, from when it traded here: they are left out");
+    expect(body).not.toContain("Net result");
   });
 
   it("leaves out a row it cannot read and says how many, with every other figure standing", () => {

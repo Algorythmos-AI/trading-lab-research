@@ -71,6 +71,9 @@ without fixing it. Read the records themselves for what they decide.
 | Forward test (host, `forward`) | daily and 1-minute bars | sip | `AlpacaREST.bars` default argument `feed="sip"` | DEC-0009 | none |
 | Selection bundles (`python -m wt.options.select_fetch`; no job runs it yet) | Stage 1: split-adjusted daily bars. Stage 2: raw daily bars, 1-minute bars, split-adjusted 5-minute bars, snapshots; corporate actions and news (counts only) take no feed | sip | literal in `select_fetch.py` | DEC-0046 | none |
 | Research scripts (hand: `build_pool`, `scan`, `r2_`, `r3_`, `g1_`, `exp*`, `options_replication`, `options_clone_dry_run`) | bars, quotes, trades | sip | literal, or the `bars` default | not reviewed per script here | - |
+| Options lab tape (host, `lab-tape`) | option snapshots and chains of the session's focus names (tier 1 every 5 s, chains and tier 2 every 60 s); their stock snapshots | opra; sip | literals in `wt/lab/recorder.py` and `wt/lab/probe.py`; key pair `WT_LAB_KEY_PREFIX` (default `APCA_CLONE`), budget 40% of `WT_LAB_RATE_LIMIT` | DEC-0060 | lab-tape runbook |
+| Options lab, after the close (host, `lab-tape`) | the day's option trade prints of tier-1 contracts; listed open interest (trading API `/v2/options/contracts`) | none: these endpoints take no feed | - | DEC-0060 | lab-tape runbook |
+| Options lab probe (hand, `python -m wt.lab.probe`) | one option snapshot per key pair; the focus names' stock snapshots and chains; one tier-1 sweep | opra; sip | literals in `wt/lab/probe.py` | DEC-0060 | lab-tape runbook |
 | News (`AlpacaREST.news`), option bars (`options_clone_dry_run`) | news; historical option bars | none: these endpoints take no feed | - | - | - |
 
 Every request names its feed, so a plan change does not change any request's source. Two settings outside the code

@@ -1,4 +1,8 @@
-"""EXP-0011: ONE-TIME holdout evaluation of the frozen B config (QQQ signals, QQQM costs, M3)."""
+"""EXP-0011: ONE-TIME holdout evaluation of the frozen B config (QQQ signals, QQQM costs, M3).
+
+`python scripts/holdout_b.py --rescore EXP-ID` (DEC-0011 section 3, DEC-0061): the one re-score of the same consumed
+holdout on de-duplicated data, parameters frozen exactly as EXP-0011 ran them, written to EXP-ID. It can demote B,
+never promote it. It refuses EXP-0011's own folder, an id without a registered config.yaml, and a second run."""
 from __future__ import annotations
 
 import json
@@ -19,6 +23,15 @@ from wt.research.manifest import write_manifest  # noqa: E402
 from wt.signals import setups  # noqa: E402
 
 OUT = ROOT / "research/experiments/EXP-0011-holdout-B-qqqm"
+if "--rescore" in sys.argv:
+    _id = sys.argv[sys.argv.index("--rescore") + 1]
+    OUT = ROOT / "research/experiments" / _id
+    if OUT.name.startswith("EXP-0011"):
+        raise SystemExit("a re-score writes to its own experiment, never to EXP-0011")
+    if not (OUT / "config.yaml").exists():
+        raise SystemExit(f"{_id} is not registered (no config.yaml): register it before it runs")
+    from wt.research.manifest import assert_clean_for_preregistered_run
+    assert_clean_for_preregistered_run()
 if (OUT / "results.json").exists():
     raise SystemExit("holdout already run — it may be run exactly once (DEC-0005/DEC-0007)")
 H0, H1 = pd.Timestamp("2025-09-26").date(), pd.Timestamp("2026-09-25").date()

@@ -1,0 +1,13 @@
+# EXP-0047: data-only re-run of EXP-0012, frozen B on IWM and DIA (DEC-0011 section 2, fifth item; DEC-0061 3.1).
+# Descriptive: feeds no verdict row.
+experiment: EXP-0047
+status: registered
+decision: DEC-0061
+carries_out: DEC-0011 section 2 (data-only re-run of EXP-0012)
+trials: 0
+baseline: EXP-0012-r2-B-iwm-dia
+change: only the data (duplicates removed)
+driver: python scripts/r2_b_etfs.py EXP-0047-r2-B-iwm-dia-dedup
+data: data/minute_etf2 (IWM, DIA), snapshot hash in manifest.json
+span: [2019-01-02, 2025-09-25]
+outputs: [results.json, manifest.json]

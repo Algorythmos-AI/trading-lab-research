@@ -150,6 +150,13 @@ wt.ops.publish                            POST /api/ingest            (productio
   table. Read only: it describes what happened and suggests nothing. An edition older than three and a half days
   is shown with a notice. `/api/health` reports it under `editions.journal`. Fixture mode reads the synthetic
   `test/fixtures/journal.v1.json`.
+- **Robot B** (`/robot-b`, DEC-0061): strategy B in one place, paper money only. Two sources: the stocks
+  snapshot (G2, the stop rule, the virtual account, kill switch, latch, the `paper-b` job, performance, blotter,
+  risk limits) and `src/lib/robot-b-evidence.json`, numbers only, which `scripts/robot_b_evidence.py` builds from
+  EXP-0042's results and the trial registry (`--check` in CI keeps it equal to a fresh build). All states are
+  derived in `src/lib/robot-b.ts` (pure, `test/robot-b.test.ts`): the evidence ladder (clean data, G1, holdout, G2a,
+  G2b, promotion, real money never), the numeric blockers, every estimate with its 95% range on one axis, and the
+  trades the paper record would need to tell the edge from zero. No record's prose is shown.
 - **Paper options** (`/paper`, `stocksdelta/paper-options`, schema `src/lib/paper-options.schema.json`;
   `paper-options.types.ts` is generated; DEC-0057): every closed paper option trade, from three sources that are
   shown apart and never added together. The options clone's trades come from its journal, the hand-placed trades
@@ -184,6 +191,18 @@ wt.ops.publish                            POST /api/ingest            (productio
   results are worked out at render time from the journal, exactly as on Trades (`daily()`, by the New York close
   day, before fees), and each day's "!" is the Overview strip's day-rule test (`judgeDay()` in `src/lib/overview.ts`);
   nothing of them is stored. A journal that is missing, unreadable or corrupt costs only the results.
+- **Radar run beacon** (`stocksdelta/radar-run`, schema `src/lib/radar-run.schema.json`; `radar-run.types.ts` is
+  generated): one stage (`build`, `send`, `evidence`, `desk`) of one session's pre-market Radar run, sent by the
+  Radar's cloud routine when the stage starts and again when it ends, through the same signed `POST /api/ingest`
+  with the `radar` key (any key not scoped to a desk is taken, as for the Radar desk file). Times, ids, closed codes,
+  booleans and an exit code only: no free text, and nothing of an edition. The newest beacon of each stage is kept
+  at `radar-run/<session>/<stage>.json`, and the newest of any stage at `radar-run/latest.json` for `/api/health`
+  (`editions.radar_run`, `accepts` 1). Within one session and stage: the stored beacon's `run_id` with its `state`
+  again is a `duplicate`; a later `as_of` replaces (a stage's end replaces its start, also at the very same
+  instant); an earlier one is `older` (409); one dated ahead of the clock is refused. Stages never order each other.
+  `loadRadarRun(session)` in `src/lib/snapshot.ts` reads a session's stages, each checked against the schema again.
+  Display only: no page shows it yet, it has no feed row, and a refusal is logged but leaves no
+  `ops/ingest-rejects` record.
 - **Economic calendar** (`stocksdelta/calendar`, schema `src/lib/calendar.schema.json`; `calendar.types.ts` is
   generated): the release dates the Calendar page shows, published once a week (Fri 21:30 New York) by the trading
   host's `econ-calendar` job (`src/wt/ops/econ_calendar.py`) through the same signed `POST /api/ingest`, never with
@@ -457,7 +476,7 @@ other panes keep working.
 | `DASHBOARD_INGEST_KEYS` | Vercel production (optional) | JSON map `{"<key id>": "<secret>"}`: one HMAC key per publisher, chosen by the `x-wt-key-id` header (ADR 0004) |
 | `PRIMARY_HOST` | Vercel production (optional) | The key id whose snapshots are the visible ones; default `default`. Every other key's go to the shadow slots |
 | `DASHBOARD_INGEST_SCOPES` | Vercel production (optional) | JSON map `{"<key id>": {"desks": ["hft"]}}`: that key is the primary publisher of those desks and may publish nothing else (see Desks). Holds no secret |
-| `RADAR_INGEST_SECRET` | Vercel production + the radar's cloud environment | HMAC key for key id `radar`. It may only publish research editions (`stocksdelta/radar`, `stocksdelta/options`, `stocksdelta/journal`); unset means the radar key is refused |
+| `RADAR_INGEST_SECRET` | Vercel production + the radar's cloud environment | HMAC key for key id `radar`. It may only publish research editions (`stocksdelta/radar`, `stocksdelta/options`, `stocksdelta/journal`) and the documents sent beside them (the ledger, the funnel's health, the Radar desk file, the Radar run beacon); unset means the radar key is refused |
 | `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` (or Alpaca's own `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`) | Vercel production only | Alpaca paper-account keys, used only for the market data behind `/api/quote` and `/api/bars` (the feed is `ALPACA_FEED`'s); unset means the Options page shows live prices as off |
 | `ALPACA_DATA_URL` | Vercel (optional) | Market-data base URL, default `https://data.alpaca.markets` |
 | `ALPACA_FEED` | Vercel (optional) | The stock feed for the live prices, the session bars and the shadow check: `iex` (default when unset or empty; free, one exchange) or `sip` (every US exchange). Case and surrounding spaces are ignored. `sip` needs a paid Alpaca market-data plan and is the owner's decision alone. Any other value is refused: `/api/quote` and `/api/bars` answer 503 `not-configured` (in fixture mode too), so the page drops its prices and shows them as off until it is reloaded, the shadow check logs `bars-off`, and one log line `alpaca.feed` gives the bad value's length, never the value. With `sip` on a plan that does not include it, Alpaca answers 403: the routes then answer 503 `not-configured` with `why: "plan"`, the page shows the prices as off and says SIP is not on this data plan, the shadow check logs `bars-off`, and one `alpaca.feed` line with outcome `plan` is logged (a 403 on `iex`, or a 401, stays a 502 failure). The option chain's feed is separate and not set by it |

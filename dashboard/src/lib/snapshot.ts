@@ -3,7 +3,7 @@ import { cache } from "react";
 import { LATEST_PATH, listPaths, readText } from "./blob";
 import type { CryptoSnapshot } from "./crypto.types";
 import type { CalendarDoc } from "./calendar.types";
-import { validateCalendar } from "./validate";
+import { RADAR_RUN_STAGES, validateCalendar, validateRadarRun } from "./validate";
 import {
   CALENDAR_PATHS,
   DESK_PATHS,
@@ -16,6 +16,8 @@ import {
   PAPER_OPTIONS_PATHS,
   RADAR_DESK_PATHS,
   RADAR_PATHS,
+  RADAR_RUN_PATHS,
+  radarRunPath,
 } from "./desk";
 import {
   fixtureCalendar,
@@ -45,6 +47,7 @@ import type { PaperOptions } from "./paper-options.types";
 import { withStoredPremarket } from "./premarket";
 import { radarDates } from "./radar";
 import type { RadarDeskDoc } from "./radar-desk.types";
+import type { RadarRunDoc } from "./radar-run.types";
 import type { RadarEdition } from "./radar.types";
 import type { Snapshot } from "./types";
 
@@ -721,6 +724,101 @@ export const loadRadarDesk = cache(
       return { status: "ok", doc: parsed as RadarDeskDoc, source: "blob" };
     } catch (e) {
       logEvent("snapshot.read", { outcome: "error", desk: "radar-desk", error: e instanceof Error ? e.name : "unknown" });
+      return { status: "error" };
+    }
+  },
+);
+
+const SESSION_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A stored beacon, read defensively: the text must be a valid beacon, and of the session and stage it is filed under. */
+export function parseRadarRun(text: string, session?: string, stage?: string): RadarRunDoc | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const r = validateRadarRun(parsed);
+  if (!r.ok) return null;
+  if ((session !== undefined && r.doc.session !== session) || (stage !== undefined && r.doc.stage !== stage)) return null;
+  return r.doc;
+}
+
+async function fixtureRadarRun(): Promise<RadarRunDoc> {
+  const mod = await import("../../test/fixtures/radar-run.v1.json");
+  return (mod.default ?? mod) as unknown as RadarRunDoc;
+}
+
+export type RadarRunResult =
+  | { status: "ok"; session: string; stages: RadarRunDoc[]; source: "fixture" | "blob" }
+  | { status: "missing" }
+  | { status: "error" };
+
+/**
+ * The Radar run of one session (YYYY-MM-DD, New York): the newest beacon of each stage that has sent one, in the
+ * routine's order (build, send, evidence, desk). A stage with no beacon, or whose file cannot be read as one, is left
+ * out. "missing" when no stage has one (or the session is not a date); "error" only when nothing could be read and
+ * the store failed for at least one stage.
+ */
+export const loadRadarRun = cache(
+  async (session: string): Promise<RadarRunResult> => {
+    if (typeof session !== "string" || !SESSION_RE.test(session)) return { status: "missing" };
+    if (fixtureMode()) {
+      const flags = await fixtureFlags();
+      if (flags.has("empty")) return { status: "missing" };
+      if (flags.has("error")) return { status: "error" };
+      const doc = await fixtureRadarRun();
+      if (session !== doc.session) return { status: "missing" };
+      return { status: "ok", session, stages: [doc], source: "fixture" };
+    }
+    let failed = false;
+    const read = await Promise.all(
+      RADAR_RUN_STAGES.map(async (stage) => {
+        try {
+          const stored = await readText(radarRunPath(session, stage));
+          if (!stored) return null;
+          const doc = parseRadarRun(stored.text, session, stage);
+          if (!doc) logEvent("snapshot.read", { outcome: "not-a-beacon", desk: "radar-run", stage });
+          return doc;
+        } catch (e) {
+          failed = true;
+          logEvent("snapshot.read", { outcome: "error", desk: "radar-run", stage, error: e instanceof Error ? e.name : "unknown" });
+          return null;
+        }
+      }),
+    );
+    const stages = read.filter((d): d is RadarRunDoc => d !== null);
+    if (stages.length === 0) return failed ? { status: "error" } : { status: "missing" };
+    return { status: "ok", session, stages, source: "blob" };
+  },
+);
+
+export type RadarRunLatestResult =
+  | { status: "ok"; doc: RadarRunDoc; source: "fixture" | "blob" }
+  | { status: "missing" }
+  | { status: "error" };
+
+/** The newest Radar run beacon of any session and stage, for /api/health. "missing" until the routine has sent one. */
+export const loadRadarRunLatest = cache(
+  async (): Promise<RadarRunLatestResult> => {
+    if (fixtureMode()) {
+      const flags = await fixtureFlags();
+      if (flags.has("empty")) return { status: "missing" };
+      if (flags.has("error")) return { status: "error" };
+      return { status: "ok", doc: await fixtureRadarRun(), source: "fixture" };
+    }
+    try {
+      const stored = await readText(RADAR_RUN_PATHS.latest);
+      if (!stored) return { status: "missing" };
+      const doc = parseRadarRun(stored.text);
+      if (!doc) {
+        logEvent("snapshot.read", { outcome: "not-a-beacon", desk: "radar-run" });
+        return { status: "error" };
+      }
+      return { status: "ok", doc, source: "blob" };
+    } catch (e) {
+      logEvent("snapshot.read", { outcome: "error", desk: "radar-run", error: e instanceof Error ? e.name : "unknown" });
       return { status: "error" };
     }
   },

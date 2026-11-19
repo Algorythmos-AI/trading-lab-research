@@ -1,0 +1,288 @@
+{
+ "backtest": {
+  "ci95": [
+   0.0398,
+   0.1907
+  ],
+  "expectancy_r": 0.1151,
+  "expectancy_without_top10": 0.075,
+  "longest_losing_run": 6,
+  "max_drawdown_r": -10.1775,
+  "profit_factor": 1.4136,
+  "sd_r": 0.8344,
+  "span": [
+   "2019-01-02",
+   "2025-09-25"
+  ],
+  "total_r": 55.1321,
+  "trades": 479,
+  "win_rate": 0.5637,
+  "years": [
+   {
+    "expectancy_r": 0.1532,
+    "trades": 64,
+    "year": 2019
+   },
+   {
+    "expectancy_r": 0.0417,
+    "trades": 79,
+    "year": 2020
+   },
+   {
+    "expectancy_r": 0.2835,
+    "trades": 70,
+    "year": 2021
+   },
+   {
+    "expectancy_r": 0.1505,
+    "trades": 69,
+    "year": 2022
+   },
+   {
+    "expectancy_r": 0.1584,
+    "trades": 78,
+    "year": 2023
+   },
+   {
+    "expectancy_r": 0.0868,
+    "trades": 72,
+    "year": 2024
+   },
+   {
+    "expectancy_r": -0.1447,
+    "trades": 47,
+    "year": 2025
+   }
+  ]
+ },
+ "evidence": {
+  "corrective_reruns_done": 5,
+  "corrective_reruns_owed": 5,
+  "corrupted_trades_found": 8,
+  "label": "corrected",
+  "trades_reading_corrupted_days": 325
+ },
+ "exits": [
+  {
+   "expectancy_r": 0.3315,
+   "kind": "eod_flatten",
+   "trades": 353
+  },
+  {
+   "expectancy_r": -1.0166,
+   "kind": "stop",
+   "trades": 104
+  },
+  {
+   "expectancy_r": 1.9932,
+   "kind": "target",
+   "trades": 22
+  }
+ ],
+ "g1": {
+  "dsr_at_65": 0.7074,
+  "items": [
+   {
+    "id": "ci_lower",
+    "line": 0.0,
+    "pass": true,
+    "value": 0.0331
+   },
+   {
+    "id": "dsr",
+    "line": 0.95,
+    "pass": false,
+    "value": 0.6361
+   },
+   {
+    "id": "profit_factor",
+    "line": 1.2,
+    "pass": true,
+    "value": 1.4185
+   },
+   {
+    "id": "random_control_p",
+    "line": 0.05,
+    "pass": true,
+    "value": 0.005
+   },
+   {
+    "id": "trades",
+    "line": 100,
+    "pass": true,
+    "value": 417
+   }
+  ],
+  "of": 5,
+  "passed": 4,
+  "series": "walk_forward",
+  "trials": 87
+ },
+ "holdout": {
+  "ci95": [
+   -0.1284,
+   0.2876
+  ],
+  "consumed": true,
+  "expectancy_r": 0.0709,
+  "span": [
+   "2025-09-26",
+   "2026-09-25"
+  ],
+  "trades": 59
+ },
+ "owed": [
+  {
+   "id": "EXP-0049",
+   "status": "not run"
+  }
+ ],
+ "power": {
+  "alpha": 0.05,
+  "dsr_needs_trades": 889,
+  "full_edge": {
+   "edge_r": 0.1151,
+   "power_at_g2b": 0.25,
+   "trades": 325,
+   "years": 4.7
+  },
+  "g2b_trades": 50,
+  "half_edge": {
+   "edge_r": 0.0575,
+   "power_at_g2b": 0.12,
+   "trades": 1300,
+   "years": 18.9
+  },
+  "min_track_record_trades": 138,
+  "rate_95": [
+   0.12,
+   0.52
+  ],
+  "target_power": 0.8,
+  "trades_per_session": 0.2727
+ },
+ "rule": {
+  "frozen": true,
+  "orders": "QQQM",
+  "record": "DEC-0037",
+  "signal": "QQQ",
+  "version": "v1"
+ },
+ "runner_parity": {
+  "tradable_expectancy_r": 0.1244,
+  "untradable_expectancy_r": -0.1112,
+  "untradable_trades": 19
+ },
+ "schema": 1,
+ "source": {
+  "corrected_sha256": {
+   "EXP-0044": "1aeee1f25bdb8c695ec3efe565c4846a58082a5b6246bdf98093fb1d36eb5bbb",
+   "EXP-0045": "143b7170f5fb42a0b1faa90595d966f4115d4c9de7f7d4df1d3de0b91375fc11"
+  },
+  "decision": "DEC-0061",
+  "decision_status": "proposed",
+  "experiment": "EXP-0042",
+  "results_sha256": "587149b155534e47d37fee4253feb88f8eb7787fe3a5d47ca36ea8efece0a1c9",
+  "run_date": "2026-11-18"
+ },
+ "trail": [
+  {
+   "date": "2026-09-28",
+   "id": "DEC-0007",
+   "kind": "decision",
+   "status": "accepted"
+  },
+  {
+   "date": null,
+   "id": "EXP-0005b",
+   "kind": "experiment",
+   "status": "run"
+  },
+  {
+   "date": null,
+   "id": "EXP-0011",
+   "kind": "experiment",
+   "status": "run (holdout, consumed)"
+  },
+  {
+   "date": "2026-10-25",
+   "id": "DEC-0011",
+   "kind": "decision",
+   "status": "accepted"
+  },
+  {
+   "date": "2026-10-24",
+   "id": "DEC-0037",
+   "kind": "decision",
+   "status": "accepted"
+  },
+  {
+   "date": "2026-11-18",
+   "id": "EXP-0042",
+   "kind": "experiment",
+   "status": "run"
+  },
+  {
+   "date": "2026-11-19",
+   "id": "DEC-0061",
+   "kind": "decision",
+   "status": "accepted"
+  },
+  {
+   "date": "2026-11-19",
+   "id": "EXP-0043",
+   "kind": "experiment",
+   "status": "run"
+  },
+  {
+   "date": "2026-11-19",
+   "id": "EXP-0044",
+   "kind": "experiment",
+   "status": "run"
+  },
+  {
+   "date": "2026-11-19",
+   "id": "EXP-0045",
+   "kind": "experiment",
+   "status": "run"
+  },
+  {
+   "date": "2026-11-19",
+   "id": "EXP-0046",
+   "kind": "experiment",
+   "status": "run"
+  },
+  {
+   "date": "2026-11-19",
+   "id": "EXP-0047",
+   "kind": "experiment",
+   "status": "run"
+  },
+  {
+   "date": "2026-11-19",
+   "id": "EXP-0048",
+   "kind": "experiment",
+   "status": "run"
+  },
+  {
+   "date": "2026-11-19",
+   "id": "DEC-0062",
+   "kind": "decision",
+   "status": "accepted"
+  }
+ ],
+ "verdict": {
+  "record": "DEC-0062",
+  "row": "V2",
+  "status": "accepted",
+  "word": "SUSPEND"
+ },
+ "walk_forward": {
+  "ci95": [
+   0.0331,
+   0.1916
+  ],
+  "expectancy_r": 0.1131,
+  "trades": 417
+ }
+}
