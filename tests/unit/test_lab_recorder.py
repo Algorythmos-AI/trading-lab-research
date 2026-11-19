@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -21,15 +21,24 @@ START = dt.datetime(2026, 11, 19, 14, 30, tzinfo=dt.UTC)          # 09:30 New Yo
 
 
 class Clock:
+    """Simulated time. A real five-second sleep is far longer than the minute's work, so the worker thread has
+    always finished by the next tick; this clock costs no real time, so `idle` (set by `make` for a worker-thread
+    run) waits for the work in flight before time moves on, and the run does not depend on how threads are
+    scheduled."""
+
     def __init__(self, t: dt.datetime) -> None:
         self.t = t
+        self.idle: Callable[[], None] | None = None
 
     def now(self) -> dt.datetime:
         return self.t
 
     def sleep(self, seconds: float) -> None:
+        start = self.t
+        if self.idle is not None:
+            self.idle()                                 # the worker's requests move the clock while it waits
         if seconds > 0:
-            self.t += dt.timedelta(seconds=seconds)
+            self.t = max(self.t, start + dt.timedelta(seconds=seconds))
 
 
 class Alpaca:
@@ -100,10 +109,13 @@ def calendar(monkeypatch: pytest.MonkeyPatch) -> Any:
 
 
 def make(tmp_path: Path, clock: Clock, api: Alpaca, **kw: Any) -> recorder.Recorder:
-    return recorder.Recorder(api, {"APCA-API-KEY-ID": "k", "APCA-API-SECRET-KEY": "s"}, ["AAA", "BBB"], DAY,
-                             tmp_path / "tape" / DAY.isoformat(), clock, kw.pop("settings", recorder.Settings()),
-                             cal=CAL, off_file=tmp_path / "OFF", free_gb=kw.pop("free_gb", lambda: 40.0),
-                             memory_mb=kw.pop("memory_mb", lambda: 100.0), inline_minute=kw.pop("inline", True))
+    rec = recorder.Recorder(api, {"APCA-API-KEY-ID": "k", "APCA-API-SECRET-KEY": "s"}, ["AAA", "BBB"], DAY,
+                            tmp_path / "tape" / DAY.isoformat(), clock, kw.pop("settings", recorder.Settings()),
+                            cal=CAL, off_file=tmp_path / "OFF", free_gb=kw.pop("free_gb", lambda: 40.0),
+                            memory_mb=kw.pop("memory_mb", lambda: 100.0), inline_minute=kw.pop("inline", True))
+    if not rec.inline_minute:
+        clock.idle = lambda: rec.minute.result() if rec.minute is not None else None    # join the minute's work
+    return rec
 
 
 def rows(folder: Path, stream: str) -> list[dict[str, Any]]:
