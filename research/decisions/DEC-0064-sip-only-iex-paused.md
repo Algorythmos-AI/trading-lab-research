@@ -55,7 +55,8 @@ on 32.
    corporate actions, option trades, option bars, contracts) are unchanged.
 2. **IEX is paused, in one place.**
    - `wt.data.feeds` holds the paused feeds. `require_feed` refuses a request that names one, before it is sent.
-     The dashboard's `alpacaDataUrl` does the same.
+   - On the dashboard the pause is applied outside the signal's frozen code (DEC-0051; its hashes do not change):
+     in the feed setting and in the comparison jobs (point 10).
    - The pause is switched on in the last pull request, after every consumer below has moved. A test fails on an
      `iex` literal outside the paused comparison code.
    - **No fallback.** A SIP or OPRA read that is refused or fails is a failed data read, handled as each consumer
@@ -118,7 +119,7 @@ on 32.
 
 Each step is its own pull request into `integration`; none changes behaviour before its release reaches the host.
 
-1. The pause in `wt.data.feeds` and `alpacaDataUrl`, with an empty list.
+1. The pause in `wt.data.feeds`, with an empty list.
 2. The clone (points 3, 4, 6, 7).
 3. The routine, paper positions and the pipeline check (points 9, 10).
 4. Robot B (point 8).
