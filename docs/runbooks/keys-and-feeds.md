@@ -58,8 +58,8 @@ without fixing it. Read the records themselves for what they decide.
 | Flow data (site, `/api/flow`) | stock snapshots and today's 2-minute bars with volume, of the allowed names only (today's focus names, SPY and QQQ; EXP-0032) | sip | literal in `flow-route.ts`, never `ALPACA_FEED` | DEC-0050 | none |
 | Signal log (site, `/api/cron/desk`, the signal step after the shadow evaluator) | stock snapshots and today's 2-minute bars of the focus names, SPY and QQQ (`/api/flow`'s own read, in process); option snapshots (the chain) of each focus name | sip and opra, asked for by name, never from `ALPACA_FEED` or `ALPACA_OPTION_FEED` | literals in `flow-route.ts` (`serverFlow`) and `signal-run.ts` (`fetchChain(..., "opra")`) | DEC-0051 (section 4) | EXP-0034 |
 | Flow baseline (site, `/api/cron/flow-baseline`) | split-adjusted 2-minute bars of the previous 20 full sessions, for the same names (today's bars in `/api/flow` stay raw) | sip | literal in `flow-baseline-run.ts`, never `ALPACA_FEED` | DEC-0050 | none |
-| Paper runner B, signal bars (host, `paper-b`) | 1-minute bars | iex | literal default in `runner_b.py` | DEC-0037 | none |
-| Paper runner B, latest quotes (host) | latest quote of the signal and trade names | iex | literal | none | DEC-0024 |
+| Paper runner B, signal bars (host, `paper-b`) | 1-minute bars | sip | `STOCK_FEED` in `runner_b.py` | DEC-0064 | DEC-0037 |
+| Paper runner B, latest quotes (host) | latest quote of the signal and trade names | sip | `STOCK_FEED` in `runner_b.py` | DEC-0064 | DEC-0024 |
 | Paper runner B, sigma (host) | 1-minute bars of the 14 prior sessions | sip | literal | none | none: set in code |
 | Options clone, stock minute bars (host, `paper-o`) | 1-minute bars of its names and SPY | iex | literal in `runner_o.py` | set in code, no record binds it | DEC-0031 |
 | Options clone, levels (host) | daily bars | sip | literal | none | DEC-0033 |

@@ -111,11 +111,16 @@ def with_deadline(fn: Callable[..., T], *args: Any, deadline_s: float = DATA_DEA
     return _pool.submit(fn, *args).result(timeout=deadline_s)
 
 
+# DEC-0064 point 8: B's signal bars and latest quotes come from the consolidated tape, the only stock feed. Nothing
+# falls back to another: a refused or failed read is a failed data read, as before.
+STOCK_FEED = "sip"
+
+
 class LiveData:
     def __init__(self, a: AlpacaREST):
         self.a = a
 
-    def bars_today(self, sym: str, day: dt.date, feed: str = "iex") -> pd.DataFrame:
+    def bars_today(self, sym: str, day: dt.date, feed: str = STOCK_FEED) -> pd.DataFrame:
         j = self.a.get(f"{DATA}/v2/stocks/bars", {"symbols": sym, "timeframe": "1Min", "feed": feed, "limit": 10000,
                                                   "start": to_utc_iso(et(day, "09:30")), "end": to_utc_iso(dt.datetime.now(ET))})
         df = pd.DataFrame((j.get("bars") or {}).get(sym, []))
@@ -124,7 +129,7 @@ class LiveData:
         return df
 
     def quote(self, sym: str) -> tuple[float, float, pd.Timestamp] | None:
-        j = self.a.get(f"{DATA}/v2/stocks/quotes/latest", {"symbols": sym, "feed": "iex"})
+        j = self.a.get(f"{DATA}/v2/stocks/quotes/latest", {"symbols": sym, "feed": STOCK_FEED})
         q = (j.get("quotes") or {}).get(sym)
         if not q or not q.get("bp") or not q.get("ap"):
             return None                                   # a zero bid/ask is no quote (it once priced an exit at -0.05)
@@ -400,7 +405,8 @@ def minute_grid(closed: pd.DataFrame, open_dt: dt.datetime) -> pd.DataFrame:
     """The session's closed bars on a full one-minute grid from the open to the newest bar.
 
     B's half-hour marks are bar positions, which equal minutes since the open only when no minute is missing.
-    The IEX feed skips a minute with no trade there, and every later mark then lands on the wrong bar. A missing
+    A feed skips a minute with no trade (IEX often did; the consolidated tape rarely does for these names), and
+    every later mark then lands on the wrong bar. A missing
     minute becomes a flat bar at the last close with no volume, so it moves neither the price nor the VWAP.
     """
     if not len(closed):
@@ -765,7 +771,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
     log("armed", day=day, sigma=sigma, prev_close=prev_close, sigma_sessions=getattr(data, "sigma_sessions", None),
         flatten=flatten_dt, kill=kill_on,
         resumed_plan=plan.state if plan else None, held=held.trade_id if held else None, entries_off=off,
-        skew_s=measure_skew(broker, clock), virtual=asdict(va) if va_ok else None)
+        skew_s=measure_skew(broker, clock), virtual=asdict(va) if va_ok else None, stock_feed=STOCK_FEED)
     held_try = dt.datetime.min.replace(tzinfo=ET)
     short_paged = False
     acted = plan is not None                               # an entry was placed today (now or before a restart)
