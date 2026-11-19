@@ -45,7 +45,8 @@ SDK_FEED_CALLS = {name for name, cls in vars(sdk_requests).items()
 KNOWN_IMPLICIT: dict[str, str] = {}
 # The raw data requests the B9 inventory found: the scan must keep seeing each one (by file), or it passes vacuously.
 KNOWN_REQUESTS = {"scripts/r3_run.py": 1, "src/wt/data/alpaca.py": 1, "src/wt/data/tape.py": 1, "src/wt/lab/probe.py": 4,
-                  "src/wt/live/runner_b.py": 2, "src/wt/live/runner_o.py": 4, "src/wt/options/live.py": 2,
+                  "src/wt/live/runner_b.py": 2, "src/wt/live/runner_o.py": 4, "src/wt/live/scan_s.py": 1,
+                  "src/wt/options/live.py": 2,
                   "src/wt/options/pipeline_check.py": 2, "src/wt/options/select_fetch.py": 5,
                   "src/wt/scanner/features.py": 1}
 
