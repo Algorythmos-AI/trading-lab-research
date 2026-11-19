@@ -182,7 +182,7 @@
   "decision": "DEC-0061",
   "decision_status": "proposed",
   "experiment": "EXP-0042",
-  "results_sha256": "3fa1d74b7e73d2248455964113e4babbc5d7ecd9e3737bf46fc8c3bc2bea2c20",
+  "results_sha256": "3c4f6ff95dccca7ba38812d1d5311dec3cfb60d7551d72ec31ea69b441b09d4d",
   "run_date": "2026-11-18"
  },
  "trail": [
