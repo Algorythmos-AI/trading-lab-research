@@ -25,3 +25,10 @@
 
 - Registered: 2026-11-18
 - First run: 2026-11-18, after the registering commit 9d5f393; results committed with the driver amendment noted in report.md
+- 2026-11-19, check only (no committed value changed): `--check` now ignores `inputs_sha256.trial_registry` when it
+  differs. That field is the hash of the whole `config/trial_registry.yaml` at the last regeneration, and it may lag
+  the file. The audit reads only the global `history` rows, so a new `families` row or a comment no longer fails CI.
+  Everything else is still compared byte for byte, including the `registry` block (global_trials, rows) and every
+  figure computed from the global count, so a new history row or a changed global count still fails. Do not
+  regenerate results.json just to refresh this hash, because that also changes `robot-b-evidence.json`'s
+  `results_sha256`.

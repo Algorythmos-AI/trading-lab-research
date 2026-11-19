@@ -240,7 +240,8 @@ def test_reconcile_failure_exits_2(monkeypatch):
 
 
 def test_committed_results_reproduce():
-    """EXP-0042's committed results.json is exactly what the driver produces from the committed inputs."""
+    """EXP-0042's committed results.json is exactly what the driver produces from the committed inputs (byte for byte,
+    except the whole-file trial_registry hash: see check_results)."""
     import subprocess
     import sys
     from pathlib import Path
@@ -250,3 +251,82 @@ def test_committed_results_reproduce():
         pytest.skip("EXP-0042 has not been run in this checkout")
     out = subprocess.run([sys.executable, str(root / "scripts/b_audit.py"), "--check"], capture_output=True, text=True)
     assert out.returncode == 0, out.stderr
+
+
+# ---- --check and the trial registry hash: only what the audit reads may fail the check
+
+def _fresh() -> dict:
+    return {"inputs_sha256": {"holdout": "aa" * 32, "trial_registry": "bb" * 32},
+            "registry": {"global_trials": 87, "rows": 4}, "dsr": {"prob": 0.123456789012}}
+
+
+def test_check_passes_on_identical_bytes():
+    cli = _cli()
+    fresh = _fresh()
+    assert cli.check_results(cli.dump(fresh), fresh) == (True, False)
+
+
+def test_check_waives_only_the_registry_file_hash():
+    cli = _cli()
+    committed = _fresh()
+    committed["inputs_sha256"]["trial_registry"] = "cc" * 32      # a family row or a comment was added since
+    assert cli.check_results(cli.dump(committed), _fresh()) == (True, True)
+
+
+@pytest.mark.parametrize("change", [
+    lambda d: d["registry"].update(rows=5),                          # a new global history row
+    lambda d: d["registry"].update(global_trials=97),                # a new accepted global count
+    lambda d: d["dsr"].update(prob=0.5),                             # a figure computed from it
+    lambda d: d["inputs_sha256"].update(holdout="dd" * 32),          # any other input
+])
+def test_check_fails_when_anything_else_differs(change):
+    cli = _cli()
+    committed = _fresh()
+    committed["inputs_sha256"]["trial_registry"] = "cc" * 32
+    change(committed)
+    ok, _ = cli.check_results(cli.dump(committed), _fresh())
+    assert not ok
+
+
+def test_check_keeps_formatting_and_rounding_strict():
+    cli = _cli()
+    fresh = _fresh()
+    assert cli.check_results(cli.dump(fresh).replace('\n "', '\n  "'), fresh)[0] is False
+    unrounded = cli.dump(fresh).replace("0.123456789", "0.123456789012")
+    assert cli.check_results(unrounded, fresh)[0] is False
+
+
+@pytest.mark.parametrize("committed", ["", "not json", "{}", '{"inputs_sha256": {}}',
+                                       '{"inputs_sha256": {"trial_registry": 1}}'])
+def test_check_fails_on_a_malformed_committed_file(committed):
+    assert _cli().check_results(committed, _fresh()) == (False, False)
+
+
+def test_check_cli_exit_codes(monkeypatch, tmp_path, capsys):
+    cli = _cli()
+    monkeypatch.setattr(cli, "EXP", tmp_path)
+    monkeypatch.setattr(cli, "run", _fresh)
+    assert cli.main(["--check"]) == 1                                  # missing
+    committed = _fresh()
+    committed["inputs_sha256"]["trial_registry"] = "cc" * 32
+    (tmp_path / "results.json").write_text(cli.dump(committed))
+    assert cli.main(["--check"]) == 0
+    assert "registry block and figures match" in capsys.readouterr().out
+    committed["registry"]["rows"] = 5
+    (tmp_path / "results.json").write_text(cli.dump(committed))
+    assert cli.main(["--check"]) == 1
+
+
+def test_registry_reads_ignore_families(tmp_path):
+    """The waiver rests on this: global_trial_count and trial_history read only `history`, never `families`."""
+    from wt.research.trials import global_trial_count, trial_history
+    base = {"history": [{"decision": "DEC-0007", "total": 65, "status": "accepted"}],
+            "families": {"O": [{"decision": "DEC-0001", "total": 3, "status": "accepted"}]}}
+    import yaml
+    a, b = tmp_path / "a.yaml", tmp_path / "b.yaml"
+    a.write_text(yaml.safe_dump(base))
+    base["families"]["O"].append({"decision": "DEC-0002", "total": 9, "status": "proposed"})
+    base["families"]["Z"] = [{"decision": "DEC-0003", "total": 1, "status": "accepted"}]
+    b.write_text("# a comment\n" + yaml.safe_dump(base))
+    assert global_trial_count(a) == global_trial_count(b) == 65
+    assert trial_history(a) == trial_history(b)
