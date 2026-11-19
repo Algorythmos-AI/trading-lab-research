@@ -161,6 +161,7 @@ def _cli():
 
 
 def test_rounding_and_trading_calendar():
+    pytest.importorskip("exchange_calendars")      # dev lock only; the deploy's staging suite has the runtime lock
     cli = _cli()
     assert cli.rounded({"a": [0.1234567891234, math.inf, 0.0, 3]}) == {"a": [0.123456789, math.inf, 0.0, 3]}
     sessions = cli.xnys_sessions(dt.date(2019, 11, 1), dt.date(2020, 1, 31))
@@ -243,6 +244,7 @@ def test_committed_results_reproduce():
     import subprocess
     import sys
     from pathlib import Path
+    pytest.importorskip("exchange_calendars")      # the driver reads XNYS sessions from it (dev lock only)
     root = Path(__file__).parents[2]
     if not (root / "research/experiments/EXP-0042-b-audit-diagnostics/results.json").exists():
         pytest.skip("EXP-0042 has not been run in this checkout")
