@@ -21,7 +21,15 @@ blank.
 
 ## Dates
 
-- Probe: (not yet run)
-- OPRA condition codes left out: (fixed before the first recorded session)
+- Probe: 2026-11-19 (run 05:30 UTC on the host, for the session 2026-11-19): passed every mark. Request limit
+  10,000 a minute on the `APCA_CLONE` pair (the `APCA_OPTIONS` and `APCA_API` pairs the same); a tier-1 sweep in
+  0.115 s (2 requests, none failed); 53.6 GB free; all 4 focus names measured. 189 tier-1 contracts (10 more over
+  the ask cap, left out) and 3,583 tier-2; projected tier-1 raw size at most 621.5 MB a session. Nothing narrowed.
+  `WT_LAB_RATE_LIMIT` stays at its default 1,000, so the recorder's budget is 400 requests a minute.
+- OPRA condition codes left out: 2026-11-19, from Alpaca's list (`/v1beta1/options/meta/conditions/trade`, read the
+  same day), applying `definitions.prints_used`. Left out: cancelled `A` `C` `E` `G`; late or out of sequence `B` `D`
+  `F` `H`; multi-leg `f` `g` `h` `i` `j` `l` `m` `t` `u`; tied to stock `k` `n` `o` `p` `q` `r` `s`; extended hours
+  `v`; single-leg crosses `c` `d` (pre-arranged, they never meet a resting order, so they say nothing about a limit
+  filling). Kept: `I` `J` `S` `a` `b` `e` and prints with no code. A print carrying any left-out code is left out.
 - First recorded session: (none yet)
 - Counting starts: (none yet)
