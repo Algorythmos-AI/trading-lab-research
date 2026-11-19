@@ -1,7 +1,7 @@
 id: HYP-0068
 trial: "BOARD-LOCK-SLOW-FAILURE"
 family: O                       # the options desk's entry rules and the filters tried on them (DEC-0028, DEC-0041); total 48 with this one
-status: pre-registered          # DEC-0065 (proposed 2026-11-19); NOT blind: the group sizes on the five logged sessions were counted first, with no outcome (DEC-0065, "What has already been seen")
+status: pre-registered          # DEC-0065 (accepted 2026-11-19); NOT blind: the group sizes on the five logged sessions were counted first, with no outcome (DEC-0065, "What has already been seen")
 arm: replay                     # a secondary split of EXP-0036's removed ENTERs: no order of any kind
 statement: "On EXP-0036's replayed sessions (every session with a DEC-0044 server record from 2026-11-12 through 2027-01-29, focus names only, SIP 2-minute bars, the owner-trade session excluded as EXP-0036 already says), among the ENTERs EXP-0036 counts as removed by the lock, those whose removing lock was set by a slow failure reach the card's target 1 before the card's stop in a share no greater than the share among the ENTERs the lock keeps. A removed ENTER's lock is the side's failedAt at that slot; its break is the brokeAt the side carried while it read plan_off with that failedAt; the failure is fast when failedAt minus brokeAt is at most FAIL_WITHIN_BARS (3) two-minute bars, else slow. Outcomes, entry, card, first touch and the flat time are EXP-0036's, unchanged."
 rule: slow_removed_minus_kept   # a = ENTERs removed by a lock a slow failure set; b = ENTERs the lock keeps; both from the board without the lock (DEC-0052's engine)
