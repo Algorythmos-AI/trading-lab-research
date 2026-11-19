@@ -59,6 +59,12 @@ EXPIRY_POLICIES = ("same_day", "nearest")      # config/options_clone.yaml names
 # (IEX leaves out a minute with no trade there). A code constant, not a config number: it makes the clone read only
 # finished bars, as DEC-0030 says it does, and leaves config/options_clone.yaml (and EXP-0029's config) as frozen.
 LAST_MINUTE_GRACE = dt.timedelta(seconds=15)
+# DEC-0064: the consolidated tape is the clone's only stock feed. The pre-market high and low are those of 04:00 to
+# 09:30 New York; the clone arms before 09:30, so it reads the range once more after the open, no sooner than it would
+# read any minute bar (3 s, or `feeds.bar_settle_s` when that is longer), and that read is final for the day.
+STOCK_FEEDS_ALLOWED = ("sip",)
+PREMARKET_FINAL_AFTER_S = 3.0
+PREMARKET_MARKS = ("PMKH", "PMKL")
 # A broker or levels failure at arm is tried again this often until this long before `day.first_entry`, then paged
 # (EXP-0029, fidelity fix). Code, not config, for the reason LAST_MINUTE_GRACE is.
 ARM_RETRY_EVERY = dt.timedelta(seconds=60)
@@ -120,13 +126,18 @@ class Feeds(Protocol):
 
 
 class AlpacaFeeds:
-    """The broker's market data, GET only, with the trading account's key pair. Stock bars from IEX (real time on
-    the free plan); option quotes from the configured feed (`indicative` free, `opra` with a subscription)."""
+    """The broker's market data, GET only, with the trading account's key pair. Stock bars from the consolidated
+    tape (`sip`, DEC-0064: the only stock feed accepted, and nothing falls back to another); option quotes from the
+    configured feed (`opra`; `indicative` is Alpaca's free one)."""
 
-    def __init__(self, key_id: str, secret: str, option_feed: str, session_: requests.Session | None = None) -> None:
+    def __init__(self, key_id: str, secret: str, option_feed: str, session_: requests.Session | None = None,
+                 stock_feed: str = "sip") -> None:
+        if stock_feed not in STOCK_FEEDS_ALLOWED:
+            raise ValueError(f"feeds.stock: {stock_feed!r} is not one of {STOCK_FEEDS_ALLOWED} (DEC-0064)")
         self.s = session_ or requests.Session()
         self.h = {"APCA-API-KEY-ID": key_id, "APCA-API-SECRET-KEY": secret}
         self.feed = option_feed
+        self.stock_feed = stock_feed
 
     def _get(self, url: str, params: dict[str, str]) -> Any:
         # A market-data request that names no feed is refused before it is sent (B9), as a TransportError: every
@@ -167,7 +178,7 @@ class AlpacaFeeds:
         return t.astimezone(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def minutes(self, symbols: Sequence[str], start: dt.datetime, end: dt.datetime) -> dict[str, list[dict[str, Any]]]:
-        p = {"symbols": ",".join(symbols), "timeframe": "1Min", "feed": "iex", "limit": "10000",
+        p = {"symbols": ",".join(symbols), "timeframe": "1Min", "feed": self.stock_feed, "limit": "10000",
              "start": self._z(start), "end": self._z(end)}
         return dict(self._paged(f"{DATA_HOST}/v2/stocks/bars", p, "bars"))
 
@@ -299,6 +310,8 @@ class Runner:
     next_arm_try: dt.datetime | None = None
     arm_gave_up: bool = False
     options_level: int | None = None
+    pm_final: bool = False                       # the 04:00 to 09:30 pre-market range has been read after the open
+    pm_paged: bool = False
 
     def __post_init__(self) -> None:
         self.session = self.day.isoformat()
@@ -441,7 +454,8 @@ class Runner:
         self.write("armed", session=self.session, names=sorted(self.names), off=sorted(self.off),
                    own_account=getattr(self.broker, "own_account", False), options_level=self.options_level,
                    plans_open=[p.trade_id for p in self.plans if p.active],
-                   orders=self.cfg.get("orders"), feed=getattr(self.feeds, "feed", self.cfg["feeds"]["option"]))
+                   orders=self.cfg.get("orders"), feed=getattr(self.feeds, "feed", self.cfg["feeds"]["option"]),
+                   stock_feed=getattr(self.feeds, "stock_feed", None))
         hc.ping_async("wt-paper-o-armed", "", f"names {len(self.names)}")
         self.publish()
 
@@ -621,6 +635,7 @@ class Runner:
         for sym, px in marks.items():
             if self.mark_seen.get(sym, (None, now))[0] != px:
                 self.mark_seen[sym] = (px, now)
+        self.finalise_premarket(now)
         bars, tapes, stalled = self.read_tape(now)
         for p in [p for p in self.plans if p.active]:
             self.manage(p, now, bars, tapes, stalled, marks)
@@ -640,7 +655,13 @@ class Runner:
             if held:
                 self.critical(f"{pg.count(len(held))} position still open at {pg.hhmm(self.ck.critical)}")
         if self.ck.first_entry <= now <= self.ck.last_entry:
-            self.look_for_entries(now, bars, tapes, stalled)
+            if self.pm_final:
+                self.look_for_entries(now, bars, tapes, stalled)
+            elif not self.pm_paged:                  # a failed data read: no entry on levels that are not final
+                self.pm_paged = True
+                self.write("premarket_unavailable")
+                self.page("premarket-unavailable", "Options clone: pre-market levels unavailable",
+                          "The 04:00 to 09:30 range could not be read. No entries until it is.", 4)
         if self.shadow is not None:                      # last: the control has managed and entered for this poll
             self.arms_guard("step", self.arms_step, now, bars, tapes)
 
@@ -649,6 +670,39 @@ class Runner:
             self.paged_critical = True
             self.page("flatten-required", "Options clone: FLATTEN REQUIRED", why + ". Close it by hand in Alpaca.", 5)
             self.publish()
+
+    def finalise_premarket(self, now: dt.datetime) -> None:
+        """DEC-0064 point 3: once, after the open, replace each name's pre-market high and low with those of the whole
+        04:00 to 09:30 range. A failed read is tried again at the next poll and no entry is looked for until one
+        succeeds; a name with no pre-market bar is left without those two marks, and the journal says so."""
+        if self.pm_final:
+            return
+        if not self.cfg["levels"].get("premarket") or not self.names:
+            self.pm_final = True
+            return
+        wait = max(float(self.cfg["feeds"].get("bar_settle_s", 0.0)), PREMARKET_FINAL_AFTER_S)
+        if now < self.ck.open + dt.timedelta(seconds=wait):
+            return
+        roots = sorted(self.names)
+        try:
+            pre = self.feeds.minutes(roots, dt.datetime.combine(self.day, dt.time(4, 0), NEW_YORK), self.ck.open)
+        except (TransportError, requests.RequestException):
+            return
+        found: dict[str, list[float] | None] = {}
+        minutes: dict[str, int] = {}
+        for root in roots:
+            rows = [r for r in pre.get(root, []) if isinstance(r, Mapping)]
+            pm = session.premarket_range(rows, self.day)
+            nm = self.names[root]
+            kept = [m for m in nm.marks if m.name not in PREMARKET_MARKS]
+            if pm is not None:
+                kept += [setups.Mark(PREMARKET_MARKS[0], pm[0], False), setups.Mark(PREMARKET_MARKS[1], pm[1], False)]
+            nm.marks = sorted(kept, key=lambda m: m.price)
+            found[root] = [round(pm[0], 4), round(pm[1], 4)] if pm is not None else None
+            minutes[root] = len(rows)
+        self.pm_final = True
+        self.write("premarket", window="04:00-09:30", stock_feed=getattr(self.feeds, "stock_feed", None),
+                   high_low=found, minutes=minutes)
 
     def read_tape(self, now: dt.datetime) -> tuple[dict[str, list[regime.Bar]], dict[str, regime.Tape], set[str]]:
         roots = sorted(set(self.names) | {"SPY"})
@@ -663,8 +717,11 @@ class Runner:
             return bars, tapes, set(roots)
         b = self.cfg["bars"]
         stall = dt.timedelta(seconds=float(self.cfg["feeds"]["bar_stall_s"]))
+        settle = dt.timedelta(seconds=float(self.cfg["feeds"].get("bar_settle_s", 0.0)))   # DEC-0064 point 7
         for root in roots:
             ms = regime.minute_bars(rows.get(root, []), self.day)
+            if settle:
+                ms = [m for m in ms if m.end + settle <= now]
             if not ms or now - ms[-1].end > stall:
                 stalled.add(root)
             two = regime.resample(ms, int(b["minutes"]), now, LAST_MINUTE_GRACE)
@@ -1387,7 +1444,8 @@ def run(day: dt.date | None = None) -> int:
             return 2
         macro, earnings = load_events()
         r = Runner(day, cfg, lim, AlpacaFeeds(k[0], k[1], "opra" if (OPT / "switches" / "opra").exists()
-                                              else str(cfg["feeds"]["option"])),
+                                              else str(cfg["feeds"]["option"]),
+                                              stock_feed=str(cfg["feeds"]["stock"])),
                    broker, lambda: dt.datetime.now(NEW_YORK), time.sleep, pager, macro=macro, earnings=earnings,
                    exits_only="exits-only launch" if env("WT_EXITS_ONLY", "") == "1" else None,
                    publisher=clone_site.publisher_from_env())

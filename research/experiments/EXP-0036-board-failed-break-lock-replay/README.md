@@ -17,7 +17,7 @@
   - Before the run, the session list, the bars' sha256s and the with-lock engine's label are written below.
   - Lapses with no verdict if that pull request is not merged by 2027-02-28.
 
-## Amended by DEC-0065 (proposed 2026-11-19), before the run
+## Amended by DEC-0065 (accepted 2026-11-19), before the run
 
 - **Sessions:** every session with a DEC-0044 server record from 2026-11-12 **through 2027-01-29**, the owner-trade
   session excluded, in place of the list that ended at the release (2 sessions against a need for 10). Both engines run

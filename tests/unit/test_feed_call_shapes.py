@@ -247,7 +247,7 @@ D, P = DATA, "https://paper-api.alpaca.markets"
 # (module, driver, the URL of every request sent, in order). The params are compared whole with the unguarded run.
 OWN_SESSIONS = {
     "src/wt/live/runner_o.py": (runner_o, _clone_helper, 2 * [
-        f"{D}/v2/stocks/bars", f"{D}/v2/stocks/bars",                          # minutes, page 1 and 2 (iex)
+        f"{D}/v2/stocks/bars", f"{D}/v2/stocks/bars",                          # minutes, page 1 and 2 (sip)
         f"{D}/v2/stocks/bars", f"{D}/v2/stocks/bars",                          # daily (sip)
         f"{D}/v1beta1/options/snapshots/SPY", f"{D}/v1beta1/options/snapshots/SPY",   # chain (the option feed)
         f"{D}/v1beta1/options/snapshots", f"{D}/v1beta1/options/snapshots",    # quotes (the option feed)
@@ -295,6 +295,15 @@ def test_the_clones_committed_option_feed_is_exactly_one_the_guard_accepts() -> 
     session (the clone is not changed to tidy the value: that would be a new behaviour in a live job)."""
     cfg = yaml.safe_load((Path(__file__).resolve().parents[2] / "config" / "options_clone.yaml").read_text())
     assert str(cfg["feeds"]["option"]) in OPTION_FEEDS
+
+
+def test_robot_b_reads_its_bars_and_quotes_from_the_consolidated_tape() -> None:
+    """DEC-0064 point 8: both of B's live requests name sip, and its armed line can say so."""
+    from wt.live import runner_b
+    sent: Sent = []
+    _runner_b(sent)
+    assert [p["feed"] for _, p in sent] == ["sip", "sip"] and runner_b.STOCK_FEED == "sip"
+    assert [u.rsplit("/v2/stocks/", 1)[1] for u, _ in sent] == ["bars", "quotes/latest"]
 
 
 def test_paper_positions_and_the_pipeline_check_read_their_snapshots_from_the_consolidated_tape() -> None:

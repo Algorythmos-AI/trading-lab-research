@@ -38,8 +38,9 @@ names:
   nearest_within_days: 7
 
 feeds:
-  option: indicative            # `opra` once the owner subscribes (the file var/options/switches/opra also selects it)
-  stock: iex
+  option: opra                  # DEC-0064: the exact option feed (the file var/options/switches/opra is no longer needed)
+  stock: sip                    # DEC-0064: the consolidated tape, the only value the runner accepts; nothing falls back
+  bar_settle_s: 0               # DEC-0064 point 7: a minute bar is read only this long after its minute ends
   poll_s: 10
   quote_stale_flat_s: 60        # no new entry in a name whose option quote is older than this
   blind_exit_s: 120             # in a trade: sell when both the quote and the position mark are older than this

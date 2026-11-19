@@ -1,7 +1,9 @@
 # DEC-0065: The board's two retest replays (EXP-0035, EXP-0036) run once on a fixed horizon of sessions, and EXP-0036 splits the lock's removals by how fast the break failed
 
-- **Status: PROPOSED on 2026-11-19.** The owner's merge of the pull request that changes this line to ACCEPTED, and
-  the registry row to `accepted`, accepts it. Acceptance changes no code, starts nothing and changes no engine label.
+- **Status: ACCEPTED on 2026-11-19.** approved_by: owner. Proposed in #525, merged on 2026-11-19, after the owner
+  chose, in chat, to keep DEC-0053 as written and fix the measurement instead. The owner asked for this accepting change
+  ("Yes, open it", 2026-11-19). Accepted by the owner's merge of the pull request that changed this line. Acceptance
+  changes no code, starts nothing and changes no engine label.
 - **Amends, before either run:** EXP-0035 (DEC-0052's replay) and EXP-0036 (DEC-0053's replay), as each config's
   header allows ("before the run a decision record may amend it, saying what was viewed"). HYP-0060 and HYP-0061 keep
   their statements except for the session list, as section 1 says.
