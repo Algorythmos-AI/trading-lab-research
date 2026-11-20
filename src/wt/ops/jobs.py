@@ -8,7 +8,8 @@ For every run:
   2. Run the preflight checks (`wt.ops.preflight`). A failure is a refusal: one alert per job per day, exit 0.
      Exception (phase-2 L1): paper-b still starts, in exits-only mode, when strategy B holds a position and every
      failed check is one that can't make exit management unsafe (disk, .env mode, legacy state). Unreviewed code,
-     a venv mismatch or a held lock never start a runner.
+     a venv mismatch or a held lock never start a runner. paper-s has no such exception, and is refused outright on
+     a host without sleeve S's own key pair.
   3. Wait in-process where the job needs it (forward: until close + 20 min ET).
   4. Run the job as a child process under a deadline, with its output appended to logs/<log>_<YYYYMMDD>.log.
   5. Inspect the outcome: exit code, and for paper-b the journal (not flat, unknown position, latch, loop errors).
@@ -87,7 +88,7 @@ def deadline_for(job: Job, start: dt.datetime, sessions: dict[dt.date, Session])
     s = sessions.get(start.astimezone(ET).date())
     if job.name == "routine":
         return et(s.date, "12:30") if s else start + dt.timedelta(minutes=15)
-    if job.name in ("paper-b", "paper-o"):
+    if job.name in ("paper-b", "paper-s", "paper-o"):
         return s.close + dt.timedelta(minutes=45) if s else start + dt.timedelta(minutes=15)
     return start + dt.timedelta(minutes=job.deadline_min) if job.deadline_min else None
 
@@ -329,7 +330,9 @@ def b_exposure() -> bool:
 # jobs with a healthchecks.io check
 # pipeline-check and options-review joined on 2026-10-25 (plan C1): a check that never ran is otherwise silent (a
 # failed pipeline check pages through ntfy on its own), and the nightly review is what the clone's verdict is read from.
-HC_JOBS = frozenset({"routine", "paper-b", "forward", "weekly", "paper-o", "pipeline-check", "options-review"})
+# paper-s joined with its host job (DEC-0066): its runner pages on its own, but only a check sees a session that never ran.
+HC_JOBS = frozenset({"routine", "paper-b", "paper-s", "forward", "weekly", "paper-o", "pipeline-check",
+                     "options-review"})
 
 # Jobs that left the schedule (DEC-0036: the crypto desk is closed). A unit for one can still be installed and fire
 # until the owner runs `sudo wt-install-units`, which removes it. `main` exits 0 quietly for these: no lock, no
@@ -351,6 +354,14 @@ def log_page(path: Path) -> str:
     """A job's log as a page names it: logs/<job log>_<YYYYMMDD>.log, for a log name the schedule defines."""
     m = _LOG_NAME.fullmatch(path.name)
     return f"logs/{path.name}" if m and m.group(1) in KNOWN_LOGS else "the job's log"
+
+
+S_KEYS = ("APCA_S_KEY_ID", "APCA_S_SECRET_KEY")     # wt.live.runner_s reads no other pair (DEC-0066)
+
+
+def sleeve_s_keys() -> bool:
+    """Are both of sleeve S's keys in this process's environment (the host's secrets file, or .env)?"""
+    return all(os.environ.get(k, "").strip() for k in S_KEYS)
 
 
 def hc_slug(job: Job) -> str:
@@ -402,6 +413,10 @@ def run_job(job: Job, root: Path = ROOT, preflight_only: bool = False, alerts: A
             # not a failure: the run that holds the lock is the one that pings
             return refuse(job, "another run of this job is still in progress", alerts, log, ping=False)
         hb = Heartbeat(job.name, _sha(root))
+        if job.name == "paper-s" and not sleeve_s_keys():
+            # The runner would refuse to start and exit 1, which systemd restarts and pages as a failure. A host
+            # whose owner has not stored the pair has nothing to run: a refusal, once a day, exit 0.
+            return refuse(job, "sleeve S's key pair is not on this host", alerts, log, hb)
         fails = preflight.failures(preflight.run_checks(root)) if job.preflight else []
         extra_env: dict[str, str] = {}
         if fails:

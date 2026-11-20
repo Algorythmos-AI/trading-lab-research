@@ -38,8 +38,8 @@ STATIC_DIR = Path("deploy/oci/systemd")       # installed to /etc/systemd/system
 # cgroup memory per job on the 4 GB VM (e2-medium): (MemoryHigh, MemoryMax, MemorySwapMax). The heavy jobs throttle at
 # High and are killed at Max rather than pushing the paper runner, which runs at the same time, into the OOM killer.
 # The tail loader keeps them near 1 GB, so these are fuses, not budgets. The publisher's limit covers its collector
-# child too. The runner itself is never capped (OOMScoreAdjust=-500 instead): killing it mid-session is the worst
-# outcome.
+# child too. The runners themselves are never capped (OOMScoreAdjust=-500 instead): killing one mid-session is the
+# worst outcome.
 MEMORY: dict[str, tuple[str | None, str, str | None]] = {
     "routine": ("1536M", "2G", "512M"),
     "forward": ("1536M", "2G", "512M"),
@@ -97,7 +97,7 @@ def service(job: Job, root: Path, user: str = USER) -> str:
         "PrivateTmp=yes",
         "ProtectSystem=full",
     ]
-    if job.name in ("paper-b", "paper-o"):
+    if job.name in ("paper-b", "paper-s", "paper-o"):
         lines.append("OOMScoreAdjust=-500")                    # the last thing the kernel should kill
     if job.name == "lab-tape":
         lines += list(LAB_CAPS)

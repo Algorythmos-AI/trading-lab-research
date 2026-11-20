@@ -27,6 +27,7 @@ host:
   # they name. The Mac reads `jobs` whole, with their Sydney launchd times; it never ran the jobs in `overlay`.
   overlay:
     - {label: com.wt.paper-o, name: "Paper options clone", must_start_before_et: "09:25"}
+    - {label: com.wt.paper-s, name: "Paper sleeve S", must_start_before_et: "09:30"}
   jobs:
     - {label: com.wt.routine, local_time: "21:30", tz: Australia/Sydney, must_start_before_et: "07:55",
        name: "Pre-market routine", what: "SPEC-0001 dry run; waits until 07:55 ET, stages at 08:00 / 08:30 / 09:00 / 09:15"}

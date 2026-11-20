@@ -319,6 +319,7 @@ site(f"{JB}::run_job::f'refuse:{{job.name}}' | f\"{{word(job.name, KNOWN_JOBS, '
      {"job": _job(), "fails": _fails()})
 site(f"{JB}::run_job::job | 'a deploy is still changing the checkout after 30 ", {"job": _job()})
 site(f"{JB}::run_job::job | 'another run of this job is still in progress'", {"job": _job()})
+site(f"{JB}::run_job::job | 'sleeve S's key pair is not on this host'", {"job": _job()})
 site(f"{JB}::run_job::job | 'the forward test is still running after 3 hours'", {"job": _job()})
 site(f"{JB}::run_job::job | reason", {"job": _job(), "reason": T, "fails": _fails()})
 VP = "src/wt/ops/visibility.py::page"

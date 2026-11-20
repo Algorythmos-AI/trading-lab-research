@@ -40,6 +40,7 @@ The research and paper-trading engine behind Trading Lab. It holds:
 systemd timers on the VM (/home/wt/trading at a deployed main commit; runtime state in var/)
  ├─ wt-routine    07:30 New York: SPEC-0001 pre-market dry run (stages 08:00 to 09:15, signals check 11:31)
  ├─ wt-paper-b    08:30 New York: strategy B paper session (OMS + pre-trade guard)
+ ├─ wt-paper-s    08:30 New York: sleeve S paper session, the stock desk (its own account, journal and lease)
  ├─ wt-forward    12:40 New York → waits until close + 20 min: forward test of the frozen candidates
  ├─ wt-weekly     Friday 20:00 New York: weekly scorecard
  └─ wt-dashboard  every 5 min in the US session, every 15 otherwise → collect → sanitize → sign → POST
