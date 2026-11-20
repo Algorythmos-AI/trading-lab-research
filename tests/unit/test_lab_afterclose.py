@@ -19,14 +19,14 @@ END = dt.datetime(2026, 11, 19, 21, 0, tzinfo=dt.UTC)
 
 
 class Api:
-    def __init__(self, fail: bool = False) -> None:
+    def __init__(self, fail: bool = False, fail_first: int = 0) -> None:
         self.calls: list[tuple[str, dict[str, str]]] = []
-        self.fail = fail
+        self.fail, self.fail_first = fail, fail_first
 
     def __call__(self, url: str, params: Mapping[str, str], headers: Mapping[str, str], timeout: float) -> Answer:
         require_feed(url, params)                       # neither endpoint takes a feed: the guard lets them pass
         self.calls.append((url, dict(params)))
-        if self.fail:
+        if self.fail or len(self.calls) <= self.fail_first:
             return Answer(500, {}, None, 0.0)
         if url.endswith("/v1beta1/options/trades"):
             syms = params["symbols"].split(",")
@@ -54,7 +54,7 @@ def test_prints_are_paged_batched_and_written_raw(tmp_path: Path) -> None:
     pw, gw = PartWriter(tmp_path, "print"), PartWriter(tmp_path, "gap")
     c = afterclose.prints(api, {}, syms, START, END, pw, gw, time.monotonic() + 60)
     pw.flush()
-    assert c == {"prints": 152, "requests": 4, "failed": 0, "not_reached": 0}     # 2 batches x 2 pages
+    assert c == {"prints": 152, "requests": 4, "failed": 0, "not_reached": 0, "batches": 2}   # 2 batches x 2 pages
     first = api.calls[0][1]
     assert first["start"] == "2026-11-19T14:30:00Z" and first["end"] == "2026-11-19T21:00:00Z" and "feed" not in first
     r = rows(tmp_path, "print")
@@ -65,18 +65,42 @@ def test_open_interest_keeps_only_recorded_contracts_and_reads_string_numbers(tm
     ow, gw = PartWriter(tmp_path, "open_interest"), PartWriter(tmp_path, "gap")
     keep = {"AAA261119C00100000", "BBB261119C00100000"}
     c = afterclose.open_interest(Api(), {}, ["AAA", "BBB"], dt.date(2026, 11, 19), dt.date(2026, 11, 27), keep, ow, gw,
-                                 time.monotonic() + 60)
+                                 time.monotonic() + 60, session=dt.date(2026, 11, 19))
     ow.flush()
-    assert c == {"contracts": 2, "requests": 2, "failed": 0}
+    assert c == {"contracts": 2, "requests": 2, "failed": 0, "missing": 0, "dates": {"2026-11-18": 2},
+                 "dated_session_or_later": 0}
     assert {(x["symbol"], x["open_interest"], x["close_price"]) for x in rows(tmp_path, "open_interest")} == {
         ("AAA261119C00100000", 1520, 1.02), ("BBB261119C00100000", 1520, 1.02)}
 
 
 def test_failures_and_the_deadline_are_gaps_not_errors(tmp_path: Path) -> None:
     pw, ow, gw = PartWriter(tmp_path, "print"), PartWriter(tmp_path, "open_interest"), PartWriter(tmp_path, "gap")
-    assert afterclose.prints(Api(fail=True), {}, ["AAA261119C00100000"], START, END, pw, gw, time.monotonic() + 60)["failed"] == 1
-    assert afterclose.prints(Api(), {}, ["AAA261119C00100000"], START, END, pw, gw, time.monotonic() - 1)["not_reached"] == 1
+    nap = lambda s: None                                                                  # noqa: E731
+    sym = "AAA261119C00100000"
+    failing = Api(fail=True)
+    assert afterclose.prints(failing, {}, [sym], START, END, pw, gw, time.monotonic() + 60, pause=nap)["failed"] == 1
+    assert len(failing.calls) == afterclose.TRIES                       # asked again before the batch is given up
+    two = [f"AAA261119C{k:08d}" for k in range(150)]
+    assert afterclose.prints(Api(), {}, two, START, END, pw, gw, time.monotonic() - 1, pause=nap)["not_reached"] == 2
     assert afterclose.open_interest(Api(fail=True), {}, ["AAA"], dt.date(2026, 11, 19), dt.date(2026, 11, 19), set(),
-                                    ow, gw, time.monotonic() + 60)["failed"] == 1
+                                    ow, gw, time.monotonic() + 60, pause=nap)["failed"] == 1
     gw.flush()
-    assert [g["reason"] for g in rows(tmp_path, "gap")] == ["status 500", "deadline", "status 500 AAA"]
+    assert [g["reason"] for g in rows(tmp_path, "gap")] == [
+        f"status 500: batch 0 {sym}..{sym} page 0 onward not pulled",
+        f"deadline: 2 batches not pulled from batch 0 {two[0]}..{two[99]} page 0", "status 500 AAA page 0"]
+
+
+def test_a_failed_page_is_asked_again_and_nothing_is_lost(tmp_path: Path) -> None:
+    pw, gw = PartWriter(tmp_path, "print"), PartWriter(tmp_path, "gap")
+    c = afterclose.prints(Api(fail_first=2), {}, ["AAA261119C00100000"], START, END, pw, gw, time.monotonic() + 60,
+                          pause=lambda s: None)
+    assert c["failed"] == 0 and c["prints"] == 2 and gw.rows == []
+
+
+def test_recorded_contracts_missing_from_the_listing_are_counted(tmp_path: Path) -> None:
+    ow, gw = PartWriter(tmp_path, "open_interest"), PartWriter(tmp_path, "gap")
+    keep = {"AAA261119C00100000", "AAA261119C00300000", "AAA261119C00400000"}
+    c = afterclose.open_interest(Api(), {}, ["AAA"], dt.date(2026, 11, 19), dt.date(2026, 11, 27), keep, ow, gw,
+                                 time.monotonic() + 60, session=dt.date(2026, 11, 19))
+    assert c["contracts"] == 1 and c["missing"] == 2 and c["dated_session_or_later"] == 0
+    assert gw.rows[-1]["reason"] == "2 recorded contracts not in the listing"

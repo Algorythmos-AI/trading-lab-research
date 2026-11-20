@@ -1,0 +1,114 @@
+# EXP-0052: EXP-0041 on the v2 recorder (DEC-0067). Descriptive: no hypothesis, no trial. Frozen with DEC-0067 before
+# any v2 session exists; a changed value is a new experiment.
+experiment: EXP-0052
+replaces: EXP-0041                  # closed unread before its first counted session
+status: proposed                    # registered when DEC-0067 is accepted; no results file until the first read
+decision: DEC-0067
+family: none                        # selects nothing; a rule taken from it counts its cells in its own record
+
+recording:
+  names: the session's focus names only (DEC-0060 section 1), read once at 09:25 New York; none, nothing recorded
+  calendar: dashboard/src/lib/market-calendar.json
+  tier1: {every_s: 5, max_sessions_to_expiry: 5, today_is: 0, strike_within_pct_of_stock_mid: 3.0, max_ask: 3.00, max_contracts_per_name: 300}
+  tier2: {every_s: 60, max_calendar_days_to_expiry: 14, strike_within_pct_of_stock_mid: 8.0}
+  tiers_only_grow_within_a_session: true
+  feeds: {option: opra, stock: sip}
+  after_close: {trade_prints: tier1, open_interest: recorded_contracts, stop_min_after_close: 90, upload_done_min_after_close: 110}
+  request_budget: {share_of_measured_limit: 0.40, back_off_when_remaining_share_under: 0.30}
+  stop_when_free_disk_gb_under: 17
+  open_interest_before_open: {at_et: "09:26", contracts: focus names to 14 days, use_only_dated_before_the_session: true}
+  fresh_tick: {newest_tier1_quote_age_s_at_most: 15}
+  reader: "wt.lab.read: a quote at an instant is the last row received by it, only if sampled and answered at the last sweep"
+
+probe:                              # run once by the owner before the recorder is built; result as a dated README line
+  pass:
+    rate_limit_per_min_at_least: 1000
+    tier1_sweep_seconds_at_most: 5.0          # for the six largest focus names' tier 1, at the recorder's own budget
+    free_disk_gb_at_least: 19
+  narrowing_order_on_a_miss: [max_ask 2.00, strike_within_pct 2.0, max_sessions_to_expiry 3]
+
+counting:
+  shadow_sessions: 5                           # the first five v2 sessions; the v1 session of 2026-11-19 counts for nothing
+  session_counts_when:
+    - a regular New York session with a focus list for it
+    - the opening tier-1 set is complete (every focus name selected)
+    - coverage_fresh_strict >= 0.99
+    - longest_stale_s <= 300
+    - abs(clock_offset_ms) <= 250 and abs(clock_offset_ms_end) <= 250
+    - tier1_crossed_share <= 0.005
+    - ticks_down == 0, else the session is partial and its missing span is listed in every report
+  opening_set: >-
+    frozen once the recorder's first minute of chain reading has finished and every focus name has been selected;
+    if a name is still missing five minutes after the run starts, frozen without it and the session does not count
+  expected_samples: >-
+    the opening set at every 5-second tick from the freeze or 09:35, whichever is earlier, to the close, run or not
+    (a late start, a stop, an outage or a restart is missed coverage); a sample on a stale tick is missed
+  entries_on_fresh_ticks_only: true            # entries skipped as stale are counted per table
+  excluded_sessions: listed with their reason in every report
+  read_points_counted_sessions: [20, 40, then every 40]
+  entry_instants_et: ["10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00"]
+  entry_instants_half_day_et: ["10:00", "10:30", "11:00", "11:30", "12:00"]
+  entry_contracts: tier-1 contracts at the first sample at or after the instant, two-sided quote, ask <= 2.00
+  max_ask_reason: trade-rules.ts MAX_PREMIUM 200 per position (read, never edited)
+  interval: {kind: bootstrap_by_session, level: 0.90, draws: 2000, seed: "first 8 bytes of sha256('EXP-0041|' + table)"}
+  cell_minimum: {sessions: 8, entries: 30}     # fewer: the cell is blank
+
+definitions:
+  delta: >-
+    Black-Scholes with r = 0 and q = 0, implied volatility solved from the entry mid (wt.options.bs), time to 16:00
+    New York on the expiry date in calendar minutes / 525600; contracts outside 0.20-0.65 absolute are left out and
+    counted
+  stock_sd_h: >-
+    standard deviation of non-overlapping h-minute log returns of the stock's SIP 1-minute closes, 09:30-16:00, over
+    its prior 20 regular sessions (historical bars, fetched after the close)
+  stock_in_noise: the largest absolute log move of the stock's 1-minute closes from the instant within h minutes is <= stock_sd_h
+  fast_tape: >-
+    the absolute 5-minute log return of the stock ending at the instant is above the 80th percentile of non-overlapping
+    5-minute absolute returns over its prior 20 regular sessions; otherwise calm
+  tick: $0.01 under $3.00, $0.05 from $3.00 (dashboard/src/lib/ticket.ts TICK_SWITCH_CENTS)
+  prints_used: >-
+    regular single-leg prints only; prints flagged late, out of sequence, cancelled or part of a multi-leg order are
+    left out by an OPRA condition-code list fixed by a dated README line before the first recorded session
+
+buckets:
+  delta: [[0.20, 0.35], [0.35, 0.50], [0.50, 0.65]]
+  expiry: [same_day, "1-2_sessions", "3-5_sessions"]
+  time_of_day_et: [["10:00", "11:00"], ["11:00", "14:00"], ["14:00", "15:30"]]
+  tape: [calm, fast]
+
+tables:
+  stop_survival:
+    entry: buy one contract at the sampled ask
+    stop: 0.75 x entry ask, rounded up to the tick        # PREMIUM_STOP 0.25 (premium-stop.ts), read, never edited
+    horizons_min: [5, 15, 30]
+    touched_by_bid: a later sampled bid at or under the stop within the horizon
+    touched_by_print: a regular print at or under the stop within the horizon
+    realised_loss: entry ask minus the first sampled bid at or under the stop, plus round-trip fees, per contract
+    report: [touch_share_by_bid, touch_share_by_print, touch_share_by_bid_stock_in_noise, realised_loss_median, realised_loss_p90, gap_beyond_stop_median, contracts_within_risk_limit]
+    risk_limit_usd: 50              # trade-rules.ts RISK_PER_TRADE, read, never edited
+    fees_round_trip_usd: 1.11       # the owner's broker, per contract
+    headline: touch_share_by_bid, all cells pooled, 15-minute horizon
+  round_trip_cost:
+    measure: (ask - bid) / mid at the instant, plus fees_round_trip_usd / (mid x 100)
+    report: [median, p75, p90]
+    headline: median, all cells pooled
+  limit_fill_band:
+    limits: {mid: "mid rounded up to the tick", ask: "the ask"}
+    windows_s: [30, 60, 120]
+    lower: a regular print strictly below the limit, or a later sampled ask at or under it, within the window
+    upper: a regular print at or below the limit within the window
+    after_fill: the mid 60 seconds after the first qualifying event, minus the limit
+    headline: lower band for the mid limit at 60 seconds, all cells pooled
+  model_gap:
+    model: >-
+      the Options page's flat-volatility price (dashboard/src/lib/bs.ts price, r = 0, q = 0) with the implied
+      volatility solved from the entry mid held fixed, at the stock's actual mid after h minutes; ported to Python with
+      parity vectors from bs.ts, which is never edited
+    horizons_min: [5, 15, 30]
+    measure: (mid after h minutes - model price) / entry mid
+    headline: median, all cells pooled, 15-minute horizon
+    stop_when: at two read points running, every cell's 90% range contains zero; the record then says the page's model is enough
+
+grid_audit:
+  coarse_grid_s: 10                 # every second 5-second sample
+  triggers_streaming_record_when: "a headline moves by more than 10% of its value and by more than 2 percentage points"

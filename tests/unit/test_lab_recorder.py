@@ -53,6 +53,15 @@ class Alpaca:
         self.n_stock, self.n_sweep, self.n_chain = 0, 0, {"AAA": 0, "BBB": 0}
         self.fail_tier1, self.remaining, self.step = fail_tier1 or set(), remaining or ["9000"], step
         self.chain_fail, self.stock_raise, self.exit_at_stock = chain_fail or {}, stock_raise or set(), exit_at_stock
+        self.quote_at: dict[int, str] = {}              # quote step: the time the quote changed (RFC 3339, as Alpaca)
+        self.frozen: tuple[dt.datetime, dt.datetime] | None = None    # OPRA answers the old quotes in this window
+        self.served: dict[str, list[tuple[dt.datetime, float | None, float | None, str | None]]] = {}
+        self.answers: list[tuple[dt.datetime, list[str], str | None]] = []     # (when, symbols, newest quote time)
+
+    def stamp(self, step: int) -> str:
+        if step not in self.quote_at:
+            self.quote_at[step] = (self.clock.t - dt.timedelta(milliseconds=200)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        return self.quote_at[step]
 
     def mid(self, name: str) -> float:
         seq = self.mids.get(name, [100.0])
@@ -73,8 +82,9 @@ class Alpaca:
                 recorder.TERM.set()                     # what the SIGTERM handler does
             if self.n_stock in self.stock_raise:
                 raise ValueError("a malformed answer")
+            qt = (self.clock.t - dt.timedelta(milliseconds=50)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
             return Answer(200, h, {s: {"latestQuote": {"bp": self.mid(s) - 0.01, "ap": self.mid(s) + 0.01,
-                                                        "bs": 3, "as": 4, "t": f"q{self.n_stock}"}}
+                                                        "bs": 3, "as": 4, "t": qt}}
                                    for s in params["symbols"].split(",")}, self.step)
         if "/v1beta1/options/snapshots/" in url:
             root = url.rsplit("/", 1)[1]
@@ -91,10 +101,20 @@ class Alpaca:
             self.n_sweep += 1
             syms = params["symbols"].split(",")
             if self.n_sweep in self.fail_tier1:
+                for s in syms:
+                    self.served.setdefault(s, []).append((self.clock.t, None, None, None))
                 return Answer(503, h, None, self.step)
-            v = 1.0 + (self.n_sweep // 2) * 0.01
+            step = self.n_sweep // 2
+            if self.frozen is not None and self.frozen[0] <= self.clock.t < self.frozen[1]:
+                step = self.frozen_step                 # the feed keeps answering the quote it had at the freeze
+            else:
+                self.frozen_step = step
+            v = 1.0 + step * 0.01
+            for s in syms:
+                self.served.setdefault(s, []).append((self.clock.t, 0.0 if s[9] == "P" else v - 0.1, v, self.stamp(step)))
+            self.answers.append((self.clock.t, syms, self.stamp(step)))
             return Answer(200, h, {"snapshots": {s: {"latestQuote": {"bp": 0.0 if s[9] == "P" else v - 0.1, "ap": v,
-                                                                     "bs": 1, "as": 2, "t": f"t{self.n_sweep // 2}"},
+                                                                     "bs": 1, "as": 2, "t": self.stamp(step)},
                                                      "greeks": {"delta": 0.5, "gamma": 0.1}, "dailyBar": {"v": 10}}
                                                  for s in syms}}, self.step)
         return Answer(404, {}, None, 0.0)
@@ -199,7 +219,7 @@ def test_a_name_whose_chain_fails_holds_the_freeze_then_is_written_down(tmp_path
 def test_a_failed_tier_one_answer_is_a_gap_and_lowers_coverage(tmp_path: Path) -> None:
     clock = Clock(START)
     rec, doc, _ = session(tmp_path, api=Alpaca(clock, fail_tier1={6, 11}))
-    assert "status 503" in reasons(rec) and 0.9 < doc["coverage"] < 1.0
+    assert any(r.startswith("status 503") for r in reasons(rec)) and 0.9 < doc["coverage"] < 1.0
 
 
 def test_the_budget_skips_batches_and_says_so(tmp_path: Path) -> None:
@@ -368,20 +388,23 @@ def test_main_after_a_stop_past_the_close_writes_the_manifest_with_what_it_has(
 
 
 def test_archiving_never_fails_the_day_and_says_what_it_did(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    close = START + dt.timedelta(hours=6, minutes=30)
-    assert recorder.archive_today(tmp_path, {}, close, Clock(close)).startswith("no lab bucket credentials")
+    until = START + dt.timedelta(hours=6, minutes=30) + dt.timedelta(minutes=recorder.UPLOAD_DONE_MIN)
+    shared = {"R2_ACCOUNT_ID": "a", "R2_ACCESS_KEY_ID": "backup", "R2_SECRET_ACCESS_KEY": "backup-secret"}
+    monkeypatch.setenv("R2_ACCESS_KEY_ID", "backup")                 # the backup's token in the process: never used
+    monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "backup-secret")
+    assert recorder.archive_today(tmp_path, shared, Clock(until)).startswith("no lab bucket credentials")
     from wt.lab import archive
     monkeypatch.setattr(archive, "store_from_env", lambda env: object())
-    assert recorder.archive_today(tmp_path, {}, close, Clock(close + dt.timedelta(hours=2))).startswith("past close")
+    assert recorder.archive_today(tmp_path, {}, Clock(until), until).startswith("past close")
     monkeypatch.setattr(archive, "upload_all", lambda *a, **k: [{"session": "2026-11-19", "verified": True},
                                                                 {"session": "2026-11-18", "verified": False}])
-    monkeypatch.setattr(archive, "prune", lambda root, keep=10: ["2026-11-01"])
-    assert recorder.archive_today(tmp_path, {}, close, Clock(close)) == "1 uploaded, 1 not (2026-11-18), 1 pruned"
+    monkeypatch.setattr(archive, "prune", lambda *a, **k: ["2026-11-01"])
+    assert recorder.archive_today(tmp_path, {}, Clock(START)) == "1 uploaded, 1 not (2026-11-18), 1 pruned"
 
     def boom(*a: Any, **k: Any) -> Any:
         raise OSError("network")
     monkeypatch.setattr(archive, "upload_all", boom)
-    assert recorder.archive_today(tmp_path, {}, close, Clock(close)) == "error OSError"
+    assert recorder.archive_today(tmp_path, {}, Clock(START)) == "error OSError"
 
 
 def test_an_early_stop_counts_every_tick_due_to_the_close_as_missed(tmp_path: Path) -> None:
@@ -430,3 +453,62 @@ def test_nothing_is_recorded_until_dec_0060_is_accepted(tmp_path: Path, capsys: 
     assert "not accepted" in capsys.readouterr().out
     assert recorder.accepted(tmp_path / "missing.md") is False
     assert recorder.accepted() is True                        # the owner accepted DEC-0060 on 2026-11-19
+
+
+class Trades(Alpaca):
+    """Alpaca with the after-close endpoints: one print per contract, and every contract listed with open interest."""
+
+    def __init__(self, clock: Clock, raise_oi: bool = False, **kw: Any) -> None:
+        super().__init__(clock, **kw)
+        self.raise_oi = raise_oi
+
+    def __call__(self, url: str, params: Mapping[str, str], headers: Mapping[str, str], timeout: float) -> Answer:
+        if url.endswith("/v1beta1/options/trades"):
+            self.calls.append((url, dict(params)))
+            return Answer(200, {}, {"trades": {s: [{"t": "2026-11-19T15:00:00Z", "p": 1.0, "s": 1, "c": "I"}]
+                                               for s in params["symbols"].split(",")}}, 0.0)
+        if url.endswith("/v2/options/contracts"):
+            self.calls.append((url, dict(params)))
+            if self.raise_oi:
+                raise OSError("disk full")
+            return Answer(200, {}, {"option_contracts": []}, 0.0)
+        return super().__call__(url, params, headers, timeout)
+
+
+def test_the_after_close_pull_runs_once_and_an_interrupted_one_is_redone_whole(tmp_path: Path) -> None:
+    clock = Clock(START - dt.timedelta(seconds=30))
+    api = Trades(clock)
+    rec = make(tmp_path, clock, api)
+    rec.run(START, START + dt.timedelta(minutes=2))
+    close = START + dt.timedelta(minutes=2)
+    first = recorder.after_close(rec, api, {}, START, close, clock)
+    n = len(rows(rec.folder, "print"))
+    assert n == first["prints"]["prints"] > 0 and (rec.folder / recorder.AFTER_CLOSE).exists()
+    assert recorder.after_close(rec, api, {}, START, close, clock) == first        # a restart: nothing pulled again
+    assert len(rows(rec.folder, "print")) == n
+    (rec.folder / recorder.AFTER_CLOSE).unlink()                                   # as if stopped mid-pull
+    again = recorder.after_close(rec, api, {}, START, close, clock)
+    assert len(rows(rec.folder, "print")) == n and again["redone_parts_removed"] >= 1
+
+
+def test_a_failing_after_close_pull_still_gives_the_session_its_manifest(tmp_path: Path,
+                                                                        monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = Clock(START - dt.timedelta(minutes=10))
+    rc, folder = run_main(tmp_path, monkeypatch, F, clock, Trades(clock, raise_oi=True))
+    doc = json.loads((folder / manifest.NAME).read_text())
+    assert rc == 0 and doc["recorded"] is True and doc["after_close"]["error"] == "OSError"
+    assert not (folder / recorder.AFTER_CLOSE).exists()                            # a same-day restart redoes it
+
+
+def test_an_earlier_day_left_unfinished_is_closed_and_counted_as_missed(tmp_path: Path,
+                                                                       monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = Clock(START - dt.timedelta(minutes=10))
+    assert run_main(tmp_path, monkeypatch, F, clock, Alpaca(clock, exit_at_stock=8))[0] == 143
+    recorder.TERM.clear()
+    old = tmp_path / "tape" / "2026-11-19"
+    assert not (old / manifest.NAME).exists()                                       # never restarted that day
+    nxt = Clock(dt.datetime(2026, 11, 20, 14, 20, tzinfo=dt.UTC))
+    monkeypatch.setattr(focus, "read", lambda env=None, get=None, now=None: None)
+    run_main(tmp_path, monkeypatch, None, nxt)
+    doc = json.loads((old / manifest.NAME).read_text())
+    assert doc["recorded"] is True and doc["stopped"].startswith("never finished") and doc["coverage"] < 0.5

@@ -229,3 +229,16 @@ def test_main_probes_the_focus_names_for_the_next_session_after_the_close(tmp_pa
     assert probe.main(["--out", str(out)], get=Fake(), now=NOW) == 0          # 17:00 New York: the next session
     doc = json.loads(out.read_text())
     assert doc["session"] == "2026-11-19" and doc["names"] == 1 and doc["passed"] is True and "NVDA" not in out.read_text()
+
+
+def test_exp0052_counting_rules_are_all_parsed_as_rules() -> None:
+    """EXP-0041's YAML folded two counting conditions into another value's text; EXP-0052's are each a list item, and
+    each names a manifest field the recorder writes."""
+    cfg = yaml.safe_load((ROOT / "research/experiments/EXP-0052-lab-execution-truth-v2/config.yaml").read_text())
+    rules = cfg["counting"]["session_counts_when"]
+    assert len(rules) == 7 and all(isinstance(r, str) for r in rules)
+    assert isinstance(cfg["counting"]["expected_samples"], str) and "\n-" not in cfg["counting"]["expected_samples"]
+    for field in ("coverage_fresh_strict", "longest_stale_s", "clock_offset_ms", "clock_offset_ms_end",
+                  "tier1_crossed_share", "ticks_down"):
+        assert any(field in r for r in rules), field
+    assert cfg["recording"]["tier1"]["max_contracts_per_name"] == 300 and cfg["replaces"] == "EXP-0041"

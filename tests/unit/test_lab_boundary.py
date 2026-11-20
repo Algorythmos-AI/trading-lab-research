@@ -86,3 +86,53 @@ def test_the_closure_walk_sees_through_an_intermediate_module() -> None:
     assert "wt.oms.options" in reached
     assert any(m.startswith("wt.brokers") for m in reached)            # through wt.ops.publish, not imported directly
     assert "wt.options.chain" in closure([LAB / "tiers.py"])
+
+
+def test_the_lab_has_no_hidden_way_to_run_or_import_code() -> None:
+    """The walk sees `import` statements only, so the ways around it are banned by name in the lab's own code:
+    dynamic imports, exec and eval, runpy, and processes other than the two it needs (chrony's clock offset and the
+    commit it runs from)."""
+    banned = ("import_module", "__import__", "importlib", "find_spec", "runpy", "exec(", "eval(", "os.system",
+              "os.popen", "Popen", "pty.", "ctypes")
+    for p in sorted(LAB.rglob("*.py")):
+        text = p.read_text()
+        for word in banned:
+            assert word not in text, f"{p.name}: {word}"
+        tree = ast.parse(text)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "run" \
+                    and isinstance(node.func.value, ast.Name) and node.func.value.id == "subprocess":
+                first = node.args[0] if node.args else None
+                assert isinstance(first, ast.List) and isinstance(first.elts[0], ast.Constant) \
+                    and first.elts[0].value in ("chronyc", "git"), f"{p.name}:{node.lineno}: subprocess"
+
+
+def test_the_lab_names_no_account_order_or_owner_endpoint_or_file() -> None:
+    from wt.lab import probe
+    for p in sorted(LAB.rglob("*.py")):
+        tree = ast.parse(p.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                v = node.value
+                if v.startswith("http"):
+                    assert v.rstrip("/") in {h for h, _, _ in probe.ALLOWED}, f"{p.name}: {v}"
+                for bad in ("/v2/account", "/v2/orders", "/v2/positions", "exp0037", "owner_trades", "journal"):
+                    assert bad not in v, f"{p.name}:{node.lineno}: {v!r}"
+
+
+def test_every_call_outside_the_allowed_urls_is_refused_before_it_is_sent() -> None:
+    from wt.lab import probe
+    ok = ["https://data.alpaca.markets/v2/stocks/snapshots", "https://data.alpaca.markets/v1beta1/options/snapshots",
+          "https://data.alpaca.markets/v1beta1/options/snapshots/SPY", "https://data.alpaca.markets/v1beta1/options/trades",
+          "https://paper-api.alpaca.markets/v2/options/contracts"]
+    no = ["https://paper-api.alpaca.markets/v2/account", "https://paper-api.alpaca.markets/v2/orders",
+          "https://api.alpaca.markets/v2/options/contracts", "https://data.alpaca.markets/v1beta1/options/snapshots/../x",
+          "https://data.alpaca.markets.evil.io/v2/stocks/snapshots", "https://paper-api.alpaca.markets/v2/positions"]
+    assert all(probe.allowed(u) for u in ok) and not any(probe.allowed(u) for u in no)
+    calls = []
+    get = probe.http_get(type("S", (), {"get": lambda self, *a, **k: calls.append(a)})())   # never reached
+    try:
+        get("https://paper-api.alpaca.markets/v2/orders", {}, {}, 1.0)
+    except PermissionError:
+        pass
+    assert calls == []
