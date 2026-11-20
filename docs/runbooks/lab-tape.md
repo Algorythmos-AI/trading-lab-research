@@ -87,7 +87,7 @@ never hands back a quote the recorder did not sample at that time.
 | `stopped: "memory limit"` or `"N errors in a row"` | Read the day's log; the session is kept and the next one starts fresh |
 | A folder with `state.json` and no manifest after the close | The job was stopped and did not restart. `sudo systemctl start wt-lab-tape` the same day writes the manifest with what it has. If you leave it, the next weekday's run closes it as `never finished` and archives it |
 | `stopped` empty but `stale_ticks` high, or a `feed` gap row "<name> stale: ..." | Alpaca's option snapshots for that name were old or stopped moving while the recorder ran. Nothing to fix on the host; the session may not count |
-| `after_close.error` set | The pull failed (the manifest is still written). A restart the same day redoes it whole; otherwise the day keeps its stock and option tape without prints |
+| `after_close.error` set | The pull failed (the manifest is still written, the error in it). The day keeps its stock and option tape without prints; nothing redoes it |
 | `upload.json` missing a day later | The next session's run uploads it. If it keeps failing, check the bucket token: `python -m wt.lab.archive upload` prints why |
 | The weekly check reports a bad object | An archived part differs from its receipt: keep the local copy if it is still there and investigate before anything is deleted |
 | A recording must stop now | Prefer `sudo -u wt touch /home/wt/trading/var/lab/OFF`: it stops within 5 s, writes the manifest and exits cleanly. `sudo systemctl stop wt-lab-tape` also works but pages "stopped by the system" and leaves the session to resume on the next start. Neither touches the paper runners |

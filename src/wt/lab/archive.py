@@ -212,13 +212,17 @@ def prune(root: Path, store: Store, bucket: str, keep: int = 10, account: str | 
     return gone
 
 
-def check(store: Store, bucket: str, root: Path, parts: int = 12, seed: str | None = None) -> dict[str, Any]:
+def check(store: Store, bucket: str, root: Path, parts: int = 12, seed: str | None = None,
+          today: dt.date | None = None) -> dict[str, Any]:
     """Every archived session's manifest is read back and compared with its receipt; then `parts` objects drawn with
-    a seed (the date by default, printed) from every receipt, local copy or not. No receipt at all while finished
-    sessions exist is a failure, never a silent pass."""
+    a seed (the date by default, printed) from every receipt, local copy or not. It fails when anything read back
+    differs, when a recorded session is still not archived three days on, and when no receipt is left although
+    sessions were written here (the chain head says so): the receipts live on this disk only, and losing them must
+    never read as a clean bucket."""
     receipts = sorted((root / RECEIPTS).glob("*.json")) if (root / RECEIPTS).exists() else []
     docs = [d for p in receipts if (d := read_receipt(root, p.stem)) is not None and d.get("bucket") == bucket]
-    seed = seed or dt.date.today().isoformat()
+    today = today or dt.date.today()
+    seed = seed or today.isoformat()
     bad: list[str] = []
     for d in docs:
         man = [o for o in d.get("objects", []) if o["key"].endswith("/" + manifest.NAME)]
@@ -228,9 +232,11 @@ def check(store: Store, bucket: str, root: Path, parts: int = 12, seed: str | No
     pick = random.Random(f"wt-lab-check|{seed}").sample(pool, min(parts, len(pool)))
     bad += remote_matches(store, bucket, {"objects": pick})
     unarchived = [f.name for f in finished(root) if recorded(f) and read_receipt(root, f.name) is None]
+    late = [d for d in unarchived if (today - dt.date.fromisoformat(d)).days > 3]   # uploads failing for days
+    lost = not docs and (root / manifest.HEAD).exists()        # sessions were written, and no receipt is left here
     return {"seed": seed, "sessions": len(docs), "manifests": len(docs), "parts": [o["key"] for o in pick],
-            "bad": bad, "not_archived": unarchived,
-            "ok": not bad and (bool(docs) or not unarchived)}
+            "bad": bad, "not_archived": unarchived, "not_archived_after_3_days": late, "receipts_lost": lost,
+            "ok": not bad and not late and not lost}
 
 
 @contextlib.contextmanager

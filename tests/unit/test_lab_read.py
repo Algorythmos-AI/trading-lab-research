@@ -89,7 +89,7 @@ def test_a_frozen_feed_is_stale_and_counted_the_same_from_the_exchanges_own_log(
     assert doc["longest_stale_s"] == len(stale) * 5.0
     assert doc["coverage"] > 0.99 and doc["coverage_fresh"] < doc["coverage"] - 0.15
     s = read.open_session(rec.folder)
-    assert all(not s.fresh(k) for k in stale) and s.fresh(stale[0] - 4) and s.fresh(stale[-1] + 2)
+    assert all(not s._any_name_fresh(k) for k in stale) and s._any_name_fresh(stale[0] - 4) and s._any_name_fresh(stale[-1] + 2)
     reasons = sorted(g["reason"] for g in s.gaps if g["stream"] == "feed")
     assert reasons == [f"AAA fresh again after {len(stale)} stale ticks", "AAA stale: newest tier-1 quote 15 s old",
                        f"BBB fresh again after {len(stale)} stale ticks", "BBB stale: newest tier-1 quote 15 s old"]
@@ -115,7 +115,7 @@ def test_one_name_on_yesterdays_quotes_is_stale_while_another_moves(tmp_path: Pa
     a1 = next(x for x in sorted(doc["opening_tier1"]) if x.startswith("AAA"))
     b1 = next(x for x in sorted(doc["opening_tier1"]) if x.startswith("BBB"))
     at = ns_of(START + dt.timedelta(minutes=2, seconds=4))
-    assert all(s.fresh(k) for k in after)                               # the whole-sweep test is fooled
+    assert all(s._any_name_fresh(k) for k in after)                               # the whole-sweep test is fooled
     early = s.quote_at(a1, at)
     assert isinstance(early, read.Missing) and early.reason == "quote from before the open"
     live = s.quote_at(b1, at)

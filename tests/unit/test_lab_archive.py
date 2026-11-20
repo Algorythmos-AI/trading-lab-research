@@ -152,7 +152,18 @@ def test_the_weekly_check_covers_pruned_sessions_is_seeded_and_never_passes_empt
     assert not bad["ok"] and set(bad["bad"]) == {"tape/2026-11-17/option-0000.parquet", "tape/2026-11-18/manifest.json"}
     other = tmp_path / "other"
     session(other, "2026-11-19")
-    assert archive.check(Store(), B, other)["ok"] is False             # sessions exist, none archived: a failure
+    lost = archive.check(Store(), B, other)                            # sessions written here, no receipt left
+    assert lost["ok"] is False and lost["receipts_lost"] is True
+    import datetime as dt
+    fresh = tmp_path / "late"
+    good = Store()
+    archive.upload(session(fresh, "2026-11-18"), good, B)
+    session(fresh, "2026-11-20")                                        # this one's uploads keep failing
+    soon = archive.check(good, B, fresh, 50, "x", today=dt.date(2026, 11, 22))
+    late = archive.check(good, B, fresh, 50, "x", today=dt.date(2026, 11, 25))
+    assert soon["ok"] is True and soon["not_archived"] == ["2026-11-20"] and soon["bad"] == []
+    assert late["not_archived_after_3_days"] == ["2026-11-20"] and late["bad"] == []
+    assert late["ok"] is False
 
 
 def test_only_the_labs_own_credentials_are_ever_used(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,

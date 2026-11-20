@@ -93,13 +93,14 @@ The recorder writes:
 - its code commit, tier rules and settings;
 - the signed clock offset at the start and at the end.
 
-Its timestamps come from one clock.
+Its session rows' timestamps come from one clock (the after-close rows are stamped by the host's wall clock, the same clock on the host).
 
 Recovery:
 - tier-2 rows carry the tick they were sampled in;
 - a promotion to tier 1 is never dropped;
 - downtime is written as a gap;
-- the after-close pull runs once and never costs the manifest;
+- the after-close pull runs once; a killed pull's parts are removed, never kept; a failed pull is recorded in the manifest, never costs it, and is not redone;
+- ticks left after a stop count as down;
 - a day left unfinished is closed by the next run.
 
 The archive:

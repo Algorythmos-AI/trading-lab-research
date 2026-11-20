@@ -149,6 +149,7 @@ class Recorder:
         self.first_fresh: dict[str, int] = {}                     # name: the first tick its quotes were fresh
         self.stale_by_name: dict[str, int] = {}                   # name: stale ticks after the freeze
         self.batch_syms: dict[tuple[int, int], tuple[str, ...]] = {}   # (tier, batch): the symbols last written
+        self.tail_counted = False
         self.tier1: dict[str, list[str]] = {n: [] for n in self.names}
         self.tier2: set[str] = set()
         self.selected: set[str] = set()
@@ -195,6 +196,10 @@ class Recorder:
         self.freeze_tick = s.get("freeze_tick")
         self.last_tick = s.get("last_tick")
         self.refused = set(s.get("refused", []))
+        self.stale_from = {str(k): int(v) for k, v in (s.get("stale_from") or {}).items()}
+        self.stale_by_name = {str(k): int(v) for k, v in (s.get("stale_by_name") or {}).items()}
+        self.first_fresh = {str(k): int(v) for k, v in (s.get("first_fresh") or {}).items()}
+        self.name_newest = {str(k): int(v) for k, v in (s.get("name_newest") or {}).items()}
         self.counts.update({k: int(v) for k, v in (s.get("counts") or {}).items() if k in self.counts})
         self.counts["restarts"] += 1
 
@@ -204,7 +209,9 @@ class Recorder:
                    "selected": sorted(self.selected),
                    "opening": sorted(self.opening) if self.opening is not None else None,
                    "opening_missing": self.opening_missing, "freeze_tick": self.freeze_tick, "counts": self.counts,
-                   "last_tick": self.last_tick, "refused": sorted(self.refused), "scheduled": self.scheduled}
+                   "last_tick": self.last_tick, "refused": sorted(self.refused), "scheduled": self.scheduled,
+                   "stale_from": self.stale_from, "stale_by_name": self.stale_by_name, "first_fresh": self.first_fresh,
+                   "name_newest": self.name_newest}
             manifest.atomic(self.folder / STATE, json.dumps(doc))
 
     # ------------------------------------------------------------ requests, within the budget
@@ -377,10 +384,10 @@ class Recorder:
         self.save()
 
     def sweep(self, symbols: Iterable[str], tier: int, tick: int,
-              reserve: int = 0) -> tuple[dict[str, int], dict[str, int]]:
+              reserve: int = 0) -> tuple[dict[str, int], dict[str, int], dict[str, int]]:
         """One sweep in batches of 100, each budgeted on its own; `reserve` requests are left for tier 1. Every batch
-        leaves a sample row, sent or not. Returns, by name (the contract's root): opening-set samples answered, and
-        the newest quote time answered."""
+        leaves a sample row, sent or not. Returns, by name (the contract's root): opening-set samples answered, the
+        newest quote time answered, and opening-set samples whose own quote is from this session."""
         syms = sorted(symbols)
         batches = [syms[i:i + BATCH] for i in range(0, len(syms), BATCH)]
         go: list[tuple[int, list[str]]] = []
@@ -402,7 +409,9 @@ class Recorder:
             answers = list(pool.map(one, go))
         missing = 0
         taken: dict[str, int] = {}
+        current: dict[str, int] = {}                     # of those, quoted since the open (a pre-open quote is old)
         newest: dict[str, int] = {}
+        open_ns = ns_of(self.start) if self.start is not None else 0
         for i, b, a, recv in answers:
             snaps = a.body.get("snapshots") if a.status == 200 and isinstance(a.body, dict) else None
             if not isinstance(snaps, Mapping):
@@ -416,10 +425,12 @@ class Recorder:
                     lost.append(sym)
                     continue
                 root = sym[:-15]                       # an OCC symbol: root, then 15 characters
-                if tier == 1 and self.opening is not None and sym in self.opening:
-                    taken[root] = taken.get(root, 0) + 1
                 row = {"recv_ns": recv, "tick": tick, "tier": tier, "symbol": sym, **option_fields(snap)}
                 q = ts_ns(row["quote_ts"])
+                if tier == 1 and self.opening is not None and sym in self.opening:
+                    taken[root] = taken.get(root, 0) + 1
+                    if q is not None and q >= open_ns:
+                        current[root] = current.get(root, 0) + 1
                 bnew = q if bnew is None or (q is not None and q > bnew) else bnew
                 if q is not None and q > newest.get(root, 0):
                     newest[root] = q
@@ -435,7 +446,7 @@ class Recorder:
             self._sample(tick, tier, i, b, len(b) - len(lost), changed, a.status, bnew, "ok", lost)
         if missing:
             self._gap(tick, f"tier{tier}", f"missing {missing}")
-        return taken, newest
+        return taken, newest, current
 
     def tier1_now(self) -> set[str]:
         with self.lock:
@@ -476,7 +487,7 @@ class Recorder:
 
     def one_tick(self, tick: int, pool: cf.ThreadPoolExecutor) -> None:
         ok = True
-        got: tuple[dict[str, int], dict[str, int]] = ({}, {})
+        got: tuple[dict[str, int], dict[str, int], dict[str, int]] = ({}, {}, {})
         try:
             got = self.sweep(self.tier1_now(), 1, tick)
         except Exception as e:  # noqa: BLE001 (one bad answer costs one tick, not the session)
@@ -504,7 +515,8 @@ class Recorder:
                     self.minute = pool.submit(self.minute_work, tick)
         self.freeze(tick)
 
-    def freshness(self, tick: int, taken: Mapping[str, int], newest: Mapping[str, int]) -> None:
+    def freshness(self, tick: int, taken: Mapping[str, int], newest: Mapping[str, int],
+                  current: Mapping[str, int] | None = None) -> None:
         """Freshness is judged name by name: a name is fresh at a tick when the newest tier-1 quote ever answered for
         it is at most `stale_after_s` old. On 2026-11-19 three of four names were answered with the previous day's
         quotes for the first hour while one name moved, so a test over the whole sweep would have called every one
@@ -515,10 +527,12 @@ class Recorder:
             for n, q in newest.items():
                 if q > self.name_newest.get(n, 0):
                     self.name_newest[n] = q
-            names = sorted({s[:-15] for s in self.opening} if self.opening is not None else
-                           {s[:-15] for s in self.tier1_now()})
+            names = sorted(set(self.names))             # every name, with tier-1 contracts or not
             stale_names = []
+            with_t1 = {s[:-15] for s in self.tier1_now()}
             for n in names:
+                if n not in with_t1:
+                    continue                             # no tier-1 contract yet: listed in the manifest instead
                 seen = self.name_newest.get(n)
                 age = None if seen is None else (now - seen) / 1e9
                 fresh = age is not None and age <= self.settings.stale_after_s
@@ -539,7 +553,8 @@ class Recorder:
                 self.counts["longest_stale_ticks"] = max(self.counts["longest_stale_ticks"],
                                                          tick - self.stale_from[n] + 1)
             self.counts["taken"] += sum(taken.values())
-            self.counts["taken_fresh"] += sum(v for n, v in taken.items() if n not in stale_names)
+            cur = current if current is not None else taken
+            self.counts["taken_fresh"] += sum(cur.get(n, 0) for n in taken if n not in stale_names)
             if stale_names:
                 self.counts["stale_ticks"] += 1
 
@@ -595,6 +610,10 @@ class Recorder:
         return len(self.opening) * max(0, self.scheduled - since - 1)
 
     def finish(self, info: Mapping[str, Any]) -> dict[str, Any]:
+        tail = self.scheduled - 1 - (self.last_tick if self.last_tick is not None else -1)
+        if tail > 0 and not self.tail_counted:          # a stop, a crash past the close, a day never finished
+            self.counts["ticks_down"] += tail
+            self.tail_counted = True
         self.flush()
         c = {**self.counts, "expected": self.expected(), "strict": self.expected(strict=True)}
         rows = {st: sum(pq.ParquetFile(f).metadata.num_rows for f in self.folder.glob(f"{st}-*.parquet"))
@@ -615,6 +634,7 @@ class Recorder:
             "rules": dataclasses.asdict(self.rules), "settings": dataclasses.asdict(self.settings),
             "tier1_refused_by_cap": len(self.refused),
             "stale_ticks_by_name": dict(sorted(self.stale_by_name.items())),
+            "names_without_tier1": sorted(n for n in self.names if not self.tier1.get(n)),
             "first_fresh_tick_by_name": dict(sorted(self.first_fresh.items())),
             "tier1_crossed_share": round(c["tier1_crossed_rows"] / c["tier1_rows"], 6) if c["tier1_rows"] else 0.0,
             "requests": c["requests"], "restarts": c["restarts"], "tick_errors": c["errors"],
@@ -642,19 +662,19 @@ def after_close(rec: Recorder, get: Get, headers: Mapping[str, str], start: dt.d
                 return prev
         except ValueError:
             pass
+    pw, ow = PartWriter(rec.folder, "print"), PartWriter(rec.folder, "open_interest")
+    out: dict[str, Any] = {}
+    redone = pw.discard() + ow.discard()                # an interrupted pull is never kept, whatever comes next
+    if redone:
+        out["redone_parts_removed"] = redone
+        rec._gap(-1, "after_close", f"an interrupted pull removed: {redone} parts")
     left = (close + dt.timedelta(minutes=AFTER_CLOSE_MIN) - clock.now()).total_seconds()
     if left <= 0:
-        return {"skipped": "past close plus 90 minutes"}
+        return {**out, "skipped": "past close plus 90 minutes"}
     deadline = time.monotonic() + left
     with rec.lock:
         t1 = sorted({s for v in rec.tier1.values() for s in v})
         every = set(t1) | set(rec.tier2)
-    pw, ow = PartWriter(rec.folder, "print"), PartWriter(rec.folder, "open_interest")
-    out: dict[str, Any] = {}
-    redone = pw.discard() + ow.discard()
-    if redone:
-        out["redone_parts_removed"] = redone
-        rec._gap(-1, "after_close", f"an interrupted pull redone: {redone} parts removed")
     paced = rec.paced(deadline)
     try:
         expiries = [o.expiry for s in every if (o := parse_occ(s)) is not None]
@@ -678,7 +698,7 @@ def after_close(rec: Recorder, get: Get, headers: Mapping[str, str], start: dt.d
             ow.flush()
         except Exception:  # noqa: BLE001
             pass
-        return out                                   # no marker: a same-day restart redoes the pull whole
+        return out                                   # the manifest records the error; the pull is not redone
     manifest.atomic(done, json.dumps(out, sort_keys=True))
     return out
 
@@ -750,7 +770,9 @@ def close_unfinished(root: Path, today: dt.date, clock: Clock) -> list[str]:
         span = (dt.datetime.combine(day, tiers.close_time(day), NY) - dt.datetime.combine(day, dt.time(9, 30), NY))
         rec.scheduled = math.ceil(span.total_seconds() / rec.settings.tick_s)   # the whole day was due
         rec.stopped = f"never finished: closed by the run of {today.isoformat()}"
-        rec.finish({**meta, "after_close": {"skipped": "the day was over"}})
+        gone = 0 if (folder / AFTER_CLOSE).exists() else \
+            PartWriter(folder, "print").discard() + PartWriter(folder, "open_interest").discard()
+        rec.finish({**meta, "after_close": {"skipped": "the day was over", "partial_parts_removed": gone}})
         done.append(folder.name)
     return done
 

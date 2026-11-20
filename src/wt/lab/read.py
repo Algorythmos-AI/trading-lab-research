@@ -37,8 +37,8 @@ from wt.lab import manifest
 from wt.lab.tape import STREAMS, ts_ns
 
 NY = zoneinfo.ZoneInfo("America/New_York")
-TIER1_WINDOW_S = 10.0          # a tier-1 sample older than two ticks says nothing about now
-TIER2_WINDOW_S = 120.0         # tier 2: two minutes
+TIER1_WINDOW_S = 6.0           # one tick and a margin: a skipped or failed sweep is never bridged by the one before
+TIER2_WINDOW_S = 65.0          # one minute and a margin (the minute's sweep lands at most ~2 s late, 2026-11-19)
 
 
 class NotReadable(Exception):
@@ -123,8 +123,9 @@ class Session:
                 recv_of[r["tick"]] = max(recv_of.get(r["tick"], 0), r["recv_ns"])
         self._fresh = {k: (recv_of[k] - n) / 1e9 <= self.stale_after_s for k, n in newest.items()}
 
-    def fresh(self, tick: int) -> bool:
-        """The tier-1 sweep of `tick` answered at least one quote newer than `stale_after_s` (any name)."""
+    def _any_name_fresh(self, tick: int) -> bool:
+        """Any name's tier-1 quote at `tick` newer than `stale_after_s`. Not a freshness test for research: on
+        2026-11-19 it called the stale first hour fresh (DEC-0067). Kept private, for the tests that show it."""
         return self._fresh.get(tick, False)
 
     def name_fresh(self, name: str, t_ns: int) -> bool:
@@ -138,10 +139,10 @@ class Session:
     def quote_at(self, symbol: str, t_ns: int) -> Quote | Missing:
         asked = self._asked.get(symbol)
         if asked is None:
-            return Missing(symbol, "never sampled")
+            return Missing(symbol, "not sampled by then")
         i = bisect.bisect_right(asked[0], t_ns) - 1
         if i < 0:
-            return Missing(symbol, "not sampled yet")
+            return Missing(symbol, "not sampled by then")         # the same words: nothing about later is told
         sampled_ns, (tick, tier, ok) = asked[0][i], asked[1][i]
         if not ok:
             return Missing(symbol, f"not answered at tick {tick}")
@@ -158,7 +159,8 @@ class Session:
             return Missing(symbol, "quote from before the open")
         return Quote(symbol, r.get("bid"), r.get("ask"), r.get("bid_size"), r.get("ask_size"), q, sampled_ns,
                      None if q is None else (t_ns - q) / 1e9, tick, tier,
-                     tier == 0 or self.name_fresh(symbol[:-15] if tier else symbol, t_ns))
+                     (q is not None and (t_ns - q) / 1e9 <= self.stale_after_s) if tier == 0
+                     else self.name_fresh(symbol[:-15], t_ns))
 
     def symbols(self, tier: int | None = None) -> list[str]:
         if tier is None:

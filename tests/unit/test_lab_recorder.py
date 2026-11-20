@@ -58,6 +58,7 @@ class Alpaca:
         self.served: dict[str, list[tuple[dt.datetime, float | None, float | None, str | None]]] = {}
         self.answers: list[tuple[dt.datetime, list[str], str | None]] = []     # (when, symbols, newest quote time)
         self.prior_day: dict[str, dt.datetime] = {}     # root: answered with the previous day's quotes until then
+        self.prior_syms: set[str] = set()               # contracts always answered with yesterday's quote
 
     def stamp(self, step: int) -> str:
         if step not in self.quote_at:
@@ -111,7 +112,8 @@ class Alpaca:
             else:
                 self.frozen_step = step
             v = 1.0 + step * 0.01
-            old = {s for s in syms if self.clock.t < self.prior_day.get(s[:-15], START - dt.timedelta(days=1))}
+            old = {s for s in syms if self.clock.t < self.prior_day.get(s[:-15], START - dt.timedelta(days=1))
+                   or s in self.prior_syms}
 
             def q(s: str) -> dict[str, Any]:
                 if s in old:                            # yesterday's last quote, as Alpaca served it on 2026-11-19
@@ -532,3 +534,58 @@ def test_an_earlier_day_left_unfinished_is_closed_and_counted_as_missed(tmp_path
     run_main(tmp_path, monkeypatch, None, nxt)
     doc = json.loads((old / manifest.NAME).read_text())
     assert doc["recorded"] is True and doc["stopped"].startswith("never finished") and doc["coverage"] < 0.5
+
+
+def test_ticks_left_after_a_stop_are_down_and_a_pre_open_quote_never_counts_as_fresh(tmp_path: Path) -> None:
+    clock = Clock(START - dt.timedelta(seconds=30))
+    api = Alpaca(clock)
+    rec = make(tmp_path, clock, api)
+    rec.run(START, START + dt.timedelta(seconds=10))                       # find the opening set first
+    first = sorted(rec.tier1_now())[0]
+    api.prior_syms = {first}                                               # its name stays fresh through its siblings
+    off = tmp_path / "OFF"
+    api.exit_at_stock = None
+    real = rec.should_stop
+    rec.should_stop = lambda: "off switch" if clock.t > START + dt.timedelta(minutes=5) else real()   # type: ignore[method-assign]
+    rec.run(START, START + dt.timedelta(minutes=8))
+    doc = rec.finish({})
+    assert doc["stopped"] == "off switch" and not off.exists()
+    assert doc["ticks_down"] == doc["ticks_scheduled"] - 1 - rec.last_tick > 30
+    swept = [r for r in rows(rec.folder, "sample") if r["tier"] == 1 and r["result"] == "ok"
+             and r["tick"] > doc["freeze_tick"] and r["tick"] >= 2]          # tick 2 on: the contract is stale
+    assert len(doc["opening_tier1"]) > 1 and len(swept) > 30 and first in doc["opening_tier1"]
+    assert doc["samples_taken"] - doc["samples_taken_fresh"] == len(swept)  # exactly the pre-open contract, every sweep
+    assert "AAA" not in doc["stale_ticks_by_name"]                          # its name was fresh all along
+
+
+def test_a_restart_keeps_each_names_stale_run_whole(tmp_path: Path) -> None:
+    clock = Clock(START - dt.timedelta(seconds=30))
+    api = Alpaca(clock, exit_at_stock=50)
+    api.prior_day = {"AAA": START + dt.timedelta(minutes=7)}               # AAA on yesterday's quotes until 09:37
+    rec = make(tmp_path, clock, api)
+    rec.run(START, START + dt.timedelta(minutes=9))
+    recorder.TERM.clear()
+    rec.flush()
+    api.exit_at_stock = None
+    clock.t = START + dt.timedelta(minutes=4, seconds=30)                  # back thirty seconds later
+    rec2 = make(tmp_path, clock, api)
+    rec2.run(START, START + dt.timedelta(minutes=9))
+    doc = rec2.finish({})
+    run = 84 - doc["freeze_tick"] - 1 - doc["ticks_down"]                  # stale ticks actually run, AAA, to tick 84
+    assert doc["stale_ticks_by_name"]["AAA"] == doc["stale_ticks"] and abs(doc["stale_ticks"] - run) <= 1
+    assert doc["longest_stale_s"] >= (84 - doc["freeze_tick"] - 1) * 5 - 5   # one run, down ticks inside it
+    assert doc["first_fresh_tick_by_name"]["BBB"] <= 1                      # kept from the first run
+
+
+def test_a_skipped_pull_still_removes_an_interrupted_ones_parts(tmp_path: Path) -> None:
+    clock = Clock(START - dt.timedelta(seconds=30))
+    api = Trades(clock)
+    rec = make(tmp_path, clock, api)
+    close = START + dt.timedelta(minutes=2)
+    rec.run(START, close)
+    import pyarrow as pa
+    pq.write_table(pa.table({"x": [1]}), rec.folder / "print-0000.parquet")    # left by a pull that was killed
+    clock.t = close + dt.timedelta(hours=2)
+    out = recorder.after_close(rec, api, {}, START, close, clock)
+    assert out["skipped"].startswith("past close") and out["redone_parts_removed"] == 1
+    assert not list(rec.folder.glob("print-*.parquet"))
