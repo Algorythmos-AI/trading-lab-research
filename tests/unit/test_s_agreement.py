@@ -171,6 +171,8 @@ def test_the_scorecard_section_reports_counts_and_differences(tmp_path, monkeypa
     assert "- Pairs: exit class same 1 · different 1\n" in s
     assert "- Pairs: R mean +0.10R · mean absolute 0.20R · largest 0.30R (n=2)" in s
     assert "sessions sleeve S armed with entries off: 1" in s
+    assert f"| {D1} | 2 | 2 | 1 |\n| {D2} | 2 | 2 | 1 |\n| {D3} | 0 | 1 | 0 |\n" in s      # per session, counts only
+    assert D4 not in s and D5 not in s                                 # a session one side did not run has no row
     assert "exit price estimated 1 · not the rule's own entry 1 · other 0" in s
     assert not any(w in s for w in ("AAAA", "CCCC", "ZZSETUP", "REV-1", "reversal"))   # ids, never a name
     assert s.rstrip().endswith("any change requires a new decision record (research/decisions)._")

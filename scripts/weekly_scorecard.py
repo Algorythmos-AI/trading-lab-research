@@ -237,6 +237,11 @@ def sleeve_s(fwd: list[dict]) -> list[str]:
         L += ["- No trade in the same name on the same session yet."]
     L += [f"- Sessions with a pair: {t['sessions_with_a_pair']} · sessions sleeve S armed with entries off: "
           f"{t['entries_off_sessions']}"]
+    traded = [d for d in a["sessions"] if d["s_trades"] or d["fwd_trades"]]
+    if traded:
+        L += ["", "| Session (a trade on either side) | Sleeve S | Forward test | Same name, same session |",
+              "|---|---|---|---|",
+              *(f"| {d['day']} | {d['s_trades']} | {d['fwd_trades']} | {d['both']} |" for d in traded), ""]
     x = t["s_excluded"]
     if any(x.values()):
         L += [f"- Sleeve S closes left out of every count: exit price estimated {x['estimated_exit']} · not the "
