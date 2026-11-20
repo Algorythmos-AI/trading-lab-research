@@ -60,8 +60,34 @@ class Answer:
 Get = Callable[[str, Mapping[str, str], Mapping[str, str], float], Answer]
 
 
+# Every URL the lab may call: market data, and the contract listing (for open interest) on the paper trading host.
+# Anything else, an account, an order, a position, any other host, is refused before it is sent (DEC-0060 section 2.6).
+ALLOWED = (("https://data.alpaca.markets", "/v2/stocks/snapshots", False),
+           ("https://data.alpaca.markets", "/v1beta1/options/snapshots", True),     # and /<root>: a chain
+           ("https://data.alpaca.markets", "/v1beta1/options/trades", False),
+           ("https://paper-api.alpaca.markets", "/v2/options/contracts", False))
+
+
+def allowed(url: str) -> bool:
+    for host, path, sub in ALLOWED:
+        if not url.startswith(host + "/"):
+            continue
+        rest = url[len(host):].split("?", 1)[0]
+        if rest == path:
+            return True
+        if sub and rest.startswith(path + "/") and rest[len(path) + 1:].isalnum() and rest[len(path) + 1:].isupper():
+            return True
+    return False
+
+
+def check_url(url: str) -> None:
+    if not allowed(url):
+        raise PermissionError(f"the lab may not call {url.split('?', 1)[0]}")
+
+
 def http_get(session: requests.Session) -> Get:
     def get(url: str, params: Mapping[str, str], headers: Mapping[str, str], timeout: float) -> Answer:
+        check_url(url)
         require_feed(url, params)
         t = time.monotonic()
         try:
