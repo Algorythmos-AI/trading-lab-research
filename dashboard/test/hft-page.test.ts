@@ -41,7 +41,7 @@ beforeEach(() => {
 describe("the HFT desk's sections", () => {
   it("has one section for now, the stocks sections are as they were, and the closed crypto desk has none", () => {
     expect(HFT_NAV).toEqual([{ href: "/hft", label: "Overview" }]);
-    expect(NAV.map((n) => n.href)).toEqual(["/", "/today", "/radar", "/options", "/paper", "/robot-b", "/trades", "/calendar", "/strategies", "/research", "/operations", "/risk", "/engineering"]);
+    expect(NAV.map((n) => n.href)).toEqual(["/", "/today", "/radar", "/options", "/paper", "/gap-hunter", "/trades", "/calendar", "/strategies", "/research", "/operations", "/risk", "/engineering"]);
     expect(CRYPTO_NAV).toEqual([]); // DEC-0036: one page at /crypto, no sections
   });
 });
@@ -88,7 +88,7 @@ describe("the HFT page with a snapshot", () => {
     const html = await page();
     const headings = [...html.matchAll(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/g)].map((m) => `h${m[1]} ${text(m[2]!).trim()}`);
     expect(headings[0]).toBe("h1 HFT");
-    expect(headings.slice(2)).toEqual(["h2 Build phases", "h2 Recorder", "h2 Pairs", "h2 Sleeves", "h2 Books", "h3 Shadow book", "h3 Broker book", "h2 Learning"]);
+    expect(headings.slice(2)).toEqual(["h2 Build phases", "h2 Recorder", "h2 Pairs", "h2 Strategies", "h2 Books", "h3 Shadow book", "h3 Broker book", "h2 Learning"]);
     expect(headings[1]).toMatch(/^h2 (All clear|Needs a look|Action needed)$/); // the health banner; its level depends on the clock
     expect(headings.filter((h) => h.startsWith("h1"))).toHaveLength(1);
     const out = text(html);
@@ -134,7 +134,7 @@ describe("the HFT page with a snapshot", () => {
     expect(pairs).toMatch(/role="region" aria-label="Currency pairs" tabindex="0"/);
     const sleeves = renderToString(createElement(HftSleeves, { s: fixture() }));
     expect([...sleeves.matchAll(/<th[^>]*scope="col"[^>]*>([^<]*)<\/th>/g)].map((m) => m[1])).toEqual([
-      "Sleeve", "Stage", "Trades today", "Trades in total", "Net today", "Net in total",
+      "Strategy", "Stage", "Trades today", "Trades in total", "Net today", "Net in total",
     ]);
     expect(text(sleeves)).toContain("Control Shadow 6 41 −3.20 USD +12.85 USD");
     expect(text(sleeves)).toContain("Directional change Shadow 9 57 +5.40 USD −8.10 USD");
@@ -172,11 +172,11 @@ describe("the HFT page with a snapshot", () => {
     stored(s);
     const html = await page();
     const out = text(html);
-    for (const title of ["No build phases reported yet", "No recorder status yet", "No pairs yet", "No sleeves yet", "No books yet", "No learning status yet"]) {
+    for (const title of ["No build phases reported yet", "No recorder status yet", "No pairs yet", "No strategies yet", "No books yet", "No learning status yet"]) {
       expect(out, title).toContain(title);
     }
     // the sections keep their headings, and nothing is drawn as a zero
-    for (const h of ["Build phases", "Recorder", "Pairs", "Sleeves", "Books", "Learning"]) expect(out).toContain(h);
+    for (const h of ["Build phases", "Recorder", "Pairs", "Strategies", "Books", "Learning"]) expect(out).toContain(h);
     expect(html).not.toMatch(/<table/);
     expect(out).not.toMatch(/NaN|undefined|\[object/);
   });

@@ -920,11 +920,10 @@ const ADRS = [
 
 const RUNBOOKS: { file: string; when: string }[] = [
   { file: "gcp-host", when: "the host runs old code, or you need to deploy, install units or rebuild" },
-  { file: "not-flat-at-close", when: "p5 “Paper B NOT FLAT at the close”, a red banner" },
+  { file: "not-flat-at-close", when: "p5 “NOT FLAT at the close”, a red banner" },
   { file: "position-alerts", when: "“adopted a position”, “exits only”, “clock check failed”" },
   { file: "latch-reset", when: "p5 “loss limit latched”; entries stay off" },
   { file: "kill-and-flatten", when: "you want the paper robot to stop now" },
-  { file: "options-positions", when: "the Options page's paper positions are missing or old" },
   { file: "paper-options", when: "the Paper page has no history, says it is old, or a total looks wrong" },
   { file: "dashboard-late", when: "“Dashboard late”, a grey or amber freshness pill" },
   { file: "rollback", when: "the next night's jobs fail after a deploy" },

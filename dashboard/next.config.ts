@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
   // Security headers live in vercel.json so they apply to every response Vercel serves.
   turbopack: { root: process.cwd() },
   outputFileTracingRoot: process.cwd(),
+  // The stock robot was renamed Gap Hunter (2026-11-20): its page moved, and the old address still lands on it.
+  async redirects() {
+    return [{ source: "/robot-b", destination: "/gap-hunter", permanent: true }];
+  },
 };
 
 export default nextConfig;

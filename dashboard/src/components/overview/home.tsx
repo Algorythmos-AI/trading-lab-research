@@ -1,25 +1,25 @@
 // The Stocks Overview: the owner's own trading first (account, day rules, profit and loss, patterns), then the next
 // session's names, then the paper robots and the lab's health in one line each. Server-rendered.
-import { Bot, CalendarCheck, Lightbulb, ChartColumn, Clock3, Crosshair, Flame, Radar as RadarIcon, Scale, ShieldCheck, Wallet } from "lucide-react";
+import { CalendarCheck, Lightbulb, ChartColumn, Clock3, Crosshair, Flame, Radar as RadarIcon, Scale, ShieldCheck, Wallet } from "lucide-react";
 import Link from "next/link";
 import { DivergingBars } from "@/components/charts/diverging-bars";
 import { SessionBars } from "@/components/charts/session-bars";
 import { Panel } from "@/components/panel";
+import { RobotsRow } from "@/components/robots-row";
 import { StatTile, StatTiles } from "@/components/stat-tile";
 import { StatusBadge, TONE_TEXT, ToneIcon } from "@/components/status";
 import type { Health } from "@/lib/health";
 import { ALL, filterHref, lessons, marketState, moneyView, sessionView, shortDay, skippedLine, summarize, type JournalDoc, type Trade } from "@/lib/journal";
 import type { Tone } from "@/lib/labels";
+import type { OptionsClone } from "@/lib/options-clone.types";
 import type { OptionsEdition } from "@/lib/options.types";
 import { hourBands, keptStreak, keptVsBroken, nextOpen, periodTotals, quickVsSlow, ruleDays, since, tickerEnds, untilText, withRun } from "@/lib/overview";
 import type { RadarEdition } from "@/lib/radar.types";
+import { robotLines } from "@/lib/programme";
 import { scan } from "@/lib/today";
 import { DAY_LOSS_LIMIT, MAX_TRADES_PER_DAY, TIME_STOP_MINUTES, dayCheck, meterToneFor } from "@/lib/trade-rules";
-import { outcomeLine, trading } from "@/lib/trading";
 import type { Snapshot } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { EnvFrame } from "@/components/ui/env-chip";
-import { Money } from "@/components/ui/money";
 
 const usd = (v: number | null | undefined, digits = 0) => {
   if (v === null || v === undefined || !Number.isFinite(v)) return "—";
@@ -390,59 +390,34 @@ export function NextSessionPanel({ options, radar }: { options: OptionsEdition |
 // ── The robots and the lab ───────────────────────────────────────────────────────────────────────────────────────
 
 /**
- * Robot B and the small-cap scan in one row each: the detail lives on the Today page. Robot B's cell is the Alpaca paper
- * account: a paper EnvFrame, its result paper Money (US$), never written like the owner's dollars above it. The scan
- * is the routine's dry run of gapping stocks: counts only, unframed.
+ * The three robots in a line each, then the pre-market scan: the detail lives on each robot's own page and on Today.
+ * States and counts only, so nothing here is framed as money.
  */
-export function RobotsStrip({ s }: { s: Snapshot | null }) {
+export function RobotsStrip({ s, clone }: { s: Snapshot | null; clone: OptionsClone | null }) {
   if (!s) return null;
-  const v = trading(s);
-  const o = outcomeLine(v);
   const sc = scan(s);
   const l = sc.latest;
   const steps = l ? [l.universe, l.traded, l.gapping, l.candidates, l.shortList] : [];
   const top = Math.max(1, ...steps.map((x) => x ?? 0));
   return (
-    <section aria-labelledby="robots-title" className="grid gap-2">
-      <h2 id="robots-title" className="text-muted-foreground flex items-center gap-2 text-sm font-semibold">
-        <Bot aria-hidden className="size-4" />
-        Robot B (paper) and the pre-market scan
-      </h2>
-      <div className="bg-border grid gap-px overflow-hidden rounded-lg border sm:grid-cols-2">
-        <EnvFrame env="paper" label="Robot B" className="bg-card grid">
-          <Link href="/today" className="hover:bg-muted/40 grid content-start gap-1.5 p-1 transition-colors">
-            <span className="text-muted-foreground text-xs">Robot B (paper) · QQQ rule</span>
-            <span className="font-mono text-sm font-semibold">
-              {v.available ? (
-                <>
-                  <Money env="paper" value={v.periods.find((x) => x.key === "total")?.money ?? 0} signed /> · {v.stats.trades} trade{v.stats.trades === 1 ? "" : "s"}
-                </>
-              ) : (
-                "No session yet"
-              )}
+    <div className="grid gap-3">
+      <RobotsRow lines={robotLines(s, clone)} />
+      <Link href="/today" className="bg-card hover:bg-muted/40 grid content-start gap-1.5 rounded-lg border p-3 transition-colors" data-testid="scan-line">
+        <span className="text-muted-foreground text-xs">Pre-market scan{sc.date ? ` · ${shortDay(sc.date)}` : ""}</span>
+        {l ? (
+          <>
+            <span className="flex h-8 items-end gap-1" aria-hidden>
+              {steps.map((x, i) => (
+                <span key={i} className="bg-info-fill/70 flex-1 rounded-t-sm" style={{ height: `${Math.max(4, Math.sqrt((x ?? 0) / top) * 100)}%` }} />
+              ))}
             </span>
-            <StatusBadge tone={o.tone} className="justify-self-start">
-              {v.session ? `${shortDay(v.session)}: ${o.title}` : o.title}
-            </StatusBadge>
-          </Link>
-        </EnvFrame>
-        <Link href="/today" className="bg-card hover:bg-muted/40 grid content-start gap-1.5 p-3 transition-colors">
-          <span className="text-muted-foreground text-xs">Small-cap scan{sc.date ? ` · ${shortDay(sc.date)}` : ""}</span>
-          {l ? (
-            <>
-              <span className="flex h-8 items-end gap-1" aria-hidden>
-                {steps.map((x, i) => (
-                  <span key={i} className="bg-info-fill/70 flex-1 rounded-t-sm" style={{ height: `${Math.max(4, Math.sqrt((x ?? 0) / top) * 100)}%` }} />
-                ))}
-              </span>
-              <span className="text-muted-foreground font-mono text-xs">{steps.map((x) => (x ?? 0).toLocaleString("en-US")).join(" → ")}</span>
-            </>
-          ) : (
-            <span className="text-muted-foreground text-sm">No scan yet</span>
-          )}
-        </Link>
-      </div>
-    </section>
+            <span className="text-muted-foreground font-mono text-xs">{steps.map((x) => (x ?? 0).toLocaleString("en-US")).join(" → ")}</span>
+          </>
+        ) : (
+          <span className="text-muted-foreground text-sm">No scan yet</span>
+        )}
+      </Link>
+    </div>
   );
 }
 

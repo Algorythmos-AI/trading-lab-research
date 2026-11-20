@@ -20,7 +20,7 @@ export function cleanSnapshot(overrides: Partial<Snapshot> = {}): Snapshot {
     run_id: "run-clean",
     as_of: "2026-09-29T12:00:00+00:00",
     kill: { on: false, since: null, reason: null },
-    jobs: { last: { routine: { status: "ok", exit: 0 }, "paper-b": { status: "ok", exit: 0 } }, runs: [] },
+    jobs: { last: { routine: { status: "ok", exit: 0 }, "paper-s": { status: "ok", exit: 0 } }, runs: [] },
     alerts: { firing: [] },
     collector: { exit_code: 0 },
     ops: {

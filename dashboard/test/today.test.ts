@@ -120,7 +120,7 @@ describe("the session clock", () => {
     const c = sessionClock(
       day({
         routine: { status: "ok", started: "2026-10-05T11:30:02Z", ended: "2026-10-05T15:31:40Z" },
-        "paper-b": { status: "running", started: "2026-10-05T12:30:01Z" },
+        "paper-s": { status: "running", started: "2026-10-05T12:30:01Z" },
         forward: { status: "failed", started: "2026-10-02T19:40:00Z", ended: "2026-10-02T20:41:00Z" },
       }),
     );
@@ -128,7 +128,7 @@ describe("the session clock", () => {
     const [routine, paper, forward] = c.runs;
     expect(routine).toMatchObject({ key: "routine", at: 450, from: 450, to: 691, tone: "good", running: false });
     // Still running: no end, so the browser draws it to "now"; amber, not the status tone.
-    expect(paper).toMatchObject({ key: "paper-b", at: 510, from: 510, to: null, tone: "warn", running: true });
+    expect(paper).toMatchObject({ key: "paper-s", at: 510, from: 510, to: null, tone: "warn", running: true });
     // Its last run was an earlier day: only the scheduled tick is drawn.
     expect(forward).toMatchObject({ key: "forward", at: 940, from: null, to: null, tone: "bad" });
     // A clean last run on an earlier day is grey, not green: "no run" today is not a success.
@@ -142,10 +142,15 @@ describe("the session clock", () => {
   });
 
   it("has a lane for each job even before any has run", () => {
-    expect(sessionClock(day({})).runs.map((r) => [r.key, r.from])).toEqual([
-      ["routine", null],
-      ["paper-b", null],
-      ["forward", null],
+    expect(sessionClock(day({})).runs.map((r) => [r.key, r.from, r.tone])).toEqual([
+      ["routine", null, "neutral"],
+      ["paper-s", null, "neutral"],
+      ["forward", null, "neutral"],
     ]);
+  });
+
+  it("gives the retired rule's job no lane, whether the host still reports it or not", () => {
+    expect(sessionClock(day({ routine: { status: "ok" } })).runs.map((r) => r.key)).toEqual(["routine", "paper-s", "forward"]);
+    expect(sessionClock(day({ "paper-b": { status: "failed", started: "2026-10-05T12:30:01Z", ended: "2026-10-05T20:00:00Z" } })).runs.map((r) => r.key)).toEqual(["routine", "paper-s", "forward"]);
   });
 });

@@ -12,7 +12,7 @@ import { SpecBars } from "@/components/spec-bars";
 import { StatusBadge } from "@/components/status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { num, pct, shortDate, txt } from "@/lib/format";
-import { humanize, stateTone, type Tone } from "@/lib/labels";
+import { humanize, isStrategyB, stateTone, type Tone } from "@/lib/labels";
 import { loadOptionsClone, loadSnapshot } from "@/lib/snapshot";
 import { programme } from "@/lib/programme";
 import { ProgrammePanel } from "@/components/programme-panel";
@@ -28,7 +28,7 @@ export default async function ResearchPage() {
     <>
       <PageHeading
         title="Research"
-        intro="The evidence behind every strategy decision: backtest results against the G1 bar, the trial budget, the research registries and how much of the specification is built."
+        intro="The evidence behind every strategy decision: backtest results against the research bar, the trial budget, the research registries and how much of the specification is built."
       />
       {result.status !== "ok" ? (
         <NoSnapshot status={result.status} />
@@ -68,14 +68,21 @@ function NoModelPanel() {
 }
 
 function ScoreboardPanel({ s }: { s: Snapshot }) {
-  const rows = list(s.research?.scoreboard);
+  // The retired stock rule's rows are left out here: its history is on the Strategies page, collapsed.
+  const all = list(s.research?.scoreboard);
+  const rows = all.filter((r) => !isStrategyB(r.label));
   return (
     <Panel
-      title="G1 scoreboard"
+      title="Backtest scoreboard"
       icon={Scale}
       means="Backtest results for every candidate. A real edge needs the whole bar (the 95% range of average R per trade) right of zero and a deflated Sharpe (DSR) of at least 0.95."
     >
       {rows.length === 0 ? <Empty title="No backtest results in this snapshot" /> : <Scoreboard rows={rows} />}
+      {all.length > rows.length ? (
+        <p className="text-muted-foreground mt-3 text-xs" data-retired-rows={all.length - rows.length}>
+          {num(all.length - rows.length)} {all.length - rows.length === 1 ? "row" : "rows"} of the retired QQQ rule {all.length - rows.length === 1 ? "is" : "are"} left out. Its history is at the foot of the Strategies page.
+        </p>
+      ) : null}
     </Panel>
   );
 }
@@ -83,6 +90,7 @@ function ScoreboardPanel({ s }: { s: Snapshot }) {
 function BudgetPanel({ s }: { s: Snapshot }) {
   const t = s.research?.trials;
   const used = t?.used;
+  const active = list(s.research?.active_strategies).filter((a) => !isStrategyB(a));
   const budget = t?.budget_if_round3;
   const tone: Tone =
     typeof used === "number" && typeof budget === "number" ? (used >= budget ? "bad" : used / budget >= 0.9 ? "warn" : "info") : "neutral";
@@ -90,7 +98,7 @@ function BudgetPanel({ s }: { s: Snapshot }) {
     <Panel
       title="Trial budget"
       icon={FlaskConical}
-      means="Every strategy variant tested counts as a trial. More trials make a lucky result more likely, so the budget is capped and the bar for G1 rises with each one."
+      means="Every strategy variant tested counts as a trial. More trials make a lucky result more likely, so the budget is capped and the bar for a pass rises with each one."
     >
       <div className="grid gap-4">
         <Meter
@@ -103,13 +111,13 @@ function BudgetPanel({ s }: { s: Snapshot }) {
         <KeyValues
           items={[
             { label: "DEC-0010", value: txt(s.research?.dec0010_status) },
-            { label: "Active strategies", value: num(list(s.research?.active_strategies).length) },
+            { label: "Active strategies", value: num(active.length) },
             { label: "Lessons recorded", value: num(s.research?.lessons_count) },
           ]}
         />
-        {list(s.research?.active_strategies).length > 0 ? (
+        {active.length > 0 ? (
           <ul className="flex flex-wrap gap-1.5">
-            {list(s.research?.active_strategies).map((a) => (
+            {active.map((a) => (
               <li key={a} className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
                 {a}
               </li>

@@ -1,7 +1,9 @@
-// The paper account's open option positions, read for the Options desk. Pure: no I/O.
+// The open option positions in the options live document, and the contract arithmetic built on them. Pure: no I/O.
 //
-// They come from the options live document, which the trading host publishes from the paper account kept for
-// manual option trades. The desk shows them; it never places, changes or closes one.
+// The positions were those of the paper account kept for hand-placed option trades, which the owner closed on
+// 2026-11-20. No page draws them any more (the Options desk's pane and the Paper page's section are gone); the
+// reader stays, with its tests, because the document still carries the field, and `parseContract` is used
+// across the site.
 import { price, type OptionKind } from "./bs";
 import type { Pick, ViewClock } from "./contract";
 import type { ChainResponse } from "./chain";

@@ -2,6 +2,7 @@ import { History } from "lucide-react";
 import { Empty } from "@/components/empty";
 import { Panel } from "@/components/panel";
 import { shortDate, txt } from "@/lib/format";
+import { RETIRED_DIGEST_KEYS } from "@/lib/robots";
 import { list, type Snapshot } from "@/lib/types";
 import { sectionState } from "@/lib/v3";
 import { V3Missing, V3Pending } from "./pending";
@@ -9,7 +10,7 @@ import { V3Missing, V3Pending } from "./pending";
 /** What moved since the previous US trading day: the brief a morning reader wants first. */
 export function DigestPanel({ s }: { s: Snapshot }) {
   const d = s.digest;
-  const items = list(d?.items);
+  const items = list(d?.items).filter((i) => !RETIRED_DIGEST_KEYS.has(i.key ?? ""));
   const changed = items.filter((i) => i.changed === true);
   return (
     <Panel

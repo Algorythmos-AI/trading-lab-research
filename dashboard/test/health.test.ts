@@ -61,6 +61,43 @@ describe("computeHealth", () => {
       expect(computeHealth(s, IN_WINDOW).level).toBe("green");
     });
 
+    it.each(["paper-s:not-flat", "paper-s:short", "paper-s:short-at-close", "paper-s:over-caps", "paper-s:orphan", "paper-s:close-unknown", "paper-s:not-paper"])(
+      "Gap Hunter alert %s is RED, in the site's own words",
+      (key) => {
+        const h = computeHealth(cleanSnapshot({ alerts: { firing: [{ key, since: null, title: "Sleeve S NOT FLAT at the close" }] } }), IN_WINDOW);
+        expect(h.level).toBe("red");
+        expect(codes(h)).toEqual([`alert:${key}`]);
+        expect(h.reasons[0]!.text).toMatch(/^Alert firing: .*Gap Hunter/);
+        expect(h.reasons[0]!.text).not.toMatch(/sleeve|paper-s|Robot B/i);
+      },
+    );
+
+    it.each(["paper-s:refused-keys", "paper-s:refused-account", "paper-s:second-runner", "paper-s:lease", "paper-s:clock-skew", "paper-s:stop-rule", "paper-s:something-new"])(
+      "Gap Hunter alert %s is AMBER: a look, not an emergency",
+      (key) => {
+        const h = computeHealth(cleanSnapshot({ alerts: { firing: [{ key, since: null, title: "Sleeve S: no primary lease, entries off" }] } }), IN_WINDOW);
+        expect(h.level).toBe("amber");
+        expect(codes(h)).toEqual([`alert:${key}`]);
+        expect(h.reasons[0]!.text).not.toMatch(/sleeve|paper-s|Robot B/i);
+      },
+    );
+
+    it("a Gap Hunter session that failed or was refused is AMBER, by its own name", () => {
+      const s = cleanSnapshot({ jobs: { last: { routine: { status: "ok" }, "paper-s": { status: "refused", exit: 1 } }, runs: [] } });
+      const h = computeHealth(s, IN_WINDOW);
+      expect(h.level).toBe("amber");
+      expect(h.reasons).toEqual([{ level: "amber", code: "job:paper-s", text: "Gap Hunter session was refused (exit 1)." }]);
+    });
+
+    it("the retired rule's job is nothing when the host no longer reports it, and nothing when it never ran", () => {
+      // No paper-b at all: not late, not missed, not red.
+      expect(computeHealth(cleanSnapshot({ jobs: { last: { routine: { status: "ok" }, "paper-s": { status: "ok" } }, runs: [] } }), IN_WINDOW).level).toBe("green");
+      // No session job of either kind yet: still nothing to act on.
+      expect(computeHealth(cleanSnapshot({ jobs: { last: { routine: { status: "ok" } }, runs: [] } }), IN_WINDOW).level).toBe("green");
+      // While it still reports, a clean run is quiet.
+      expect(computeHealth(cleanSnapshot({ jobs: { last: { routine: { status: "ok" }, "paper-b": { status: "ok" } }, runs: [] } }), IN_WINDOW).level).toBe("green");
+    });
+
     it("alert paper-b:close-unknown is RED", () => {
       const s = cleanSnapshot({ alerts: { firing: [{ key: "paper-b:close-unknown", since: null, title: "t" }] } });
       expect(computeHealth(s, IN_WINDOW).level).toBe("red");

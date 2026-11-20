@@ -36,15 +36,12 @@ import { cn } from "@/lib/utils";
 import type { HourlyBar } from "@/lib/hourly";
 import type { Interest } from "@/lib/oi";
 import type { OptionsLive } from "@/lib/options-live.types";
-import { pickFor, type PositionRow } from "@/lib/positions";
 import { agreement, rulesToday } from "@/lib/triggers";
 import { useDensity } from "./desk-prefs";
 import { DeskPalette } from "./desk-palette";
 import { FeedPill, StateChip, useLive } from "./live-layer";
-import { storePick } from "./options-contract";
 import { OptionsCosts } from "./options-costs";
 import { OptionsDetail, Tick } from "./options-detail";
-import { OptionsPositions } from "./options-positions";
 import { OptionsTriggers, TriggerNotices } from "./options-triggers";
 import { PaneBoundary } from "./pane-boundary";
 import { OPEN_NAME_EVENT } from "./trade-now";
@@ -309,7 +306,7 @@ export function OptionsDesk({
   initialSymbol: string | null;
   /** The pane a phone opens on. A wider screen shows both panes whatever this says. */
   initialPane: DeskPane;
-  /** The paper account's open option positions, when the trading host has published them. */
+  /** The options live document, when the trading host has published it: the day's rules and the feed agreement read it. */
   positions: OptionsLive | null;
   /** Open-interest marks by name, worked out on the server from the same document. */
   interest: Record<string, Interest>;
@@ -320,7 +317,7 @@ export function OptionsDesk({
   const { feed, session, now } = useLive();
   const done = useDone();
   const halfDay = isHalfDay(e);
-  // Until the browser's clock is read, the document's own time stands in, as the positions pane does.
+  // Until the browser's clock is read, the document's own time stands in, so the first paint has a time.
   const rules = rulesToday(positions, e, now ?? (positions ? Date.parse(positions.as_of) : 0));
   const [picked, setPicked] = useState<DeskView | null>(manualView ? initialView : null);
   const view: DeskView = picked ?? (live && now !== null ? viewForClock(e.session, halfDay, new Date(now)) : initialView);
@@ -424,12 +421,6 @@ export function OptionsDesk({
       if (p === "name") focusHeading();
       else rowButtons.current.get(symbolRef.current ?? "")?.focus();
     }, 0);
-  };
-  /** Opening a position: its name, with the contract that is held loaded into the contract pane. */
-  const openPosition = (row: PositionRow) => {
-    const pick = pickFor(row);
-    if (pick) storePick(row.symbol, pick);
-    openName(row.symbol);
   };
   /** Choosing a name by hand: a row, or the palette. On a phone that also opens the name. */
   const openName = (s: string) => {
@@ -730,16 +721,6 @@ export function OptionsDesk({
           {rules && live && view === "live" ? (
             <PaneBoundary name="Rules today">
               <OptionsTriggers rules={rules} nextClose={now === null ? null : nextHourlyClose(e.session, halfDay, new Date(now))} marketOpen={now !== null && sessionClock(e.session, halfDay, new Date(now))?.phase === "open"} onOpen={openName} />
-            </PaneBoundary>
-          ) : null}
-          {positions && live && view === "live" ? (
-            <PaneBoundary name="Manual option positions (paper)">
-              <OptionsPositions
-                doc={positions}
-                tickers={e.tickers}
-                marketOpen={now !== null && sessionClock(e.session, halfDay, new Date(now))?.phase === "open"}
-                onOpen={openPosition}
-              />
             </PaneBoundary>
           ) : null}
         </div>

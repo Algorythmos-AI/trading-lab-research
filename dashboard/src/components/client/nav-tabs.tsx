@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DESK_HOME, deskOfPath, type DeskName } from "@/lib/desk";
 import { deskNote } from "@/lib/desk-state";
+import { GAP_HUNTER } from "@/lib/robots";
 import { cn } from "@/lib/utils";
 
 export const NAV = [
@@ -13,7 +14,7 @@ export const NAV = [
   { href: "/radar", label: "Radar" },
   { href: "/options", label: "Options" },
   { href: "/paper", label: "Paper" },
-  { href: "/robot-b", label: "Robot B" },
+  { href: GAP_HUNTER.href, label: GAP_HUNTER.name },
   { href: "/trades", label: "Trades" },
   { href: "/calendar", label: "Calendar" },
   { href: "/strategies", label: "Strategies" },

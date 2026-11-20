@@ -1,4 +1,9 @@
-// The Robot B page's arithmetic. Pure: no I/O; the clock is passed in. Two sources and nothing typed by hand:
+// The retired QQQ rule's evidence (DEC-0062, DEC-0069). Its page is gone: Gap Hunter is the stock robot now
+// (lib/gap-hunter.ts), and the only reader left is the collapsed "Retired" section at the foot of the Strategies page,
+// which uses the verdict and the decision records. The rest is kept, with its tests, while
+// scripts/robot_b_evidence.py still builds the file and CI holds the two equal; it goes when that script does.
+//
+// Pure: no I/O; the clock is passed in. Two sources and nothing typed by hand:
 //  * robot-b-evidence.json, built by scripts/robot_b_evidence.py from EXP-0042 (DEC-0061) and checked in CI against a
 //    fresh build: the research evidence, numbers only (ids, statuses, counts, R, intervals, statistics);
 //  * the published stocks snapshot: the paper desk now (G2, the stop rule, the account, the kill switch, the job).
