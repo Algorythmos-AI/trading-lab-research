@@ -1,0 +1,112 @@
+{
+ "what": "DEC-0010's count guard for Set P (D16): trade counts at US$600 per trial at each relaxation level, counts only. No R was written or printed by any of these runs (scripts/r3_run.py --counts-only).",
+ "run_on": "2026-11-19 to 2026-11-20, on the owner's console machine",
+ "driver": "scripts/r3_run.py <scratch> <start> 2025-09-25 --set P --counts-only [--relax ...]",
+ "upper_bound": "The pools for these sessions were built on 2026-11-19, when the news source returned nothing dated before 2026-04-28, so every name has no headline. Set P only excludes two headline types (offering and buyout), so with no headlines nothing is excluded: each count is an upper bound. Set F cannot be counted on this span for the same reason and was not run.",
+ "threshold": 60,
+ "levels": [
+  {
+   "level": 0,
+   "relax": [],
+   "from_2019-01-02": {
+    "sessions_with_a_pool": 1693,
+    "counts_at_600": {
+     "P:GG-1": 3,
+     "P:GG-2": 16,
+     "P:GG-3": 4,
+     "P:GG-4": 23
+    }
+   },
+   "from_2020-01-01": {
+    "sessions_with_a_pool": 1441,
+    "counts_at_600": {
+     "P:GG-1": 3,
+     "P:GG-2": 15,
+     "P:GG-3": 4,
+     "P:GG-4": 23
+    }
+   }
+  },
+  {
+   "level": 1,
+   "relax": [
+    "window"
+   ],
+   "from_2019-01-02": {
+    "sessions_with_a_pool": 1693,
+    "counts_at_600": {
+     "P:GG-1": 4,
+     "P:GG-2": 23,
+     "P:GG-3": 8,
+     "P:GG-4": 27
+    }
+   },
+   "from_2020-01-01": {
+    "sessions_with_a_pool": 1441,
+    "counts_at_600": {
+     "P:GG-1": 4,
+     "P:GG-2": 22,
+     "P:GG-3": 7,
+     "P:GG-4": 27
+    }
+   }
+  },
+  {
+   "level": 2,
+   "relax": [
+    "window",
+    "pm_consolidation"
+   ],
+   "from_2019-01-02": {
+    "sessions_with_a_pool": 1693,
+    "counts_at_600": {
+     "P:GG-1": 23,
+     "P:GG-2": 179,
+     "P:GG-3": 46,
+     "P:GG-4": 232
+    }
+   },
+   "from_2020-01-01": {
+    "sessions_with_a_pool": 1441,
+    "counts_at_600": {
+     "P:GG-1": 23,
+     "P:GG-2": 170,
+     "P:GG-3": 42,
+     "P:GG-4": 224
+    }
+   }
+  },
+  {
+   "level": 3,
+   "relax": [
+    "window",
+    "pm_consolidation",
+    "emas"
+   ],
+   "from_2019-01-02": {
+    "sessions_with_a_pool": 1693,
+    "counts_at_600": {
+     "P:GG-1": 48,
+     "P:GG-2": 393,
+     "P:GG-3": 122,
+     "P:GG-4": 531
+    }
+   },
+   "from_2020-01-01": {
+    "sessions_with_a_pool": 1441,
+    "counts_at_600": {
+     "P:GG-1": 44,
+     "P:GG-2": 375,
+     "P:GG-3": 113,
+     "P:GG-4": 507
+    }
+   }
+  }
+ ],
+ "first_level_reaching_60_from_2020": {
+  "P:GG-1": null,
+  "P:GG-2": 2,
+  "P:GG-3": 3,
+  "P:GG-4": 2
+ }
+}
