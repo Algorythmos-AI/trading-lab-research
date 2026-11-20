@@ -228,6 +228,30 @@ site(f"{RB}::'paper-b:signal-not-acted' | 'Paper B had a signal and did not act'
 site(f"{RB}::'paper-b:stop-rule' | f'paper-b stopped by its stop rule ({{page.record(r",
      {"rule": NS(decision=T), "fired": NS(kind=T, detail=T)})
 site("src/wt/live/runner_b.py::run::'paper-b:second-runner' | 'paper-b: a second runner refused to start'", {})
+RS = "src/wt/live/runner_s.py"
+site(f"{RS}::_start::'paper-s:refused-keys' | 'Sleeve S refused to start: key pair'", {})
+site(f"{RS}::_start::'paper-s:second-runner' | 'paper-s: a second runner refused to start'", {})
+site(f"{RS}::_guarded::'paper-s:refused-account' | 'Sleeve S refused to start: account'", {})
+site(f"{RS}::_session.adopt::'paper-s:orphan' | 'Sleeve S adopted a position it did not open'", {"qty": N})
+site(f"{RS}::_session.consider::'paper-s:clock-skew' | 'Sleeve S clock check: ok'", {})
+site(f"{RS}::_session.consider::'paper-s:clock-skew' | 'Sleeve S skipped an entry: clock check failed'", {"skew": N})
+site(f"{RS}::_session.sweep_positions::'paper-s:over-caps' | 'Sleeve S: a position over its hard caps'",
+     {"pos": NS(symbol=NAMES[0], qty=N, avg_price=N)})
+site(f"{RS}::_session.sweep_positions::'paper-s:short' | 'Sleeve S is SHORT'",
+     {"pos": NS(symbol=NAMES[0], qty=-N, avg_price=N)})
+site(f"{RS}::_session::'paper-s:close-unknown' | 'Sleeve S: session close unknown'", {})
+site(f"{RS}::_session::'paper-s:lease' | 'Sleeve S: no primary lease, entries off'", {})
+site(f"{RS}::_session::'paper-s:lease' | 'Sleeve S: primary lease held'", {})
+site(f"{RS}::_session::'paper-s:not-flat' | 'Sleeve S NOT FLAT at the close'",
+     {"pos": NS(symbol=NAMES[0], qty=N, avg_price=N)})
+site(f"{RS}::_session::'paper-s:not-flat' | 'Sleeve S could not verify flat after the close'", {})
+site(f"{RS}::_session::'paper-s:not-flat' | 'Sleeve S: no long position after the close'", {})
+site(f"{RS}::_session::'paper-s:not-paper' | 'Sleeve S stopped: not a paper account'", {})
+site(f"{RS}::_session::'paper-s:short-at-close' | 'Sleeve S is SHORT at the close'",
+     {"pos": NS(symbol=NAMES[0], qty=-N, avg_price=N)})
+site(f"{RS}::_session::'paper-s:short-at-close' | 'Sleeve S: no short position after the close'", {})
+site(f"{RS}::_session::'paper-s:stop-rule' | f'paper-s stopped by its stop rule ({{page.record(r",
+     {"rule": NS(decision=T), "fired": NS(kind=T, detail=T)})
 RO = "src/wt/live/runner_o.py::Runner"
 site(f"{RO}.give_up_arm::'arm-broker' | 'Options clone: broker unreachable at arm'", {"e": E})
 site(f"{RO}.connect_at_arm::'flatten-required' | 'Options clone: a position no plan knows'", {})
@@ -566,6 +590,22 @@ RECORDS = [
     ("src/wt/live/runner_b.py", "_session", "'Paper B is SHORT'", "log('short_position'"),
     ("src/wt/live/runner_b.py", "_session", "NOT FLAT at the close", "log('END_OF_DAY_NOT_FLAT', qty=qty, plan="),
     ("src/wt/live/runner_b.py", "_session", "SHORT at the close", "log('END_OF_DAY_NOT_FLAT', qty=qty, short=True"),
+    ("src/wt/live/runner_s.py", "_start", "refused to start: key pair", "log('refuse_to_start'"),
+    ("src/wt/live/runner_s.py", "_start", "a second runner refused to start", "log('refuse_to_start'"),
+    ("src/wt/live/runner_s.py", "_guarded", "refused to start: account", "log('refuse_to_start'"),
+    ("src/wt/live/runner_s.py", "_session", "no primary lease", "refuse(f'primary lease not held"),
+    ("src/wt/live/runner_s.py", "_session", "not a paper account", "log('refuse_to_arm', reason='account not paper'"),
+    ("src/wt/live/runner_s.py", "_session", "session close unknown", "log('close_unknown'"),
+    ("src/wt/live/runner_s.py", "_session", "stopped by its stop rule", "log('stop_rule'"),
+    ("src/wt/live/runner_s.py", "_session.adopt", "adopted a position", "log('adopted_orphan'"),
+    ("src/wt/live/runner_s.py", "_session.sweep_positions", "over its hard caps", "log('position_over_caps'"),
+    ("src/wt/live/runner_s.py", "_session.sweep_positions", "'Sleeve S is SHORT'", "log('short_position'"),
+    ("src/wt/live/runner_s.py", "_session.consider", "clock check failed", "log('clock_skew'"),
+    ("src/wt/live/runner_s.py", "_session", "NOT FLAT at the close",
+     "log('END_OF_DAY_NOT_FLAT', symbol=pos.symbol, qty=pos.qty)"),
+    ("src/wt/live/runner_s.py", "_session", "SHORT at the close",
+     "log('END_OF_DAY_NOT_FLAT', symbol=pos.symbol, qty=pos.qty, short=True"),
+    ("src/wt/live/runner_s.py", "_session", "could not verify flat", "log('END_OF_DAY_NOT_FLAT', error="),
     ("src/wt/live/runner_o.py", "Runner.give_up_arm", "broker unreachable at arm",
      "pg.say(f'broker unreachable at arm"),
     ("src/wt/live/runner_o.py", "Runner.on_fill", "Options clone entered", "self.write('filled'"),

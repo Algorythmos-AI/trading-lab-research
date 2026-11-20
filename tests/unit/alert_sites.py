@@ -24,6 +24,7 @@ SINKS = {"fire": (1, 2), "once_per_day": (1, 2), "resolve": (1, 2), "notify": (0
 # Functions whose sinks use their parameters but are not pass-through wrappers: the text is judged where it is made,
 # with hostile values for those parameters, instead of at every caller.
 NOT_WRAPPERS = frozenset({"src/wt/ops/jobs.py::run_job", "src/wt/live/runner_b.py::_session.adopt_orphan",
+                          "src/wt/live/runner_s.py::_session.adopt",
                           "src/wt/ops/evidence.py::run", "src/wt/ops/visibility.py::page"})
 Func = ast.FunctionDef | ast.AsyncFunctionDef
 

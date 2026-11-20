@@ -8,8 +8,12 @@ What it shares with sleeve Q (wt.live.runner_b): nothing at run time. Its own pa
 data/live/plan_*.json, data/live/journal.jsonl or the QQQ rule's virtual account.
 
 It refuses to start without its own key pair, or when its account is sleeve Q's. It places no entry while DEC-0066
-does not read ACCEPTED, while it runs under systemd (no host job is installed for it yet), or while any of the
-session gates below is closed. A refusal turns entries off, never exit management.
+does not read ACCEPTED, or while any of the session gates below is closed. A refusal turns entries off, never exit
+management.
+
+On the host (job `paper-s`, WT_HOST=systemd) it trades only while it holds its own primary lease (`wt-leases/paper-s`,
+wt.ops.lease): without it entries are off and exits are still managed. On a shadow host (WT_ROLE=shadow) every order
+call raises (wt.brokers.shadow) and entries are off for the session. A console checkout takes no lease.
 
 Each poll, in this order: the plan in play is synced with the broker and booked if it closed; orders and positions
 are reconciled and protected; the universe is rescanned on each five-minute mark; newly closed bars are read; a
@@ -23,8 +27,13 @@ working order, a plan or account that could not be saved, a spread that is unkno
 than the limit, a newest bar that is not the minute just ended (no print: treated as halted), a clock more than 2 s
 off the broker's, a size of zero, and cash that has not settled.
 
-Not in this slice, and said so in the journal's `armed` row: phone pages, the host job, and the gap entries (which
-need the order manager's partial exit).
+Phone pages go out during the session through a non-blocking pager (wt.ops.alerts.Pager), keys `paper-s:*`: refused
+to start (key pair, account), a second runner, no lease, the session's close unknown, the stop rule, a position
+adopted, a position over the hard caps, a short, a clock-skew block, and not flat (or not verified flat) after the
+close. A page is fixed words and guarded counts: never a symbol, a price, an amount or an error's text; the journal
+row written just before it holds those. The `armed` row says whether this session pages.
+
+Not in this slice: the gap entries (which need the order manager's partial exit).
 """
 from __future__ import annotations
 
@@ -52,7 +61,9 @@ from wt.live import scan_s
 from wt.live import setups_live as sl
 from wt.live.runner_b import measure_skew, target_exit_limit, times_from_clock, with_deadline
 from wt.oms.manager import ACTIVE_POSITION, OMS, PlanStore, TradePlan
+from wt.ops import alerts as page
 from wt.ops import locks
+from wt.ops.alerts import Alerts, Pager
 from wt.risk import stop_rule
 from wt.risk.pretrade import Context, PreTradeGuard, load_limits
 from wt.risk.virtual_account import StateError, VirtualAccount
@@ -64,7 +75,7 @@ KILL = DIR / "KILL"
 VA_PATH = DIR / "virtual_account.json"
 JOURNAL = DATA_DIR / "live" / "smallcap_journal.jsonl"
 RECORD = ROOT / "research" / "decisions" / "DEC-0066-robot-b-sleeve-s-paper-desk.md"
-RUNNER_LOCK = "paper-s-runner"
+RUNNER_LOCK = locks.RUNNER_LOCK_S          # "paper-s-runner": the deploy gate reads it too
 KEY_ID, KEY_SECRET = "APCA_S_KEY_ID", "APCA_S_SECRET_KEY"
 Q_KEY_ID = "APCA_API_KEY_ID"
 
@@ -82,6 +93,7 @@ ENTRY_CUTOFF_MIN = 30           # no new entry in the last half hour before the 
 SEQ_BLOCK = 1000                # each plan's order ids come from its own block of sequence numbers (see plan_seq)
 BAR_PAGES = 20
 CONNECT_TRIES, CONNECT_WAIT_S = 5, 15.0
+RUNNER_LOCK_WAIT_S = 10.0       # how long a starting runner waits for its own process lock
 
 
 # ---- journal ------------------------------------------------------------------------------------------------------
@@ -343,25 +355,42 @@ def staged_of(p: TradePlan) -> sl.Staged | None:
 def run(day: dt.date | None = None, poll_s: float = 10.0, broker: Any = None, rest: Any = None,
         now_fn: Callable[[], dt.datetime] | None = None, sleep_fn: Callable[[float], None] | None = None,
         account_number: str | None = None, q_account: Callable[[], str | None] | None = None,
-        environ: Mapping[str, str] | None = None) -> None:
-    """broker, rest, now_fn, sleep_fn, account_number and q_account are injected by the replay tests; production
-    builds them from sleeve S's own keys."""
+        environ: Mapping[str, str] | None = None, alerts: Any = None) -> None:
+    """broker, rest, now_fn, sleep_fn, account_number, q_account and alerts are injected by the replay tests;
+    production builds them from sleeve S's own keys. A run with an injected broker pages only through `alerts`."""
     if env("MODE", "backtest") != "paper":
         raise SystemExit("runner_s refuses to start: MODE must be 'paper'")
+    pager = Pager(alerts if alerts is not None else (Alerts() if broker is None else None))
+    try:
+        _start(day, poll_s, broker, rest, now_fn, sleep_fn, account_number, q_account, environ, pager)
+    finally:
+        pager.close()                                         # also on a refusal: its page is still delivered
+
+
+def _start(day: dt.date | None, poll_s: float, broker: Any, rest: Any, now_fn: Callable[[], dt.datetime] | None,
+           sleep_fn: Callable[[float], None] | None, account_number: str | None,
+           q_account: Callable[[], str | None] | None, environ: Mapping[str, str] | None, pager: Pager) -> None:
     e = os.environ if environ is None else environ
     why = key_refusal(e)
     if why:
         log("refuse_to_start", reason=why)
+        pager.once_per_day("paper-s:refused-keys", "Sleeve S refused to start: key pair",
+                           "Its own key pair is missing or is not its own; the session's journal (refuse_to_start) "
+                           "says which. No order was sent and nothing is managed. See "
+                           "docs/runbooks/position-alerts.md.", 4)
         raise SystemExit(f"runner_s refuses to start: {why}")
     clock = now_fn or (lambda: dt.datetime.now(ET))
     sleep = sleep_fn or time.sleep
     day = day or clock().date()
     if broker is not None:
-        _guarded(day, poll_s, broker, rest, clock, sleep, account_number, q_account)
+        _guarded(day, poll_s, broker, rest, clock, sleep, account_number, q_account, pager)
         return
-    with locks.job_lock(RUNNER_LOCK, wait_s=10.0, poll_s=0.5) as got:
+    with locks.job_lock(RUNNER_LOCK, wait_s=RUNNER_LOCK_WAIT_S, poll_s=0.5) as got:
         if not got:
             log("refuse_to_start", reason="another paper-s runner process is live (runner lock held)")
+            pager.once_per_day("paper-s:second-runner", "paper-s: a second runner refused to start",
+                               "Another paper-s runner process holds the runner lock; this one exited without "
+                               "trading.", 4)
             return
         from wt.brokers.alpaca_paper import AlpacaPaperBroker    # asserts the paper-only lock
         from wt.data.alpaca import AlpacaREST
@@ -372,7 +401,7 @@ def run(day: dt.date | None = None, poll_s: float = 10.0, broker: Any = None, re
             def reader() -> str | None:
                 from wt.brokers.alpaca_read import AccountReader
                 return AccountReader().account_number()
-        _guarded(day, poll_s, broker, rest, clock, sleep, getattr(broker, "account_number", None), reader)
+        _guarded(day, poll_s, broker, rest, clock, sleep, getattr(broker, "account_number", None), reader, pager)
 
 
 def _connect(factory: Callable[[], Any], sleep: Callable[[float], None]) -> Any:
@@ -392,16 +421,20 @@ def _connect(factory: Callable[[], Any], sleep: Callable[[float], None]) -> Any:
 
 def _guarded(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callable[[], dt.datetime],
              sleep: Callable[[float], None], account_number: str | None,
-             q_account: Callable[[], str | None] | None) -> None:
+             q_account: Callable[[], str | None] | None, pager: Pager) -> None:
     why = account_refusal(account_number, q_account)
     if why:
         log("refuse_to_start", reason=why)
+        pager.once_per_day("paper-s:refused-account", "Sleeve S refused to start: account",
+                           "Its account could not be told apart from sleeve Q's, or is sleeve Q's; the session's "
+                           "journal (refuse_to_start) says which. No order was sent and nothing is managed. See "
+                           "docs/runbooks/position-alerts.md.", 4)
         raise SystemExit(f"runner_s refuses to start: {why}")
-    _session(day, poll_s, broker, rest, clock, sleep)
+    _session(day, poll_s, broker, rest, clock, sleep, pager)
 
 
 def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callable[[], dt.datetime],
-             sleep: Callable[[float], None]) -> None:
+             sleep: Callable[[float], None], pager: Pager) -> None:
     off: list[str] = []                 # why entries are off for the whole session (exits keep being managed)
 
     def refuse(reason: str) -> None:
@@ -410,8 +443,27 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
 
     if not accepted():
         refuse("DEC-0066 does not read ACCEPTED")
-    if env("WT_HOST", "") == "systemd":
-        refuse("no host job is installed for sleeve S: it runs from a console checkout only")
+    role = env("WT_ROLE", "primary")
+    lease_state = "none"                # a console checkout takes no lease
+    if role == "shadow":
+        from wt.brokers.shadow import ShadowBroker             # every order call raises
+        broker = ShadowBroker(broker)
+        lease_state = "shadow"
+        refuse("shadow host: this session never places orders")
+    elif env("WT_HOST", "") == "systemd":
+        # On the host, trading needs sleeve S's own primary lease: two hosts can never both trade it (ADR 0004).
+        from wt.ops import lease
+        got = lease.acquire(key=lease.KEY_S)
+        if got.ok:
+            lease_state = "held"
+            log("lease", held=got.reason)
+            pager.resolve("paper-s:lease", "Sleeve S: primary lease held", "The lease is held again; entries are on.")
+        else:
+            lease_state = "refused"
+            refuse(f"primary lease not held: {got.reason}")
+            pager.fire("paper-s:lease", "Sleeve S: no primary lease, entries off",
+                       "The lease was not held; the session's journal (refuse_to_arm) says why. Exits are still "
+                       "managed. See docs/runbooks/backups-and-lease.md.", 4)
     free_gb = shutil.disk_usage(ROOT).free / 1e9
     if free_gb < MIN_FREE_GB:
         refuse(f"free disk {free_gb:.1f} GB under the {MIN_FREE_GB:.0f} GB floor")
@@ -419,7 +471,10 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         acct = broker.account()
         if not acct.is_paper:
             log("refuse_to_arm", reason="account not paper", exits_only=False)
-            return
+            pager.once_per_day("paper-s:not-paper", "Sleeve S stopped: not a paper account",
+                               "The broker did not say the account is a paper account, so the session ended at "
+                               "once: nothing was ordered and nothing is managed. Check the key pair.", 5)
+            return                                    # never act on anything that isn't the paper account
         if acct.blocked:
             refuse("account blocked")
     except Exception as e:  # noqa: BLE001
@@ -445,6 +500,9 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         times = times_from_clock(broker, day)
         if times is None:
             log("close_unknown", day=day)
+            pager.once_per_day("paper-s:close-unknown", "Sleeve S: session close unknown",
+                               "Neither the market calendar nor the broker clock could be read. Resting GTC stops "
+                               "stay in place, but there is no end-of-day exit. Check the account.", 5)
             return
         open_dt, close_dt = times
         nxt = day + dt.timedelta(days=1)
@@ -485,6 +543,10 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             except OSError as e:
                 _echo(f"STOP RULE LATCH NOT SAVED ({e.__class__.__name__})", sys.stderr)
             log("stop_rule", kind=fired.kind, detail=fired.detail, decision=rule.decision)
+            pager.once_per_day("paper-s:stop-rule", f"paper-s stopped by its stop rule ({page.record(rule.decision)})",
+                               "The rule fired; the session's journal (stop_rule) has its numbers. Entries stay off "
+                               "until a new decision record changes S.stop_rule or retires the sleeve and its latch "
+                               "is cleared; a reset alone brings the latch back at the next arming.", 4)
         refuse(f"stop rule {fired.kind} ({rule.decision}): {fired.detail}")
     va.roll(day)
     losers, realised, closed_n = day_state(rows, day)
@@ -595,6 +657,10 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         except Exception as e:  # noqa: BLE001 — it is adopted either way: reconcile keeps trying to protect it
             log("orphan_stop_failed", trade_id=o.trade_id, error=e.__class__.__name__)
         log("adopted_orphan", trade_id=o.trade_id, symbol=sym, qty=qty, stop=stop)
+        pager.once_per_day("paper-s:orphan", "Sleeve S adopted a position it did not open",
+                           f"A long position of {page.count(qty)} share(s) had no plan. It is stopped and sold at "
+                           "once (retried every 5 minutes); the session's journal (adopted_orphan) names it. Only "
+                           "the day's first adoption pages.", 4)
         return o
 
     left_alone: set[str] = set()                              # positions too large for this desk's hard caps
@@ -610,6 +676,10 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                 # it (its own orders are under the caps): it is journaled once and left for the owner.
                 left_alone.add(pos.symbol)
                 log("position_over_caps", symbol=pos.symbol, qty=pos.qty, action="left for the owner")
+                pager.once_per_day("paper-s:over-caps", "Sleeve S: a position over its hard caps",
+                                   f"The account holds a long position of {page.count(pos.qty)} share(s) that this "
+                                   "desk did not open and cannot stop or sell (its hard caps refuse the orders). It "
+                                   "is left for the owner; the session's journal (position_over_caps) names it.", 5)
             elif pos.qty > 0:
                 o = adopt(pos.symbol, pos.qty, pos.avg_price)
                 if o is not None:
@@ -618,6 +688,11 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                 left_alone.add(pos.symbol)                     # a short is never covered automatically
                 allow({pos.symbol})
                 log("short_position", symbol=pos.symbol, qty=pos.qty, cancelled=oms.cancel_resting(pos.symbol))
+                pager.once_per_day("paper-s:short", "Sleeve S is SHORT",
+                                   f"Short {page.count(abs(pos.qty))} share(s). This account must never be short. "
+                                   "This desk's orders in the name were cancelled; nothing is bought back "
+                                   "automatically. The session's journal (short_position) names it. Follow the "
+                                   "not-flat runbook.", 5)
 
     try:
         sweep_positions()
@@ -670,7 +745,8 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
     log("armed", day=day, trial=sl.TRIAL, entries_off=off, kill=kill_on, flatten=flatten_dt, symbols=len(symbols),
         resumed_plan=plan.trade_id if plan else None, held=[p.trade_id for p in held],
         day_stop=day_stopped(losers, realised), skew_s=measure_skew(broker, clock),
-        virtual=asdict(va) if va_ok else None, stock_feed="sip", pages=False, record_accepted=accepted())
+        virtual=asdict(va) if va_ok else None, stock_feed="sip", pages=pager.alerts is not None, role=role,
+        lease=lease_state, record_accepted=accepted())
 
     def close_out(p: TradePlan) -> None:
         book(p, dt.date.fromisoformat(p.date))
@@ -806,10 +882,13 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             bump(why)
             log("signal_blocked", blockers=[why, *blockers], name_done=why, **row)
             return
+        skew: float | None = None
         if not blockers:
             skew = measure_skew(broker, clock)
             if skew is None or abs(skew) > SKEW_MAX_S:
                 blockers.append("clock_skew")
+            else:
+                pager.resolve("paper-s:clock-skew", "Sleeve S clock check: ok", "Clock skew is back in range.")
         qty = 0
         if not blockers:
             risk = va.equity * RISK_PCT / 100
@@ -821,6 +900,12 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             for k in blockers:
                 bump(k.split(":")[0])
             log("signal_blocked", blockers=blockers, **row)
+            if "clock_skew" in blockers:
+                log("clock_skew", skew_s=skew, max_s=SKEW_MAX_S, action="entry skipped")
+                pager.fire("paper-s:clock-skew", "Sleeve S skipped an entry: clock check failed",
+                           "The broker clock could not be read, so the local clock could not be checked."
+                           if skew is None else
+                           f"The local clock is {page.ratio(skew, '+.1f')} s off the broker's (limit 2 s).", 4)
             return
         p = TradePlan(date=day.isoformat(), strategy=STRATEGY, symbol=sym, qty=qty, trigger=s.trigger, limit=s.limit,
                       stop=s.stop, target=s.target, attempt=s.attempt, seq=plan_seq(s.attempt))
@@ -954,15 +1039,25 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         for p in [plan, *held]:
             if p is not None and p.active:
                 oms.sync(p)
+        long_left = short_left = False
         for pos in broker.positions():
             owner = next((p for p in [plan, *held] if p is not None and p.symbol == pos.symbol and p.active), None)
             if pos.qty > 0:
+                long_left = True
                 if owner is not None and owner.state in ACTIVE_POSITION:
                     oms.ensure_stop(owner)                     # a GTC stop keeps protecting overnight
                 log("END_OF_DAY_NOT_FLAT", symbol=pos.symbol, qty=pos.qty)
+                pager.fire("paper-s:not-flat", "Sleeve S NOT FLAT at the close",
+                           f"A long position of {page.count(pos.qty)} share(s) is still open after the close; the "
+                           "session's journal (END_OF_DAY_NOT_FLAT) names every one. One this desk owns keeps a GTC "
+                           "stop overnight and is sold at the next session's open. Check the broker.", 5)
             elif pos.qty < 0:
+                short_left = True
                 log("END_OF_DAY_NOT_FLAT", symbol=pos.symbol, qty=pos.qty, short=True,
                     cancelled=oms.cancel_resting(pos.symbol))
+                pager.fire("paper-s:short-at-close", "Sleeve S is SHORT at the close",
+                           f"Short {page.count(abs(pos.qty))} share(s). Nothing is bought back automatically; the "
+                           "session's journal (END_OF_DAY_NOT_FLAT) names every one. Follow the not-flat runbook.", 5)
         flat = {pos.symbol for pos in broker.positions() if pos.qty}
         resting = {o.symbol for o in broker.open_orders()}
         for sym in sorted((guard.limits.allowlist & resting) - flat):
@@ -972,8 +1067,17 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         for p in [plan, *held, *made]:
             if p is not None:
                 close_out(p)
+        if not long_left:                                     # verified: an earlier session's page is over
+            pager.resolve("paper-s:not-flat", "Sleeve S: no long position after the close",
+                          "The account held no long position after the close.")
+        if not short_left:
+            pager.resolve("paper-s:short-at-close", "Sleeve S: no short position after the close",
+                          "The account held no short position after the close.")
     except Exception as e:  # noqa: BLE001
         log("END_OF_DAY_NOT_FLAT", error=f"could not verify flat after the close: {e!r}"[:300])
+        pager.fire("paper-s:not-flat", "Sleeve S could not verify flat after the close",
+                   "The broker could not be read after the close, or the end-of-day checks failed part way. Check "
+                   "the account; the session's journal (END_OF_DAY_NOT_FLAT) has the error.", 5)
     log("session_end", trial=sl.TRIAL, entries_off=off, universe=len(universe.joined), scans=universe.scans,
         entries=va.trades_by_day.get(day.isoformat(), 0), closed=closed_n, realised_R=round(realised, 4),
         day_stop=day_stopped(losers, realised), blocked=dict(sorted(counts.items())),
