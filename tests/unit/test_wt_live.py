@@ -20,24 +20,28 @@ COSTS = Costs(slippage_per_share=0.01)
 
 
 def walk(bars: pd.DataFrame, sig: EntrySignal, entry_i: int, entry: float, qty: int, flatten: int,
-         bv_fail: bool = False) -> list[tuple]:
-    """The live reading: closed bars only, decisions from wt_step, fills as the engine makes them."""
+         bv_fail: bool = False, bv_i: int | None = None, slip: float = 0.01) -> list[tuple]:
+    """The live reading: closed bars only, decisions from wt_step, fills as the engine makes them. `bv_i`: the bar
+    at whose close the breakout-volume check is known (the entry bar when None). On that bar the engine asks the
+    check before the target, so the walk takes no target there when the check failed."""
     o, h, low = (bars[k].to_numpy(float) for k in ("o", "h", "l"))
-    s = sl.wt_start(entry, sig.stop, qty, bars.t.iloc[entry_i], sig.target, bv_fail=bv_fail)
+    s = sl.wt_start(entry, sig.stop, qty, bars.t.iloc[entry_i], sig.target, bv_fail=bv_fail,
+                    bv_bar=None if bv_i is None else bars.t.iloc[bv_i])
+    bv_at = entry_i if bv_i is None else bv_i
     pos, exits, pending = qty, [], None                      # pending: a market exit asked for at the last close
     for j in range(entry_i, len(bars)):
         if pending is not None:
-            exits.append((bars.t.iloc[j], round(o[j] - COSTS.slip(), 6), pos, pending))
+            exits.append((bars.t.iloc[j], round(o[j] - slip, 6), pos, pending))
             return exits
         if j >= flatten:
-            exits.append((bars.t.iloc[flatten], round(o[flatten] - COSTS.slip(), 6), pos, "eod_flatten"))
+            exits.append((bars.t.iloc[flatten], round(o[flatten] - slip, 6), pos, "eod_flatten"))
             return exits
         if low[j] <= s.stop:
-            px = min(s.stop, o[j]) - COSTS.stop_slip() if j > entry_i else s.stop - COSTS.stop_slip()
+            px = min(s.stop, o[j]) - slip if j > entry_i else s.stop - slip
             exits.append((bars.t.iloc[j], round(px, 6), pos, s.stop_reason))
             return exits
         seen = bars.iloc[: j + 1]
-        if j > entry_i and not s.partial_done and h[j] >= s.t1:
+        if j > entry_i and not (s.bv_fail and j == bv_at) and not s.partial_done and h[j] >= s.t1:
             q = pos if s.qty0 < 2 else s.partial_qty
             exits.append((bars.t.iloc[j], round(max(s.t1, o[j]), 6), q, "target_all" if s.qty0 < 2 else "partial_t1"))
             pos -= q

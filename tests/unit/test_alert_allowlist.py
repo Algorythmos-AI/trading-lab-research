@@ -235,6 +235,8 @@ site(f"{RS}::_guarded::'paper-s:refused-account' | 'Sleeve S refused to start: a
 site(f"{RS}::_session.adopt::'paper-s:orphan' | 'Sleeve S adopted a position it did not open'", {"qty": N})
 site(f"{RS}::_session.consider::'paper-s:clock-skew' | 'Sleeve S clock check: ok'", {})
 site(f"{RS}::_session.consider::'paper-s:clock-skew' | 'Sleeve S skipped an entry: clock check failed'", {"skew": N})
+site(f"{RS}::_session.gap_place::'paper-s:clock-skew' | 'Sleeve S clock check: ok'", {})
+site(f"{RS}::_session.gap_place::'paper-s:clock-skew' | 'Sleeve S skipped an entry: clock check failed'", {"skew": N})
 site(f"{RS}::_session.sweep_positions::'paper-s:over-caps' | 'Sleeve S: a position over its hard caps'",
      {"pos": NS(symbol=NAMES[0], qty=N, avg_price=N)})
 site(f"{RS}::_session.sweep_positions::'paper-s:short' | 'Sleeve S is SHORT'",
