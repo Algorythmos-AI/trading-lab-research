@@ -1,0 +1,28 @@
+# EXP-0053: Gap Hunter, the stock desk's funnel rule on paper (DEC-0068).
+# A forward paper experiment: no development-span or holdout data is read to produce its result.
+experiment: EXP-0053
+status: registered              # runs from the first session after HYP-0071 is switched on by a dated note in DEC-0066
+decision: DEC-0068
+hypotheses: [HYP-0071]
+trials: 1                       # family S; the global count stays at 87
+question: >
+  Does the desk pick each morning's primary by DEC-0068's rule, take the first valid registered gap entry in it,
+  protect, exit and record as SPEC-0001 says, what do its paper fills cost against the quotes at the time, and what
+  is the mean R per closed trade?
+driver: python -m wt.live.runner_s            # job paper-s; one process per session
+book: research/experiments/EXP-0051-sleeve-s-paper-book/config.yaml   # the same book, limits, day stop and stop rule (DEC-0066)
+inputs:
+  pool: data/candidates/<session>.parquet     # the 09:25 pool, built on the host before the open
+  journal: data/live/smallcap_journal.jsonl   # PRIVATE; on the host, never in git
+  market_data: Alpaca, SIP named on every stock request (DEC-0064)
+measures:
+  primary: mean R per closed trade, 95% bootstrap interval, sessions resampled (HYP-0071)
+  selection:
+    - sessions with a primary; sessions where the primary gave a valid entry signal; sessions with an order; with a fill
+    - names rejected by each hard filter, and the primary's score terms (counts and numbers; never a headline or a category)
+  execution:
+    - fill minus trigger, and fill against the NBBO journaled at the decision, in cents and in R
+    - signals blocked, by blocker
+before_switch_on: DEC-0068 "What must be true before it is switched on"
+reports:
+  never: [a setup name, a headline, a catalyst category]   # AGENTS.md data classes; trials are named by id
