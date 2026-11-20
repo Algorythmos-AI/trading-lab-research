@@ -17,6 +17,9 @@ from wt.core.clock import ET
 from wt.live import runner_b
 from wt.live.replay import BarFillBroker, ReplayClock, ReplayCrash, ReplayREST, Tape
 
+# Whole sessions replayed: GitHub CI runs these; the host's deploy gate leaves them out (owner, 2026-11-20).
+pytestmark = pytest.mark.replay
+
 DAY = dt.date(2026, 9, 30)
 PRIOR = [d.date() for d in pd.bdate_range(end=DAY - dt.timedelta(days=1), periods=14)]
 NEXT = (pd.Timestamp(DAY) + pd.offsets.BDay(1)).date()       # the runner asks the calendar for the session after today

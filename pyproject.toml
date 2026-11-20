@@ -16,6 +16,7 @@ testpaths = ["tests"]
 addopts = "-q -p no:cacheprovider"
 markers = [
     "smoke: fast import and sanity checks that `make deploy` runs against the live venv",
+    "replay: whole trading sessions replayed through a runner; run by GitHub CI, left out of the host's deploy gate",
 ]
 
 [tool.ruff]

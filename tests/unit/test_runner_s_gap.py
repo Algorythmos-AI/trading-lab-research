@@ -25,6 +25,9 @@ from wt.live import setups_live as sl
 from wt.live.replay import BarFillBroker, ReplayClock, ReplayCrash, ReplayREST, Tape
 from wt.signals.spec_setups import continuation_5m, gg_level_break, orb_ladder, red_to_green
 
+# Whole sessions replayed: GitHub CI runs these; the host's deploy gate leaves them out (owner, 2026-11-20).
+pytestmark = pytest.mark.replay
+
 BATCH = {"e1": gg_level_break, "e2": orb_ladder, "e3": continuation_5m, "e4": red_to_green}
 OPEN = (5.00, 5.05, 4.95, 5.02, 150_000)                       # the 09:30 bar: green, high 5.05, low 4.95
 # the gap entries' windows end at 11:00, so these days close at noon: the same code path, a third of the polls
