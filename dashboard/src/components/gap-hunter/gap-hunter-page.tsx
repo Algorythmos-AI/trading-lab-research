@@ -73,7 +73,8 @@ function Glance({ s, now }: { s: Snapshot | null; now: Date }) {
       <StatusBadge tone={recordTone(r.decision)}>
         Rule {r.decision.id} · {r.decision.status ?? "not in the registry yet"}
       </StatusBadge>
-      <StatusBadge tone={job ? jobTone(job.status) : "neutral"}>{runWords(job)}</StatusBadge>
+      {/* With no session reported, the state badge already says so. */}
+      {runWords(job) === st.word ? null : <StatusBadge tone={job ? jobTone(job.status) : "neutral"}>{runWords(job)}</StatusBadge>}
       <StatusBadge tone={alerts.length === 0 ? "good" : alerts.some((a) => a.red) ? "bad" : "warn"}>{alerts.length === 0 ? "No alerts" : `${alerts.length} alert${alerts.length === 1 ? "" : "s"}`}</StatusBadge>
       <span className={cn("ml-auto text-xs", stale ? "text-warn font-medium" : "text-muted-foreground")}>
         {s?.as_of ? `Host data ${newYork(s.as_of)} New York${stale ? ` · stale (${Math.round(ageHours ?? 0)} h old)` : ""}` : "No host data"}

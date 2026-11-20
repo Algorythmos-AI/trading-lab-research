@@ -267,7 +267,7 @@ function buildCards(i: FeedsInput): Feed[] {
       href: "/options",
       state: liveRefused ? "failed" : i.optionsLive.status === "ok" ? "info" : i.optionsLive.status,
       asOf: live?.as_of ?? null,
-      schedule: "Paper positions and open interest, from the host",
+      schedule: "Open interest, hourly bars and the day's rules, from the host",
     },
     {
       key: "host",
