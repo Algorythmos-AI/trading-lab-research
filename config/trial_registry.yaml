@@ -45,3 +45,4 @@ families:
     - {decision: DEC-0055, total: 3, status: proposed}    # EXP-0038: HYP-0065 RADAR-DAILY-1D (primary), HYP-0066 RADAR-DAILY-5D, HYP-0067 RADAR-SMALL-1D (Holm over the two)
   S:                                                      # Robot B sleeve S, the stock desk's paper book (DEC-0066): forward only, no development data read
     - {decision: DEC-0066, total: 2, status: accepted}    # EXP-0051: HYP-0069 S-BOOK (the book and its day stop), HYP-0070 REV-1C (the reversal rule on a causal universe)
+    - {decision: DEC-0068, total: 3, status: accepted}    # EXP-0053: HYP-0071 GAP-HUNTER (the funnel with scored chart and catalyst checks, one trade a day)

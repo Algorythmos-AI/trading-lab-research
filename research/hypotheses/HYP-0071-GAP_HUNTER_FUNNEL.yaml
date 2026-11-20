@@ -1,0 +1,11 @@
+id: HYP-0071
+trial: "GAP-HUNTER"
+family: S                       # the stock desk's paper book (DEC-0066): forward-only paper trials, counted apart from the global 87; total 3
+spec: SPEC-0001 v1.0.1          # the entries, the execution musts and the exit are spec.yaml's, unchanged; only the selection differs
+status: pre-registered          # DEC-0068 (ACCEPTED 2026-11-20). NOT blind: the funnel's step counts on 39 forward pools had been seen (DEC-0068 "Disclosure")
+arm: paper                      # paper orders on the desk's own paper account; switched on only by a dated note in DEC-0066
+statement: "Selecting each morning's primary name by DEC-0068's rule (hard filters on price, gap, float, volume, buyout and split; chart checks and catalyst as score terms) and taking the first valid registered gap entry in it, at most one trade a day in the US$600 book, has positive mean R per closed trade after the fills the paper broker actually gives."
+rule: gap_hunter_funnel         # DEC-0068 "The rule (frozen)"
+frozen: {price_usd: [1.0, 20.0], gap_min_pct: 4.0, float_max_shares: 50000000, float_must_be_known: true, pm_volume_min_shares: 50000, rvol_min: 2.0, no_headline: {rvol_min: 2.5, pm_volume_min_shares: 100000}, reject: [buyout_offer, suspect_split], base_score: "wt.scanner.ranking.spec_score", bonus: {headline_not_qualifying: 0.05, trend_ok: 0.10, window_ok: 0.10, pm_consolidation: 0.10}, tier1_max: 20, tier2_max: 4, ties: [rvol_pm, gap_pct, symbol], primary: rank_1, trades_per_day: 1, entries: [ENT-GG-1, ENT-GG-2, ENT-GG-3, ENT-GG-4], rotation: none, unit: closed_trade, measure: mean_R, interval: [2.5, 97.5], resample_unit: session, resamples: 10000, seed: 20261171, too_few: {trades: 30, sessions: 20}}
+config: research/experiments/EXP-0053-gap-hunter-paper-book/config.yaml
+evidence: {spec: research/specs/SPEC-0001-warrior-methodology, decision: DEC-0068, experiments: [EXP-0053-gap-hunter-paper-book]}
