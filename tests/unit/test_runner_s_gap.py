@@ -18,6 +18,7 @@ from test_runner_s import (DAY, KEYS, PREV, SESSIONS, at, events, flat_and_clean
 from test_runner_s import env as env  # noqa: F401 — the shared state fixture
 
 from wt.backtest.engine import Costs, simulate
+from wt.brokers.base import BrokerRejected
 from wt.backtest.management import REGISTRY
 from wt.live import runner_s
 from wt.live import setups_live as sl
@@ -100,9 +101,9 @@ def simulated(code: str, rows: list[tuple], ctx: dict | None = None):
                          risk_dollars=6.0, cash=600.0, max_notional=600.0, flatten_idx=FLATTEN)
 
 
-def same_trade(root, b: BarFillBroker, sim, code: str) -> dict:
+def same_trade(root, b: BarFillBroker, sim, code: str, allow_errors: bool = False) -> dict:
     """The runner's trade against the simulation's: entry bar, entry price, stop, size, and every exit's reason."""
-    j = journal(root)
+    j = journal(root, allow_errors)
     filled, closed = one(j, "entry_filled"), one(j, "trade_closed")
     entry = next(f for f in b.fills if f.side == "buy")
     assert entry.t == pd.Timestamp(sim.entry_time)
@@ -293,6 +294,28 @@ def test_a_primary_whose_spread_is_too_wide_is_not_ordered(gap):
     blocked = events(j, "signal_blocked")
     assert blocked and all(r["blockers"][0] == "spread" and r["dead"] for r in blocked)
     assert b.placed == [] and one(j, "gap_day_done")["reason"] == "missed"
+
+
+def wide_level_day(gap):
+    """e1 signals at 09:31 over the 5.10 pre-market high, eight cents wide, and its trigger is not reached until
+    09:34: three minutes in which a refused signal could be asked for again."""
+    write_pool(gap, pool_row("ABC", pm_high=5.10), pool_row("XYZ", rvol_pm=3.0))
+    return tape_of(LEVEL + [(5.03, 5.20, 5.02, 5.18, 400_000)] + LEVEL_RUN, spread=0.08)
+
+
+def test_a_signal_refused_for_its_spread_is_asked_once(gap):
+    b = session(wide_level_day(gap))
+    blocked = [r for r in events(journal(gap), "signal_blocked") if r["code"] == "e1"]
+    assert len(blocked) == 1 and blocked[0]["blockers"][0] == "spread" and b.placed == []
+
+
+def test_a_signal_refused_for_its_spread_is_not_asked_again_after_a_restart(gap):
+    tape = wide_level_day(gap)
+    b = crashed(tape, at(9, 31, 40))                                   # after the 09:31 refusal, before the next bar
+    assert [r["code"] for r in events(journal(gap), "signal_blocked")] == ["e1"]
+    session(tape, start=(9, 32), broker=b)
+    blocked = [r for r in events(journal(gap), "signal_blocked") if r["code"] == "e1"]
+    assert len(blocked) == 1 and b.placed == []
 
 
 def test_a_trigger_reached_while_nothing_rested_still_spends_the_day(gap):
@@ -579,3 +602,104 @@ def test_nothing_new_rests_while_the_old_orders_cancel_is_not_confirmed(gap):
     placed = events(j, "entry_placed")
     assert [p["code"] for p in placed] == ["e2", "e1", "e4", "e4"] and not events(j, "entry_not_placed")
     assert j.index(placed[2]) > j.index(events(j, "entry_cancelled")[2])    # placed only after the confirmed cancel
+
+
+# ---- faults the review of #570 found (each test fails without its fix) ---------------------------------------------------
+def crash_after_stop(tape: Tape, k: int) -> tuple[BarFillBroker, dt.datetime]:
+    """Run until the broker has accepted the k-th protective stop, then die before anything else is saved."""
+    clock = ReplayClock(at(9, 25))
+    b = BarFillBroker(clock, tape, HALF)
+    real, n = b.place, [0]
+
+    def place(o):
+        out = real(o)
+        if o.side == "sell" and o.type == "stop":
+            n[0] += 1
+            if n[0] == k:
+                raise ReplayCrash()
+        return out
+    b.place = place
+    with pytest.raises(ReplayCrash):
+        runner_s.run(DAY, poll_s=10.0, broker=b, rest=ReplayREST(clock, tape, HALF), now_fn=clock.now,
+                     sleep_fn=clock.sleep, environ=KEYS)
+    b.place = real
+    return b, clock.now()
+
+
+@pytest.mark.parametrize("rows, k", [(STALLED, 1), (TRAILED, 2)], ids=["first stop", "stop for the half left"])
+def test_a_crash_just_after_a_stop_is_accepted_resumes_with_that_stop_known(gap, rows, k):
+    tape = tape_of(rows)
+    b, when = crash_after_stop(tape, k)
+    assert b.positions() and b.own_sells("ABC")                        # died holding shares, the new stop resting
+    session(tape, start=(when.hour, when.minute + 1), broker=b)
+    j = journal(gap)
+    assert not events(j, "loop_error") and not events(j, "END_OF_DAY_NOT_FLAT") and not events(j, "adopted_orphan")
+    closed = one(j, "trade_closed")
+    assert closed["booked"] is True and closed["origin"] == "entry"
+    flat_and_clean(b)
+
+
+def test_an_entry_whose_answer_is_lost_is_still_the_days_plan(gap):
+    _, sim = simulated("e2", TRAILED)
+    tape = tape_of(TRAILED)
+    armed = []
+
+    def lose(now, b):                                                  # the 09:31 entry reaches the broker, then the
+        if not armed and now >= at(9, 30, 50):                         # answer and the lookup after it are both lost
+            armed.append(now)
+            b.lose_next_response, b.fail_next_gets = True, 1
+    b = session(tape, hook=lose)
+    j = journal(gap, allow_errors=True)
+    assert [r["error"] for r in events(j, "loop_error")] == ["TransportError('simulated lookup timeout')"]
+    assert not events(j, "adopted_orphan")
+    closed = same_trade(gap, b, sim, "e2", allow_errors=True)
+    assert closed["origin"] == "entry" and closed["R"] is not None
+    assert one(j, "entry_filled")["code"] == "e2"
+
+
+def test_a_stale_bid_over_the_first_target_asks_for_no_sale(gap):
+    tape = tape_of(STALLED)
+    q = tape.quotes["ABC"]
+    gap_ = (q.t >= pd.Timestamp(at(9, 32, 20))) & (q.t < pd.Timestamp(at(9, 36)))
+    stale = pd.DataFrame([{"t": pd.Timestamp(at(9, 32, 20)), "bp": 5.40, "ap": 5.42}])  # over 5.33, then silence
+    tape.quotes["ABC"] = pd.concat([q[~gap_], stale]).sort_values("t", ignore_index=True)
+    b = BarFillBroker(ReplayClock(at(9, 25)), tape, HALF, quote_fill_age_s=-1.0)   # the sale cannot fill
+    session(tape, broker=b)
+    limits = [c for c in b.placed if b.orders[c].side == "sell" and b.orders[c].type == "limit"
+              and b.placed_at[c] < pd.Timestamp(at(9, 36))]
+    assert len(limits) <= 1                     # while the quote was fresh; before the fix, one at every poll after
+    assert not events(journal(gap), "partial_filled")
+    flat_and_clean(b)
+
+
+def test_a_trailed_stop_the_broker_refuses_under_the_market_takes_the_exit(gap):
+    rows = RUN + [(5.30, 5.32, 5.20, 5.22, 60_000)]                    # 09:40 opens under the trail's 5.37
+    tape = tape_of(rows)
+    b = BarFillBroker(ReplayClock(at(9, 25)), tape, HALF)
+    real = b.place
+
+    def place(o):                                                      # as a broker does: no sell stop over the bid
+        q = tape.quote_at(o.symbol, b._rc.now())
+        if o.side == "sell" and o.type == "stop" and q is not None and o.stop_price > q[0]:
+            raise BrokerRejected("stop price above the market")
+        return real(o)
+    b.place = place
+    session(tape, broker=b)
+    j = journal(gap)
+    assert any(r.get("why") == "stop_under_market" for r in events(j, "exit_signal"))
+    assert one(j, "trade_closed")["reason"] == "runner_prior_5m_low"
+    flat_and_clean(b)
+
+
+@pytest.mark.parametrize("what", ["quote_age", "clock_skew"])
+def test_an_entry_gate_that_fails_sends_no_order(gap, monkeypatch, what):
+    tape = tape_of(RUN)
+    if what == "quote_age":                                            # no quote after 09:30:30: 35 s old at 09:31
+        q = tape.quotes["ABC"]
+        tape.quotes["ABC"] = q[(q.t < pd.Timestamp(at(9, 30, 30))) | (q.t >= pd.Timestamp(at(9, 33)))]
+    else:
+        monkeypatch.setattr(runner_s, "measure_skew", lambda *a, **k: 5.0)
+    b = session(tape)
+    j = journal(gap)
+    assert any(what in r["blockers"] for r in events(j, "signal_blocked"))
+    assert not [c for c in b.placed if b.orders[c].side == "buy" and b.placed_at[c] < pd.Timestamp(at(9, 33))]
