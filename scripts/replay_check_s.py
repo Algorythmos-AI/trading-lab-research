@@ -121,7 +121,7 @@ def replay_day(d: dt.date, sessions: dict[dt.date, tuple[str, str]]) -> tuple[di
         try:
             sys.stdout = open(os.devnull, "w")                  # the runner echoes its journal: never to the screen
             runner_s.run(d, poll_s=10.0, broker=broker, rest=ReplayREST(clock, tape, sessions), now_fn=clock.now,
-                         sleep_fn=clock.sleep, account_number="PA-REPLAY-S", q_account=None, environ=KEYS)
+                         sleep_fn=clock.sleep, environ=KEYS)
         finally:
             sys.stdout.close()
             sys.stdout = out

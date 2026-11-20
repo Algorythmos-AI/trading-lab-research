@@ -1,8 +1,13 @@
 """Owner control actions that loosen safety: `make unkill` and `make reset-latch` (plan R7, loopholes L14/L15).
 
-Both refuse while paper B's runner is live (its job lock is held), and act while holding that lock themselves. Mid-session they would be unsafe or silently
+Both refuse while the QQQ rule's runner is live (its job lock is held), and act while holding that lock themselves. Mid-session they would be unsafe or silently
 undone: an unkill would re-enable entries part-way through a session, and a reset is overwritten by the runner's
 in-memory account at its next save. Tightening actions (`make kill`) are never refused.
+
+Since DEC-0069 (2026-11-20) the QQQ rule is retired and its job (`paper-b`) is gone, so that lock is never held by a
+scheduled run: the refusal now only catches a runner someone started by hand. The root KILL file is still read by the
+options clone (wt.live.runner_o), so `make kill` and `make unkill` keep their use. `reset-latch` clears the retired
+rule's virtual account and has no use while nothing trades it. The lock names below are not renamed.
 
 Every action is recorded: KILL on/off in the hash-chained audit log (wt.ops.audit); a latch reset in the virtual
 account's own latch history, which the dashboard's audit trail already reads. The owner's words stay on the host.

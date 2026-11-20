@@ -37,9 +37,7 @@ incident, not a second one.
 | Slug | Cron | Grace | Normal ping (ET) | What a page means |
 |---|---|---|---|---|
 | `wt-routine` | `0 5 * * 1-5` | 5 h | ~08:00 | The pre-market routine didn't finish (or refused) |
-| `wt-paper-b-armed` | `0 6 * * 1-5` | 3 h 45 min | 09:30 (the open) | Paper B never reached the open: not started, refused or crashed while arming |
-| `wt-paper-b` | `0 6 * * 1-5` | 11 h | ~16:05 (13:05 early close) | The paper-B session job didn't end cleanly |
-| `wt-paper-s` | `0 6 * * 1-5` | 11 h | ~16:05 (13:05 early close) | Sleeve S's session job didn't end cleanly, or was refused (no key pair on the host) |
+| `wt-paper-s` | `0 6 * * 1-5` | 11 h | ~16:05 (13:05 early close) | Gap Hunter's (the stock desk's) session job didn't end cleanly, or was refused (no key pair on the host) |
 | `wt-forward` | `0 12 * * 1-5` | 7 h | ~16:30–17:50 | The forward test didn't run |
 | `wt-weekly` | `0 18 * * 5` | 6 h | Fri ~19:00–21:00 | The weekly scorecard didn't run |
 | `wt-paper-o-armed` | `0 9 * * 1-5` | 1 h | ~09:25 (arm) and after the close | The options clone never armed: not started, refused or crashed while arming |
@@ -47,8 +45,11 @@ incident, not a second one.
 | `wt-pipeline-check` | `0 8,18 * * 1-5` | 1 h 30 min | ~08:55 and ~18:30 | The options pipeline check didn't run or crashed (a failed check, market data unreachable included, pages through ntfy and exits 0, not here) |
 | `wt-options-review` | `0 16 * * 1-5` | 3 h | ~16:30 | The options clone's nightly review didn't run |
 
-Ten checks for the stocks and options jobs; the VM adds backup and restore-test checks (at most 16 of the free 20).
-Sleeve S has no `-armed` check: its runner pages on its own, and `wt-paper-s` catches a session that never ran. The
+Eight checks for the stocks and options jobs; the VM adds backup and restore-test checks (at most 14 of the free 20).
+The stock desk has no `-armed` check: its runner pages on its own, and `wt-paper-s` catches a session that never ran.
+The QQQ rule's two (`wt-paper-b-armed`, `wt-paper-b`) ended with its job (DEC-0069, 2026-11-20): pause or delete
+them on healthchecks.io once the release that removes the job is deployed, or they page for a job that no longer
+exists. The
 crypto desk's three (`wt-crypto`, `wt-crypto-challengers`, `wt-crypto-learn`) ended with the desk (DEC-0036, 2026-10-24):
 pause or delete them on healthchecks.io, or they page for a job that no longer exists. The Mac and the VM share these
 slugs: the ping body says which host and role sent it.
@@ -58,8 +59,6 @@ slugs: the ping body says which host and role sent it.
 - Success (exit 0): `https://hc-ping.com/<key>/<slug>`, body `host=… role=… exit 0`.
 - Failure or refusal: `…/<slug>/fail`. A refusal exits 0 so the scheduler doesn't retry it, but it is not a
   success. A run that finds its job already running (lock held) sends nothing: the running one will ping.
-- Paper B pings `wt-paper-b-armed` when its loop reaches the open. On a day without a session it pings with
-  "no session today"; if it never armed for any other reason, the job runner sends `/fail`.
 - Pings never block or fail a job: 5-second timeout, errors ignored, nothing sent without `HC_PING_KEY`.
 
 ## When a check pages

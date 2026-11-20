@@ -117,9 +117,9 @@ def test_apply_refuses_while_a_job_holds_its_lock(mac, tmp_path):
     vm = tmp_path / "vm"
     put(vm, "data/live/journal.jsonl", "")
     seed = ship(mac, tmp_path / "seed")
-    with locks.job_lock("paper-b", tmp_path / "locks"):
+    with locks.job_lock("paper-s", tmp_path / "locks"):
         ok, msgs = hostsync.apply(seed, vm, lock_root=tmp_path / "locks")
-    assert not ok and "paper-b" in msgs[0]
+    assert not ok and "paper-s" in msgs[0]
     assert (vm / "data/live/journal.jsonl").read_text() == "" and seed.exists()   # nothing changed
 
 

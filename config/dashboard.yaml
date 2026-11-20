@@ -27,17 +27,15 @@ host:
   # they name. The Mac reads `jobs` whole, with their Sydney launchd times; it never ran the jobs in `overlay`.
   overlay:
     - {label: com.wt.paper-o, name: "Paper options clone", must_start_before_et: "09:25"}
-    - {label: com.wt.paper-s, name: "Paper sleeve S", must_start_before_et: "09:30"}
+    - {label: com.wt.paper-s, name: "Gap Hunter (stock desk)", must_start_before_et: "09:30"}
   jobs:
     - {label: com.wt.routine, local_time: "21:30", tz: Australia/Sydney, must_start_before_et: "07:55",
        name: "Pre-market routine", what: "SPEC-0001 dry run; waits until 07:55 ET, stages at 08:00 / 08:30 / 09:00 / 09:15"}
-    - {label: com.wt.paper-b, local_time: "22:30", tz: Australia/Sydney, must_start_before_et: "09:30",
-       name: "Paper B", what: "Strategy B paper session; waits until 09:30 ET, exits at the close"}
     - {label: com.wt.forward, local_time: "05:40", tz: Australia/Sydney, must_start_before_et: "16:00",
        name: "Forward test", what: "Frozen candidates re-run on the day's delayed SIP data, 20 min after the close"}
     - {label: com.wt.weekly, local_time: "11:00", tz: Australia/Sydney, must_start_before_et: "23:59",
        name: "Weekly scorecard", what: "Saturdays, after Friday's forward test"}
-  wake_needed: ["21:25"]                   # one wake before the first job; the routine keeps the Mac awake until paper B
+  wake_needed: ["21:25"]                   # one wake before the first job
   swap_warn_pct: 85                        # swap files live on the same disk; high swap use eats free space
 
 closed_hypotheses: [HYP-0001, HYP-0002, HYP-0003, HYP-0004, HYP-0005, HYP-0006]   # judged by DEC-0007
@@ -103,7 +101,7 @@ capabilities:
   - {name: "Backtesting", research: done, org: none, note: "wt.backtest: 1-minute simulator, controls, G1 statistics"}
   - {name: "Experiment tracking", research: done, org: none, note: "HYP / EXP / DEC registry with a global trial count"}
   - {name: "Versioned strategy specs", research: done, org: none, note: "SPEC-0001 with a traceability matrix; configs generated from the spec"}
-  - {name: "Paper trading", research: partial, org: partial, note: "Paper B runs nightly on a $600 virtual account; the org pipeline is frozen (ADR-0001)"}
+  - {name: "Paper trading", research: partial, org: partial, note: "The stock desk (Gap Hunter) and the options clone run on paper accounts; the QQQ rule is retired (DEC-0069); the org pipeline is frozen (ADR-0001)"}
   - {name: "Risk controls in code", research: partial, org: partial, note: "Research: RSK-01..07 and loss latches. Org: order guard only; M2 not started"}
   - {name: "Auditability", research: partial, org: partial, note: "Decision records and journals; no hash-chained ledger yet (org M3)"}
   - {name: "Observability", research: partial, org: none, note: "Logs, scorecard, dashboard, Vercel watchdog and healthchecks.io; host pings are dropped until it runs the primary role"}

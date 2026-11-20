@@ -8,8 +8,7 @@ make a second start harmless (a runner resumes its plans or runs exits-only; for
 
 Windows, on a session day (America/New_York):
   * routine: from 07:30 (its systemd start) until its 12:30 deadline (wt.ops.jobs);
-  * paper-b: from 3 h before the open (the runner's own earliest arm) until the close;
-  * paper-s: the same window (wt.live.runner_s arms on the same lead and ends at the close);
+  * paper-s: from 3 h 15 min before the open (wt.live.runner_s's own earliest arm) until the close;
   * paper-o: from 09:00 (its systemd start) until the close (the runner resumes its plans);
   * forward: from 12:40 (its systemd start) until close + 20 min + its 90-minute deadline.
 
@@ -25,7 +24,7 @@ from collections.abc import Mapping
 from wt.core.clock import ET, et
 from wt.ops.window import Session, load_sessions
 
-ARM_LEAD = dt.timedelta(hours=3, minutes=15)   # wt.live.runner_b.ARM_LEAD (not imported: the runner pulls in the broker)
+ARM_LEAD = dt.timedelta(hours=3, minutes=15)   # wt.live.runner_s.ARM_LEAD (not imported: the runner pulls in the broker)
 
 
 def due(now: dt.datetime, sessions: Mapping[dt.date, Session]) -> list[str]:
@@ -36,7 +35,6 @@ def due(now: dt.datetime, sessions: Mapping[dt.date, Session]) -> list[str]:
     if et(s.date, "07:30") <= now < et(s.date, "12:30"):
         out.append("wt-routine.service")
     if s.open - ARM_LEAD <= now < s.close:
-        out.append("wt-paper-b.service")
         out.append("wt-paper-s.service")
     if et(s.date, "09:00") <= now < s.close:
         out.append("wt-paper-o.service")

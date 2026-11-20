@@ -432,25 +432,17 @@ def test_refusal_exits_zero_and_alerts_once(jobroot, monkeypatch):
     assert last_runs(tmp / "hb")["routine"]["status"] == "refused"
 
 
-def test_paper_b_starts_exits_only_when_it_holds_a_position(jobroot, monkeypatch):
-    root, a, box, tmp = jobroot
-    monkeypatch.setattr(jobs.preflight, "run_checks", lambda root: [preflight.Check("free disk", False, "1.0 GB")])
-    monkeypatch.setattr(jobs, "b_exposure", lambda: True)
-    monkeypatch.setattr(jobs, "JOURNAL", tmp / "journal.jsonl")
-    child = "import os, sys; sys.exit(0 if os.environ.get('WT_EXITS_ONLY') == '1' else 5)"
-    assert jobs.run_job(_job(child, name="paper-b"), root, alerts=a) == 0
-    assert box[0]["title"] == "paper-b: entries off, exits only" and box[0]["priority"] == 4
-    assert last_runs(tmp / "hb")["paper-b"]["status"] == "ok"
-
-
-@pytest.mark.parametrize("check,exposure", [("on main", True), ("venv matches lockfile", True), ("free disk", False)])
-def test_paper_b_is_refused_when_exits_only_is_not_safe(jobroot, monkeypatch, check, exposure):
+@pytest.mark.parametrize("check", ["on main", "venv matches lockfile", "free disk"])
+def test_no_job_starts_after_a_failed_preflight_the_stock_desks_included(jobroot, monkeypatch, check):
+    """DEC-0069: the exits-only start was the QQQ job's alone and left with it. A failed check is a refusal."""
     root, a, box, tmp = jobroot
     monkeypatch.setattr(jobs.preflight, "run_checks", lambda root: [preflight.Check(check, False, "x")])
-    monkeypatch.setattr(jobs, "b_exposure", lambda: exposure)
-    assert jobs.run_job(_job("raise SystemExit(9)", name="paper-b"), root, alerts=a) == 0
-    assert [m["title"] for m in box] == ["paper-b refused to run"]
-    assert last_runs(tmp / "hb")["paper-b"]["status"] == "refused"
+    monkeypatch.setenv("APCA_S_KEY_ID", "PKS-TEST")
+    monkeypatch.setenv("APCA_S_SECRET_KEY", "s-secret")
+    assert jobs.run_job(_job("raise SystemExit(9)", name="paper-s"), root, alerts=a) == 0
+    assert [m["title"] for m in box] == ["paper-s refused to run"]
+    assert last_runs(tmp / "hb")["paper-s"]["status"] == "refused"
+    assert not hasattr(jobs, "EXITS_ONLY_CHECKS") and not hasattr(jobs, "b_exposure")
 
 
 def test_a_second_concurrent_run_is_refused(jobroot):
@@ -468,19 +460,6 @@ def test_deadline_kills_a_hung_job(jobroot, monkeypatch):
     assert jobs.run_job(_job("import time; time.sleep(60)", name="forward"), root, alerts=a) == 124
     assert "stopped at its deadline" in box[-1]["message"]
     assert last_runs(tmp / "hb")["forward"]["status"] == "timeout"
-
-
-def test_paper_outcome_raises_trading_critical_alerts(tmp_path, sent):
-    box, _ = sent
-    a = alerts.Alerts(root=tmp_path, topic="t")
-    rows = [{"event": "loop_error"}] * 3 + [
-        {"event": "reconcile", "actions": ["UNKNOWN unprotected position QQQM x3 -> flatten required"]},
-        {"event": "END_OF_DAY_NOT_FLAT"},
-        {"event": "session_end", "virtual": {"latched": True, "latch_reason": "day -2%"}}]
-    o = jobs.paper_outcome(rows)
-    assert o["not_flat"] and o["unknown_positions"] == 1 and o["latched"] and o["loop_errors"] == 3
-    jobs.alert_paper(o, a)
-    assert {m["priority"] for m in box} == {5, 4} and len(box) == 4
 
 
 def test_forward_summary_reports_r_only(tmp_path):
@@ -575,27 +554,13 @@ def test_alert_history_is_cut_to_its_newer_half(tmp_path, monkeypatch):
     assert len(lines) < 40 and json.loads(lines[-1])["key"] == "k39"
 
 
-def test_the_daily_summary_says_what_paper_b_did_in_r_and_never_in_money():
-    armed = {"event": "armed", "ts": "2026-10-06T12:30:06+00:00", "virtual": {"equity": 600.0}}
-    end = {"event": "session_end", "ts": "2026-10-06T20:00:08+00:00", "virtual": {"equity": 601.2}}
-    closed = {"event": "trade_closed", "R": 0.42, "entry": 310.0, "exit": 311.2, "qty": 1}
-    assert jobs.paper_summary([armed, {**end, "outcome": "no_signal"}]) == "Paper B: no signal."
-    assert jobs.paper_summary([armed, closed, {**end, "outcome": "traded"}]) == "Paper B: traded, +0.42R on 1 closed trade(s)."
-    assert jobs.paper_summary([armed, {**end, "outcome": "blocked:kill_file"}]) == "Paper B: a signal was blocked (kill_file)."
-    assert "NOT acted on" in jobs.paper_summary([armed, {**end, "outcome": "signal_not_acted"}])
-    assert "could NOT be checked" in jobs.paper_summary([armed, {**end, "outcome": "no_inputs"}])
-    assert jobs.paper_summary([armed]) == "Paper B: session not finished."
-    assert jobs.paper_summary([end]) is None                                   # never armed: nothing to say
-    for line in (jobs.paper_summary([armed, closed, {**end, "outcome": "traded"}]),):
-        assert "$" not in line and "311" not in line and "600" not in line
-
-
-def test_the_daily_summary_joins_its_lines_and_has_no_crypto_line(tmp_path, monkeypatch):
+def test_the_daily_summary_is_the_forward_line_and_names_no_retired_desk(jobroot, monkeypatch):
+    """DEC-0069: the QQQ rule's line left the summary with its job (as the crypto desk's did, DEC-0036)."""
+    root, a, box, tmp = jobroot
     monkeypatch.setattr(jobs, "forward_summary", lambda: "Forward 2026-10-06: 1 trade(s), -0.18R total.")
-    monkeypatch.setattr(jobs, "journal_since", lambda start, path=None: [
-        {"event": "armed", "ts": "2026-10-06T12:30:06+00:00"}, {"event": "session_end", "outcome": "no_signal"}])
-    start = dt.datetime(2026, 10, 6, 16, 40, tzinfo=dt.UTC)
-    assert jobs.daily_summary(start) == "Paper B: no signal. Forward 2026-10-06: 1 trade(s), -0.18R total."
-    monkeypatch.setattr(jobs, "journal_since", lambda start, path=None: [])
-    assert jobs.daily_summary(start) == "Forward 2026-10-06: 1 trade(s), -0.18R total."
-    assert not hasattr(jobs, "crypto_summary")                        # DEC-0036: the desk's line left with its jobs
+    monkeypatch.setattr(jobs, "KILL", tmp / "KILL")
+    assert jobs.run_job(_job("pass", name="forward"), root, alerts=a) == 0
+    assert (box[-1]["title"], box[-1]["message"]) == ("Trading Lab daily summary",
+                                                      "Forward 2026-10-06: 1 trade(s), -0.18R total.")
+    for gone in ("paper_summary", "daily_summary", "crypto_summary", "journal_since", "JOURNAL"):
+        assert not hasattr(jobs, gone), gone

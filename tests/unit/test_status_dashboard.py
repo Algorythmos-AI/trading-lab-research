@@ -227,7 +227,8 @@ def test_schedule_lists_each_jobs_next_run_first():
     for r in rows:
         first.setdefault(r["job"], r)
     assert first["com.wt.routine"]["local"].startswith("Thu 01 Oct 21:30")    # not today's slot, already gone
-    assert first["com.wt.paper-b"]["local"].startswith("Wed 30 Sep 22:30")
+    assert first["com.wt.forward"]["local"].startswith("Thu 01 Oct 05:40")
+    assert "com.wt.paper-b" not in first                                      # DEC-0069: the QQQ rule's job is gone
     assert first["com.wt.weekly"]["local"].startswith("Sat 03 Oct 11:00")    # Saturdays only, never "today"
     assert [r["et_date"] for r in rows] == sorted(r["et_date"] for r in rows)   # in time order
 
@@ -277,7 +278,7 @@ def test_systemd_jobs_are_looked_up_by_job_key():
             seen.append(argv[2])
             return "LoadState=loaded\nActiveState=inactive\nExecMainStatus=0\n"
     got = status._systemd_jobs(Ctx(), CFG["host"]["jobs"])
-    assert seen == ["wt-routine.service", "wt-paper-b.service", "wt-forward.service", "wt-weekly.service"]
+    assert seen == ["wt-routine.service", "wt-forward.service", "wt-weekly.service"]
     assert all(v["loaded"] and v["last_exit"] == 0 for v in got.values())
 
 

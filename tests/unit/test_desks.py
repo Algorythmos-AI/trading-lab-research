@@ -40,7 +40,7 @@ def test_an_alert_belongs_to_one_desk():
 def test_the_stocks_jobs_are_untouched_and_no_crypto_job_is_left_in_the_schedule():
     """DEC-0036: the crypto desk is closed. Its four jobs left the schedule; its Desk record stays until the code goes."""
     stocks = {n: j for n, j in JOBS.items() if j.desk == "stocks"}
-    assert set(stocks) == {"routine", "paper-b", "paper-s", "forward", "weekly", "dashboard", "options-live",
+    assert set(stocks) == {"routine", "paper-s", "forward", "weekly", "dashboard", "options-live",
                            "deploy-notify", "deploy-auto", "econ-calendar"}
     assert all(j.calendar is None for j in stocks.values())
     assert not [n for n, j in JOBS.items() if j.desk == "crypto"]
