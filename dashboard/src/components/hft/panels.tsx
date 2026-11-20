@@ -18,7 +18,7 @@ const SECTIONS: readonly (readonly [string, string])[] = [
   ["Build phases", "The platform's phases F0 to F7 and how far each has got."],
   ["Recorder", "Whether quotes are being recorded, how many events today, and any gaps nobody can explain."],
   ["Pairs", "Each currency pair being recorded, with its quote rate and median spread."],
-  ["Sleeves", "Each strategy sleeve, the stage it runs at, and its results today and in total."],
+  ["Strategies", "Each strategy on the desk, the stage it runs at, and its results today and in total."],
   ["Books", "The desk's shadow book beside the broker's, and how often the two disagreed."],
   ["Learning", "The model in force, its challengers, and the last training, promotion and rollback."],
 ];
@@ -199,17 +199,17 @@ export function HftSleeves({ s }: { s: Hft }) {
   const list = rows(s.sleeves);
   return (
     <Panel
-      title="Sleeves"
+      title="Strategies"
       icon={Layers}
-      means="A sleeve is one strategy running on the desk, with its own stage and its own results. Results are paper money."
+      means="Each strategy running on the desk, with its own stage and its own results. Results are paper money."
     >
       {list.length === 0 ? (
-        <Empty title="No sleeves yet" />
+        <Empty title="No strategies yet" />
       ) : (
-        <ScrollTable label="Sleeves">
+        <ScrollTable label="Strategies">
           <TableHeader>
             <TableRow>
-              <TableHead>Sleeve</TableHead>
+              <TableHead>Strategy</TableHead>
               <TableHead>Stage</TableHead>
               <TableHead className="text-right">Trades today</TableHead>
               <TableHead className="text-right">Trades in total</TableHead>

@@ -315,6 +315,8 @@ class OMS:
             return
         p.stop_id = self._next_id(p, "stop")
         p.sell_ids.append(p.stop_id)
+        self._persist(p)                    # saved before it is sent: a crash once the broker holds the stop must not
+        #                                     leave a resting stop that the restarted plan does not know
         self._submit(Order(p.stop_id, p.symbol, "sell", want, "stop", stop_price=p.stop, tif="gtc"), protective=True)
         self._note(p, "stop_placed", p.stop, want)
         self._persist(p)

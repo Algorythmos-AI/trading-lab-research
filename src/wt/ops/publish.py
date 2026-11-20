@@ -199,6 +199,10 @@ ALLOW: dict[str, Any] = {
                           "stop": N, "target": N, "pnl": N, "r": N, "reason": S, "held_min": N, "estimated": B,
                           "origin": S}],
               "days": [{"date": S, "pnl": N, "r": N, "trades": I}]},
+    # ---- Gap Hunter, the stock robot (HYP-0071): counts, dates and R only, never a symbol ----
+    "gap_hunter": {"enabled": B, "kill": B, "latched": B, "sessions": I, "last_session": S, "trades": I,
+                   "total_r": N, "mean_r": N, "open": I,
+                   "funnel": {"session": S, "kept": I, "passed": I, "tier1": I, "tier2": I, "primary": B}},
 }
 REQUIRED = ("schema", "schema_version", "run_id", "as_of")
 _KEY = re.compile(r"^[\w.:+\- /|]{1,64}$")
@@ -481,6 +485,49 @@ def paper_series(journal: Path = DATA_DIR / "live" / "journal.jsonl") -> list[di
     return [days[k] for k in sorted(days)]
 
 
+def gap_hunter_view(journal: Path | None = None, state_dir: Path | None = None,
+                    risk_yaml: Path | None = None) -> dict[str, Any]:
+    """Gap Hunter, the stock robot (wt.live.runner_s, HYP-0071), in counts, dates and R: is it switched on, its
+    kill file and latch, its armed sessions, its booked trades, its open positions and the newest morning's
+    selection. Never a symbol, a setup or a headline (the page's GapHunterBlock, dashboard/src/lib/gap-hunter.ts)."""
+    from wt.live import runner_s
+    from wt.live.setups_live import GAP_TRIAL
+    from wt.risk.virtual_account import VirtualAccount
+
+    rows = _read_jsonl(journal or runner_s.JOURNAL)
+    folder = state_dir or runner_s.DIR
+    days = sorted({str(r.get("day")) for r in rows if r.get("event") == "armed" and r.get("trial") == GAP_TRIAL})
+    seen: set[str] = set()
+    rs: list[float] = []
+    for r in rows:
+        if r.get("event") != "trade_closed" or r.get("trial") != GAP_TRIAL or not r.get("booked") \
+                or str(r.get("trade_id")) in seen or not isinstance(r.get("R"), int | float):
+            continue
+        seen.add(str(r.get("trade_id")))
+        rs.append(float(r["R"]))
+    va = folder / "virtual_account.json"
+    latched = VirtualAccount.load(va).latched if va.exists() else None
+    held = 0
+    for f in sorted((folder / "plans").glob("*.json")) if (folder / "plans").exists() else []:
+        try:
+            held += json.loads(f.read_text()).get("state") in ("in_position", "exiting")
+        except (OSError, json.JSONDecodeError):
+            continue
+    pick = next((r for r in reversed(rows) if r.get("event") == "gap_primary"), None)
+    return {
+        "enabled": GAP_TRIAL in runner_s.switched_on(risk_yaml),
+        "kill": (folder / "KILL").exists(),
+        "latched": latched,
+        "sessions": len(days), "last_session": days[-1] if days else None,
+        "trades": len(rs), "total_r": round(sum(rs), 4) if rs else 0.0,
+        "mean_r": round(sum(rs) / len(rs), 4) if rs else None,
+        "open": held,
+        "funnel": None if pick is None else {
+            "session": pick.get("day"), "kept": pick.get("kept"), "passed": pick.get("passed"),
+            "tier1": pick.get("tier1"), "tier2": pick.get("tier2"), "primary": pick.get("symbol") is not None},
+    }
+
+
 def expected_windows(now: dt.datetime, sessions: dict[dt.date, Any], hours: int = 48) -> list[dict[str, str]]:
     """When the Mac should be publishing: from 07:30 ET (the routine is up) to close + 2 h, next 48 hours."""
     out = []
@@ -590,6 +637,11 @@ def extras(now: dt.datetime, root: Path = ROOT) -> dict[str, Any]:
     except Exception as e:  # noqa: BLE001 — a new view must never stop the publish the watchdog depends on
         print(f"v3 views failed ({e.__class__.__name__}); publishing without them", file=sys.stderr)
         views = {}
+    gap: dict[str, Any] = {}
+    try:
+        gap = {"gap_hunter": gap_hunter_view()}
+    except Exception as e:  # noqa: BLE001 — as the v3 views: a robot's panel never stops the publish
+        print(f"gap hunter view failed ({e.__class__.__name__}); publishing without it", file=sys.stderr)
     last = {k: v for k, v in last_runs().items() if mine(k)}
     prev = next((r for r in reversed(runs) if r.get("job") == "dashboard"), None)
     if prev is not None:                # this run is the one collecting: show the previous, completed publish
@@ -610,6 +662,7 @@ def extras(now: dt.datetime, root: Path = ROOT) -> dict[str, Any]:
         "expected_windows": expected_windows(now, sessions, hours=WINDOW_HORIZON_H),
         "series": {"forward": forward_series(), "paper": paper_series()},
         **views,
+        **gap,
     }
 
 

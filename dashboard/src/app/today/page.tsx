@@ -1,37 +1,38 @@
-import { Activity, Bot, Filter, FlaskConical, Hourglass, ListOrdered, PlayCircle, Power } from "lucide-react";
+import { Filter, FlaskConical, Hourglass, ListOrdered, PlayCircle } from "lucide-react";
 import { Funnel } from "@/components/charts/funnel";
 import { PaneBoundary } from "@/components/client/pane-boundary";
 import { Empty } from "@/components/empty";
 import { SessionClock } from "@/components/today/session-clock";
-import { OutcomePanel, PnlPanel, TradesPanel } from "@/components/today/trading";
 import { KeyValues } from "@/components/kv";
 import { NoSnapshot } from "@/components/no-snapshot";
 import { PageHeading } from "@/components/page-heading";
 import { Panel } from "@/components/panel";
+import { RobotsRow } from "@/components/robots-row";
 import { StatusBadge } from "@/components/status";
 import { EnvFrame } from "@/components/ui/env-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { duration, newYork, num, rMult, shortDate, sydney } from "@/lib/format";
-import { humanize, jobName, jobTone } from "@/lib/labels";
-import { loadJournal, loadLedger, loadOptions, loadRadar, loadSnapshot, pageTime } from "@/lib/snapshot";
+import { humanize, jobTone } from "@/lib/labels";
+import { jobName } from "@/lib/robots";
+import { loadJournal, loadLedger, loadOptions, loadOptionsClone, loadRadar, loadSnapshot, pageTime } from "@/lib/snapshot";
+import { robotLines } from "@/lib/programme";
 import { LedgerLine } from "@/components/ledger";
 import { NoJournal } from "@/components/journal";
 import { NextSessionPanel } from "@/components/overview/home";
 import { YourDay } from "@/components/today/your-day";
-import { detailLabel, eventLabel, near, ofRecord, scan, sessionClock, sessionJobs, type Near, type Scan, type Why } from "@/lib/today";
-import { trading } from "@/lib/trading";
+import { near, ofRecord, scan, sessionClock, sessionJobs, type Near, type Scan, type Why } from "@/lib/today";
 import { list, type Snapshot } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Today" };
 
 export default async function TodayPage() {
-  const [result, journal, options, radar, now, ledger] = await Promise.all([loadSnapshot(), loadJournal(), loadOptions(), loadRadar(), pageTime(), loadLedger()]);
+  const [result, journal, options, radar, now, ledger, clone] = await Promise.all([loadSnapshot(), loadJournal(), loadOptions(), loadRadar(), pageTime(), loadLedger(), loadOptionsClone()]);
   return (
     <>
       <PageHeading
         title="Today"
-        intro="Your trading day as it happens: every trade on the New York clock, the day's running result and how much room the day rules leave, then the names to watch. Below, what Robot B did with paper money, and the morning's pre-market scan. Nothing on this page can place an order."
+        intro="Your trading day as it happens: every trade on the New York clock, the day's running result and how much room the day rules leave, then the names to watch. Below, the three paper robots in a line each, the session's jobs and the morning's pre-market scan. Nothing on this page can place an order."
       />
       {journal.status === "ok" ? (
         <PaneBoundary name="Your day">
@@ -48,38 +49,22 @@ export default async function TodayPage() {
       <PaneBoundary name="Next session">
         <NextSessionPanel options={options.status === "ok" ? options.edition : null} radar={radar.status === "ok" ? radar.edition : null} />
       </PaneBoundary>
-      {/* The robot's section: Robot B's own panes are the Alpaca paper account (paper frames); its forward test replays
-          frozen strategies and is a model (a model frame). Never the owner's Webull money. The pre-market scan below is
-          the routine's dry-run scan of gapping stocks, not the robot's account: counts only, no money, so unframed. */}
-      <h2 className="text-muted-foreground mt-2 flex items-center gap-2 text-sm font-semibold">
-        <Bot aria-hidden className="size-4" />
-        Robot B (paper)
-      </h2>
+      {/* The robots in a line each, then the session's jobs on the New York clock. The forward test replays frozen
+          strategies and is a model (a model frame). The pre-market scan is the routine's dry-run scan of gapping
+          stocks: counts only, no money, so unframed. */}
       {result.status !== "ok" ? (
         <NoSnapshot status={result.status} />
       ) : (
         <>
-          <EnvFrame env="paper" label="Robot B" className="grid gap-5">
-            <PaneBoundary name="Now">
-              <NowPanel s={result.snapshot} />
-            </PaneBoundary>
-            <PaneBoundary name="Outcome">
-              <OutcomeOnly s={result.snapshot} />
-            </PaneBoundary>
-          </EnvFrame>
-          <details className="group grid gap-5" data-testid="robot-detail">
-            <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-sm font-medium">
-              More from Robot B (paper): its trades and results, the session log, and the forward test (model)
-            </summary>
+          <PaneBoundary name="The robots">
+            <RobotsRow lines={robotLines(result.snapshot, clone.status === "ok" ? clone.doc : null)} note="Each robot's detail is on its own page. All three use paper or simulated money, never your Webull account." />
+          </PaneBoundary>
+          <PaneBoundary name="Now">
+            <NowPanel s={result.snapshot} />
+          </PaneBoundary>
+          <details className="group grid gap-5" data-testid="forward-detail">
+            <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-sm font-medium">The forward test (model): every frozen strategy replayed after the close</summary>
             <div className="mt-5 grid gap-5">
-              <EnvFrame env="paper" label="Robot B, in detail" className="grid gap-5">
-                <PaneBoundary name="Paper B trading">
-                  <TradingDetail s={result.snapshot} />
-                </PaneBoundary>
-                <PaneBoundary name="Paper session log">
-                  <PaperPanel s={result.snapshot} />
-                </PaneBoundary>
-              </EnvFrame>
               <EnvFrame env="model" label="Forward test" className="grid gap-5">
                 <PaneBoundary name="Forward test">
                   <ForwardPanel s={result.snapshot} />
@@ -120,24 +105,6 @@ export default async function TodayPage() {
   );
 }
 
-/** Paper B's outcome and open position. Shown once the host publishes the `today` section. */
-function OutcomeOnly({ s }: { s: Snapshot }) {
-  const v = trading(s);
-  return v.available ? <OutcomePanel v={v} asOf={s.as_of} /> : null;
-}
-
-/** Paper B's profit and loss and its trades, folded away under the robots' detail. */
-function TradingDetail({ s }: { s: Snapshot }) {
-  const v = trading(s);
-  if (!v.available) return null;
-  return (
-    <>
-      <PnlPanel v={v} />
-      <TradesPanel v={v} />
-    </>
-  );
-}
-
 function NowPanel({ s }: { s: Snapshot }) {
   const jobs = sessionJobs(s);
   const clock = sessionClock(s);
@@ -145,7 +112,7 @@ function NowPanel({ s }: { s: Snapshot }) {
     <Panel
       title="Now"
       icon={PlayCircle}
-      means="Where the session is, and the last run of each of its three jobs. Dashed tick: when a job is due. Bar: when it ran that day. Times are New York."
+      means="Where the session is, and the last run of each of its jobs. Dashed tick: when a job is due. Bar: when it ran that day. Times are New York."
       action={<StatusBadge tone="info">{humanize(s.market?.phase) || "Unknown phase"}</StatusBadge>}
     >
       <div className="grid gap-4">
@@ -415,46 +382,6 @@ function CandidatesPanel({ v }: { v: Scan }) {
           </TableBody>
         </Table>
       )}
-    </Panel>
-  );
-}
-
-function PaperPanel({ s }: { s: Snapshot }) {
-  const p = s.ops?.paper;
-  const recent = list(p?.recent).slice().reverse();
-  const killed = s.kill?.on === true;
-  return (
-    <Panel
-      title="Robot B (paper) session"
-      icon={Activity}
-      means="The one strategy that runs live against the paper broker: it watches QQQ and would trade QQQM. This is its own log of what it did, newest first."
-      action={killed ? <StatusBadge tone="warn" icon={Power}>Kill switch on</StatusBadge> : <StatusBadge tone="good">Entries allowed</StatusBadge>}
-    >
-      <div className="grid gap-4">
-        <p className="text-sm">
-          {killed
-            ? "The kill switch is on, so it records what it would do and places no order."
-            : "The kill switch is off: it may place paper orders when its rules are met."}{" "}
-          {num(p?.trades)} paper {p?.trades === 1 ? "trade has" : "trades have"} been closed so far.
-        </p>
-        {recent.length === 0 ? (
-          <Empty title="No runner events yet" />
-        ) : (
-          <ul className="divide-border grid divide-y">
-            {recent.map((e, i) => (
-              <li key={`${e.ts}-${i}`} className="grid gap-0.5 py-2 first:pt-0 last:pb-0 sm:grid-cols-[11rem_1fr] sm:gap-3">
-                <span className="text-muted-foreground font-mono text-xs">
-                  {newYork(e.ts)} NY
-                </span>
-                <span className="min-w-0 text-sm [overflow-wrap:anywhere]">
-                  {eventLabel(e.event)}
-                  {e.detail ? <span className="text-muted-foreground">: {detailLabel(e.detail)}</span> : null}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
     </Panel>
   );
 }

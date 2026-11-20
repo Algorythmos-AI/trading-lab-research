@@ -150,17 +150,15 @@ wt.ops.publish                            POST /api/ingest            (productio
   quotes whose newest is more than 35 minutes old (105 for a contract that does not expire that day) are too old to
   price from, and the numbers are withheld; with the market shut the last quotes are simply the last quotes, and the
   stock's price is labelled "Last close" instead of "Now". Everything it shows is an estimate and it suggests nothing.
-- **Paper option positions** (`stocksdelta/options-live`, schema `src/lib/options-live.schema.json`): the open option
-  positions of the paper account kept for manual option trades, with open interest by strike, published by the
-  trading host's `options-live` job through the same signed `POST /api/ingest`. Paper only by its schema
-  (`paper: true` is required; an account number, a balance or buying power is an unknown key and refuses the whole
-  document), and never from the research environment's key. Only the latest is kept. The desk draws a **Paper
-  positions** pane under the list (`src/components/client/options-positions.tsx`, logic in `src/lib/positions.ts`):
-  each contract, what was paid, the broker's mark and the open result; a position on one of the desk's names opens
-  that name with the held contract loaded into the Contract pane. Read only. A document not renewed for half an
-  hour while the market is open is shown with a warning; one older than a day and a half is not shown; until the
-  job has published once there is no pane. `/api/health` reports the stored run under `editions.options_live`,
-  and nothing of what it holds.
+- **Options live document** (`stocksdelta/options-live`, schema `src/lib/options-live.schema.json`): open interest
+  by strike, hourly bars and where each probation rule stands in the session, published by the trading host's
+  `options-live` job through the same signed `POST /api/ingest`. Paper only by its schema (`paper: true` is
+  required; an account number, a balance or buying power is an unknown key and refuses the whole document), and
+  never from the research environment's key. Only the latest is kept. The document also carries `positions`, the
+  open option positions of the paper account that was kept for hand-placed option trades. The owner closed that
+  account on 2026-11-20 and the desk's positions pane went with it: the field is still required by the schema, the
+  site reads it and draws nothing from it (`src/lib/positions.ts` keeps the reader, unit-tested). `/api/health`
+  reports the stored run under `editions.options_live`, and nothing of what it holds.
 - **Trades** (`/trades`, `stocksdelta/journal`, schema `src/lib/journal.schema.json`; `journal.types.ts` is
   generated): the owner's own closed trades from their brokerage account, matched first in, first out from the
   broker's filled orders by the owner's research environment and published through the same signed
@@ -175,31 +173,44 @@ wt.ops.publish                            POST /api/ingest            (productio
   table. Read only: it describes what happened and suggests nothing. An edition older than three and a half days
   is shown with a notice. `/api/health` reports it under `editions.journal`. Fixture mode reads the synthetic
   `test/fixtures/journal.v1.json`.
-- **Robot B** (`/robot-b`, DEC-0061): strategy B in one place, paper money only. Two sources: the stocks
-  snapshot (G2, the stop rule, the virtual account, kill switch, latch, the `paper-b` job, performance, blotter,
-  risk limits) and `src/lib/robot-b-evidence.json`, numbers only, which `scripts/robot_b_evidence.py` builds from
-  EXP-0042's results and the trial registry (`--check` in CI keeps it equal to a fresh build). All states are
-  derived in `src/lib/robot-b.ts` (pure, `test/robot-b.test.ts`): the evidence ladder (clean data, G1, holdout, G2a,
-  G2b, promotion, real money never), the numeric blockers, every estimate with its 95% range on one axis, and the
-  trades the paper record would need to tell the edge from zero. No record's prose is shown.
+- **The three robots** (`src/lib/robots.ts`): the options clone, Gap Hunter and the research arms. That file is the
+  one place the site names them and the host's keys for them (the job `paper-s`, alert keys `paper-s:*`, the
+  strategy tag `S`): job names in full and in short, the site's own title for each Gap Hunter alert and whether it
+  turns the dashboard red, and the words that replace a host name for a robot in a line of host text. Host keys are
+  never renamed. `RobotsRow` (`src/components/robots-row.tsx`) draws the three in one row on Overview, Today,
+  Strategies and Risk, from `robotLines` in `src/lib/programme.ts`.
+- **Gap Hunter** (`/gap-hunter`; `/robot-b` redirects to it, `next.config.ts`): the stock robot, paper money only.
+  Everything is read from the stocks snapshot by `src/lib/gap-hunter.ts` (pure, `test/gap-hunter.test.ts`): the
+  `paper-s` job's last run, its runs and its 14-day reliability, the firing `paper-s:*` alerts, the status of
+  DEC-0068 and HYP-0071 from the research registries, and the pre-market scan's counts. The snapshot does not yet
+  carry the robot's own switch, selection, trades or results: the page says "not sent yet" for each and shows no
+  number of its own. They are read from an optional top-level `gap_hunter` block (`GapHunterBlock` in that file)
+  the moment the publisher and `snapshot.schema.json` carry one. The morning funnel shows the scan's counts
+  labelled as the scan's, never as Gap Hunter's selection. Counts, ids, dates, statuses and R only: no symbol.
+- **The retired QQQ rule** (DEC-0062, DEC-0069): the stock rule that ran before Gap Hunter is out of every summary.
+  One collapsed section at the foot of Strategies keeps its verdict, its paper counts and its decision records
+  (`src/lib/robot-b-evidence.json`, which `scripts/robot_b_evidence.py` builds and CI checks, read through
+  `src/lib/robot-b.ts`). What the host still publishes about it is left out by id (`RETIRED_*` in
+  `src/lib/robots.ts`): its scoreboard rows, the G2 tile and progress line, three digest lines and the host's
+  "best candidate" line. Its `paper-b` job has no lane on Today and is never expected: absent is normal.
 - **Paper options** (`/paper`, `stocksdelta/paper-options`, schema `src/lib/paper-options.schema.json`;
-  `paper-options.types.ts` is generated; DEC-0057): every closed paper option trade, from three sources that are
-  shown apart and never added together. The options clone's trades come from its journal, the hand-placed trades
-  from the manual paper account's filled orders matched first in, first out, and the research arms' from their
-  simulated book. The trading host builds the document from its own records and sends it with its own key through
+  `paper-options.types.ts` is generated; DEC-0057): every closed paper option trade, from two books that are
+  shown apart and never added together. The options clone's trades come from its journal and the research arms'
+  from their simulated book. (The hand-placed paper account was closed on 2026-11-20; its section is gone.) The
+  trading host builds the document from its own records and sends it with its own key through
   the same signed `POST /api/ingest`; the `radar` key is refused. A trade is an id, a contract symbol, times, prices,
   its result in dollars and on the premium, a hypothesis id and codes; a setup name, a balance, an account number or
   an order id refuses the whole document. Only the latest is kept (`paper-options/latest.json`): each document
-  carries the whole history. `manual` and `arms` are optional, so the host can send the clone alone. The page
+  carries the whole history. `manual` and `arms` are optional, so the host can send the clone alone; a `manual` block that still arrives is
+  ignored. The page
   (`src/app/paper/page.tsx`, `src/components/paper/paper-page.tsx`) reads each row into the journal's `Trade` shape
   (`src/lib/paper.ts`, pure and unit-tested) and reuses the Trades page's arithmetic (`src/lib/journal.ts`) and
-  charts. It filters by period, kind and ticker through the URL and shows, for each source, a glance card, tiles,
+  charts. It filters by period, kind and ticker through the URL and shows, for each book, a glance card, tiles,
   the running total with its drawdown (and a line where the clone's rules changed), days against the clone's loss
   limit, months, a calendar, each trade in R, how the results are spread, a rolling 20-trade view, breakdowns
   (ticker, call or put, how it ended, hypothesis, rule window, hour, weekday, hold time, expiry, premium), how the
   fills compared with the quotes, and every trade in a sortable table. Today's clone session is the same panel as
-  on Trades (`stocksdelta/options-clone`), and what is open in the manual account comes from
-  `stocksdelta/options-live`. A clone trade its own record does not count is listed and kept out of every figure; a
+  on Trades (`stocksdelta/options-clone`). A clone trade its own record does not count is listed and kept out of every figure; a
   row that cannot be read is left out and counted; the page's clone total is checked against the clone's own
   document when both count the same trades. Every dollar is paper or simulated and sits in a frame of its class
   (`test/env-allowlist.ts`). Read only. `/api/health` reports it under `editions.paper_options`. Fixture mode reads

@@ -2,7 +2,8 @@
 
 import { useNow } from "@/components/client/use-now";
 import { newYork } from "@/lib/format";
-import { humanize, jobName, type Tone } from "@/lib/labels";
+import { humanize, type Tone } from "@/lib/labels";
+import { jobName, jobShort } from "@/lib/robots";
 import { nyClock } from "@/lib/options";
 import { BELL_CLOSE, BELL_OPEN, CLOCK_FROM, CLOCK_TO, type ClockRun } from "@/lib/today";
 
@@ -26,8 +27,6 @@ const INK: Record<Tone, string> = {
   info: "var(--info)",
   neutral: "var(--muted-foreground)",
 };
-
-const SHORT: Record<string, string> = { routine: "Routine", "paper-b": "Robot B", forward: "Forward" };
 
 const X = (m: number) => L + ((Math.max(CLOCK_FROM, Math.min(CLOCK_TO, m)) - CLOCK_FROM) / (CLOCK_TO - CLOCK_FROM)) * (R - L);
 const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
@@ -96,7 +95,7 @@ export function SessionClock({ day, runs }: { day: string | null; runs: ClockRun
                 : `${statusWord(r)}, ran ${newYork(r.started, false)}${r.ended && !r.running ? ` to ${newYork(r.ended, false)}` : ""} New York.`
             }`}</title>
             <text x={L - 8} y={y + 4} textAnchor="end" fontSize={12} style={{ fill: "var(--foreground)" }}>
-              {SHORT[r.key] ?? jobName(r.key)}
+              {jobShort(r.key)}
             </text>
             <line x1={L} x2={R} y1={y} y2={y} stroke="var(--border)" strokeWidth={1} />
             <line x1={X(r.at)} x2={X(r.at)} y1={y - 8} y2={y + 8} stroke="var(--muted-foreground)" strokeWidth={1.5} strokeDasharray="2 2" />

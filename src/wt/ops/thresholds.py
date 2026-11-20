@@ -13,7 +13,7 @@ from pathlib import Path
 
 from wt.core.config import ROOT
 
-DISK_FLOOR_GB = 3.0        # below this the trading jobs refuse (paper-b runs exits-only if it holds a position)
+DISK_FLOOR_GB = 3.0        # below this the trading jobs refuse
 DISK_TARGET_GB = 15.0      # keep at least this free: under it the dashboard shows amber
 SWAP_WARN_PCT = 85.0       # swap use above this is amber (swap files eat the same disk)
 MIN_TRADES_STATS = 20      # below this many trades: no win rate CI, profit factor or Sharpe (they'd mislead)

@@ -2,6 +2,7 @@
 // fields the snapshot already carries; no I/O and no clock.
 import { jobTone, type Tone } from "./labels";
 import { nyClock } from "./options";
+import { GAP_HUNTER, SESSION_JOBS } from "./robots";
 import { entries, list, type Snapshot } from "./types";
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -277,10 +278,13 @@ export function detailLabel(detail: string | null | undefined): string {
     .join(", ");
 }
 
-/** The jobs that make up a session, with the last run of each. */
+/**
+ * The jobs that make up a session, with the last run of each. The retired stock rule's job is not one of them,
+ * whether or not the host still reports it: its runs are on Operations with every other job's.
+ */
 export function sessionJobs(s: Snapshot): { key: string; status: string | null; started: string | null; ended: string | null }[] {
   const last = Object.fromEntries(entries(s.jobs?.last));
-  return ["routine", "paper-b", "forward"].map((key) => ({
+  return SESSION_JOBS.map((key) => ({
     key,
     status: last[key]?.status ?? null,
     started: last[key]?.started ?? null,
@@ -295,7 +299,7 @@ export const BELL_OPEN = 9 * 60 + 30;
 export const BELL_CLOSE = 16 * 60;
 
 /** When each session job is scheduled to start, New York minutes (the host's systemd timers). */
-export const SCHEDULE: Record<string, number> = { routine: 7 * 60 + 30, "paper-b": 8 * 60 + 30, forward: 15 * 60 + 40 };
+export const SCHEDULE: Record<string, number> = { routine: 7 * 60 + 30, [GAP_HUNTER.job]: 8 * 60 + 30, forward: 15 * 60 + 40 };
 
 export interface ClockRun {
   key: string;

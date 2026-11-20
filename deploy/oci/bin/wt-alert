@@ -23,7 +23,7 @@ if [[ -z "$topic" ]]; then
   echo "wt-alert: no ntfy topic configured; $unit failed" >&2
   exit 0
 fi
-prio=4; [[ "$unit" == wt-paper-b* ]] && prio=5
+prio=4; [[ "$unit" == wt-paper-s* ]] && prio=5
 if [[ "$unit" == "a unit" ]]; then
   body="systemd reports a unit failed. Check: make status and the journal for the failed unit."
 else

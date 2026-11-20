@@ -113,9 +113,9 @@ def verify(seed: Path) -> list[str]:
 
 @contextlib.contextmanager
 def all_locks(lock_root: Path | None = None) -> Iterator[list[str]]:
-    """Hold every job lock, the runner's lock, the publisher's and the deploy lock. Yields the busy ones (then none
+    """Hold every job lock, the runners' locks, the publisher's and the deploy lock. Yields the busy ones (then none
     is held and the caller must stop)."""
-    names = [*TRADING_JOBS, locks.RUNNER_LOCK, "publish", locks.DEPLOY_LOCK]
+    names = [*TRADING_JOBS, *locks.RUNNER_LOCKS, "publish", locks.DEPLOY_LOCK]
     with contextlib.ExitStack() as stack:
         busy = [n for n in names if not stack.enter_context(locks.job_lock(n, lock_root))]
         yield busy

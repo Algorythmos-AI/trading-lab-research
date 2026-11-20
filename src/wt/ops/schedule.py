@@ -9,7 +9,7 @@ Two clocks, one table:
     with the zone, so neither daylight-saving change ever needs a schedule edit (US clocks change on Sundays;
     no job fires on a weekend).
 Session logic never trusts either: every job converts to America/New_York itself and waits in-process for its
-real start (the routine for 07:55 ET, paper-b for the open, forward for close + 20 min).
+real start (the routine for 07:55 ET, paper-s for the open, forward for close + 20 min).
 """
 from __future__ import annotations
 
@@ -97,9 +97,14 @@ JOBS: dict[str, Job] = {j.name: j for j in (
     Job("routine", "com.wt.routine", 21, 30, ("scripts/premarket_routine.py",), "backtest", "routine",
         what="SPEC-0001 pre-market dry run; waits in-process until 07:55 ET", et="Mon..Fri 07:30",
         runtime_max_h=6),
-    # The runner arms up to 3 h before the open and runs to the close; its deadline is close + 45 min.
-    Job("paper-b", "com.wt.paper-b", 22, 30, ("-c", "from wt.live.runner_b import run; run()"), "paper", "paper_b",
-        what="Strategy B paper session; waits in-process until 09:30 ET, exits at the close", et="Mon..Fri 08:30",
+    # The QQQ rule's job (`paper-b`, wt.live.runner_b) left this table on 2026-11-20 (DEC-0069: the rule is retired).
+    # Its runner module, journal and virtual account stay as an archive; nothing starts them. A unit still installed
+    # for it exits 0 and runs nothing (wt.ops.jobs.RETIRED_JOBS) until `sudo wt-install-units` removes it.
+    # Gap Hunter, the stock desk (DEC-0066): its own runner, account, key pair, journal, lock and lease. It arms up
+    # to 3 h 15 min before the open, scans from the open and ends at the close; its deadline is close + 45 min.
+    # Without APCA_S_KEY_ID / APCA_S_SECRET_KEY on the host the runner refuses to start (exit 1).
+    Job("paper-s", "com.wt.paper-s", 22, 30, ("-c", "from wt.live.runner_s import run; run()"), "paper", "paper_s",
+        what="Sleeve S paper session (stock desk); scans from the open, flat by the close", et="Mon..Fri 08:30",
         runtime_max_h=10),
     # 05:40 Sydney is before the earliest possible close (06:00 AEST / 16:00 EDT). The runner waits in-process
     # until close + 20 min ET, so SIP data is older than the free plan's 15-minute delay.

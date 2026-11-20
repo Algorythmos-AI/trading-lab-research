@@ -9,40 +9,31 @@ import type { Env } from "@/lib/env";
 export type NonRealFrame = { env: Exclude<Env, "real">; label: string };
 
 export const NON_REAL_FRAMES = {
-  /** /options (the desk, live view): the hand-traded Alpaca paper account's positions, and the rule replay. */
-  options: [
-    { env: "paper", label: "Manual option positions" },
-    { env: "model", label: "Rule replay" },
-  ],
-  /** / (the Overview): Robot B's one-line result (paper). The scan beside it is counts only, unframed. */
-  overview: [{ env: "paper", label: "Robot B" }],
-  /** /today: Robot B's panes (paper), its detail (paper), and the forward test (a model). The pre-market scan is unframed. */
-  today: [
-    { env: "paper", label: "Robot B" },
-    { env: "paper", label: "Robot B, in detail" },
-    { env: "model", label: "Forward test" },
-  ],
+  /** /options (the desk, live view): the rule replay. The hand-traded paper account's positions pane is gone (2026-11-20). */
+  options: [{ env: "model", label: "Rule replay" }],
+  /** / (the Overview): the three robots in a state word each and the scan in counts. No money, so no frame. */
+  overview: [],
+  /** /today: the forward test (a model). The three robots (states only) and the pre-market scan (counts) are unframed. */
+  today: [{ env: "model", label: "Forward test" }],
   /** /trades: the options clone (paper). */
   trades: [{ env: "paper", label: "Options clone" }],
   /**
-   * /paper (DEC-0057): three sources, each with a card at the top and a section below, and no real money anywhere.
+   * /paper (DEC-0057): two books, each with a card at the top and a section below, and no real money anywhere.
    * The options clone (paper): its glance card, today's session (the same panel as on /trades) and its history. The
-   * hand-placed paper account (paper): its glance card, then its open positions and closed trades. The research
-   * arms' simulated trades (shadow): their glance card and their section.
+   * research arms' simulated trades (shadow): their glance card and their section. The hand-placed paper account's
+   * two frames went with that account (2026-11-20).
    */
   paper: [
     { env: "paper", label: "Options clone at a glance" },
     { env: "paper", label: "Options clone" },
     { env: "paper", label: "Options clone history" },
-    { env: "paper", label: "Manual option trades at a glance" },
-    { env: "paper", label: "Manual option trades" },
     { env: "shadow", label: "Research arms at a glance" },
     { env: "shadow", label: "Research arms" },
   ],
-  /** /risk: Robot B's safety controls and its paper broker account (paper). */
-  risk: [{ env: "paper", label: "Robot B" }],
-  /** /robot-b (DEC-0061): Robot B's own page, all of it paper (the desk) or research numbers about the same paper robot. */
-  "robot-b": [{ env: "paper", label: "Robot B" }],
+  /** /risk: the owner's own account, then the robots' alerts and the kill switch. No paper money, so no frame. */
+  risk: [],
+  /** /gap-hunter: the stock robot's own page, all of it its paper desk. The frame Robot B's page had, under the robot's new name. */
+  "gap-hunter": [{ env: "paper", label: "Gap Hunter" }],
 } as const satisfies Record<string, readonly NonRealFrame[]>;
 
 export type GuardedPage = keyof typeof NON_REAL_FRAMES;

@@ -1,6 +1,6 @@
 import { freshness, type Freshness } from "./freshness";
 import { num } from "./format";
-import { jobName, sortJobKeys } from "./labels";
+import { alertTitle, isGapHunterAlert, isRedAlert, jobName, sortJobKeys } from "./robots";
 import { DISK_FLOOR_GB, DISK_TARGET_GB } from "./thresholds.gen";
 import { scan } from "./today";
 import { entries, list, type Snapshot } from "./types";
@@ -19,13 +19,6 @@ export interface Health {
   freshness: Freshness;
 }
 
-export const RED_ALERT_PREFIXES = [
-  "paper-b:not-flat",
-  "paper-b:unknown-position",
-  "paper-b:latched",
-  "paper-b:close-unknown",
-  "paper-b:signal-not-acted",
-];
 /** Alerts about the scan's data. They need a look and are never urgent: no position depends on a scan. */
 export const SCAN_ALERT_PREFIXES = ["forward:scan-failed", "forward:scan-thin", "routine:scan-failed", "routine:sip-fallback"];
 /** The loss limits whose use is measured. The other limits are caps that are meant to be reached (one entry a day). */
@@ -54,9 +47,7 @@ export function computeHealth(s: Snapshot | null, now: Date): Health {
   // RED
   for (const a of list(s.alerts?.firing)) {
     const key = a.key ?? "";
-    if (RED_ALERT_PREFIXES.some((p) => key.startsWith(p))) {
-      red(`alert:${key}`, `Alert firing: ${a.title || key}.`);
-    }
+    if (isRedAlert(key)) red(`alert:${key}`, `Alert firing: ${alertTitle(key, a.title)}.`);
   }
   if (s.ops?.account?.trading_blocked === true) {
     red("trading-blocked", "The paper broker account reports that trading is blocked.");
@@ -65,7 +56,7 @@ export function computeHealth(s: Snapshot | null, now: Date): Health {
     if (p.in_mandate === false && p.legacy !== true && p.qty) {
       red(
         `mandate:${p.symbol ?? "?"}`,
-        `The paper account holds ${p.symbol ?? "a symbol"} outside strategy B's mandate. Close it in the Alpaca UI or record it as legacy.`,
+        `The paper account holds ${p.symbol ?? "a symbol"} outside what the stock paper account may hold. Close it in the Alpaca UI or record it as legacy.`,
       );
     }
   }
@@ -90,13 +81,15 @@ export function computeHealth(s: Snapshot | null, now: Date): Health {
   for (const a of list(s.alerts?.firing)) {
     const key = a.key ?? "";
     if (SCAN_ALERT_PREFIXES.some((p) => key.startsWith(p))) amber(`alert:${key}`, `${a.title || "Scan data alert"}.`);
+    // Gap Hunter's other alerts (it did not start, it has no lease, its stop rule fired): a look, not an emergency.
+    else if (isGapHunterAlert(key) && !isRedAlert(key)) amber(`alert:${key}`, `${alertTitle(key, a.title)}.`);
   }
   for (const l of list(s.risk?.limits)) {
     if (LOSS_LIMITS.has(l.id ?? "") && l.state === "warn") {
       amber(`limit:${l.id}`, `${l.label || "A loss limit"} is close to its limit (${l.used ?? "in use"}).`);
     }
   }
-  if (s.kill?.on === true) amber("kill", "Kill switch is on: paper B makes no new entries.");
+  if (s.kill?.on === true) amber("kill", "Kill switch is on: the options clone opens no new paper trades.");
   const last = Object.fromEntries(entries(s.jobs?.last));
   for (const key of sortJobKeys(Object.keys(last))) {
     const job = last[key];

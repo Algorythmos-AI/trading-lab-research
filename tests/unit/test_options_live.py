@@ -97,7 +97,7 @@ def _state(tmp_path, monkeypatch):
     monkeypatch.setattr(live, "OUT", tmp_path / "options-live")
     monkeypatch.setattr(live.time, "sleep", lambda s: None)
     monkeypatch.setattr(publish, "read_health", lambda *a: (None, "not asked in this test"))
-    for name in (live.KEY_ID_VAR, live.SECRET_VAR, "DASHBOARD_INGEST_URL", "DASHBOARD_INGEST_SECRET", "WT_ROLE",
+    for name in (live.KEY_ID_VAR, live.SECRET_VAR, live.DATA_KEY_ID_VAR, live.DATA_SECRET_VAR, "DASHBOARD_INGEST_URL", "DASHBOARD_INGEST_SECRET", "WT_ROLE",
                  "DASHBOARD_KEY_ID"):
         monkeypatch.delenv(name, raising=False)
 
@@ -110,7 +110,9 @@ def test_the_module_can_only_read_and_only_from_the_paper_host():
     assert src.count('"/v2/account/activities"') == 1
     for word in (".post(", ".put(", ".patch(", ".delete(", "/v2/orders", "/v2/account", "TradingClient", "alpaca.markets"):
         assert word not in src.replace(live.PAPER_HOST, "").replace(live.DATA_HOST, "").replace('"/v2/account/activities"', ""), word
-    assert "APCA_API_KEY_ID" not in src                    # never strategy B's account
+    # The lab's data pair is named once, as the market-data fallback; its positions and activities are never read
+    # (test_without_the_manual_account_market_data_still_goes_out_with_no_positions)
+    assert src.count('"APCA_API_KEY_ID"') == 1 and live.DATA_KEY_ID_VAR == "APCA_API_KEY_ID"
     assert [n for n in vars(live.OptionsAccount) if not n.startswith("_")] == ["positions", "activities", "clock", "closes", "bars", "contracts"]
     assert live.DATA_HOST == "https://data.alpaca.markets"
     s = Session(Reply(200, []), Reply(200, CLOCK))
@@ -192,10 +194,34 @@ def args(**kw):
     return argparse.Namespace(dry_run=False, verify=False, **kw)
 
 
-def test_without_the_accounts_keys_the_job_does_nothing(capsys):
+def test_without_any_keys_the_job_does_nothing(capsys):
     assert live._publish(args()) == 0
-    assert "not configured" in capsys.readouterr().out
+    assert "nothing to do" in capsys.readouterr().out
     assert not (live.OUT / "outbox").exists()
+
+
+def test_without_the_manual_account_market_data_still_goes_out_with_no_positions(monkeypatch, capsys):
+    """The manual account was deleted (2026-11-20): the open interest, the clock and the rules still go to the desk,
+    read with the data key pair, and the positions list is empty. That pair's own positions are never read."""
+    monkeypatch.setenv(live.DATA_KEY_ID_VAR, "k")
+    monkeypatch.setenv(live.DATA_SECRET_VAR, "s")
+    made = []
+
+    class DataOnly(Account):
+        def positions(self):
+            raise AssertionError("the data pair's positions are another robot's")
+
+        def activities(self, *a, **k):
+            raise AssertionError("the data pair's activities are another robot's")
+
+    def account(key_id, secret):
+        made.append((key_id, secret))
+        return DataOnly([option()])
+    monkeypatch.setattr(live, "OptionsAccount", account)
+    assert live._publish(argparse.Namespace(dry_run=True, verify=False)) == 0
+    assert made == [("k", "s")] and "no manual options account" in capsys.readouterr().out
+    doc = json.loads(next((live.OUT / "outbox").glob("*.json")).read_text())
+    assert doc["positions"] == []
 
 
 def test_an_unreadable_account_sends_nothing_and_fails_on_the_second_run_in_a_row(monkeypatch, capsys):

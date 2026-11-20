@@ -1,5 +1,4 @@
-import { ChartSpline, ListChecks, ScrollText, Wallet } from "lucide-react";
-import { EquityChart } from "@/components/charts/equity-chart";
+import { ChartSpline, ListChecks, ScrollText } from "lucide-react";
 import { ForwardMini, type ForwardPointRow } from "@/components/charts/forward-chart";
 import { DataDetails } from "@/components/data-details";
 import { Empty } from "@/components/empty";
@@ -9,39 +8,43 @@ import { PageHeading } from "@/components/page-heading";
 import { Panel } from "@/components/panel";
 import { StatusBadge } from "@/components/status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BlotterPanel, PerformancePanel } from "@/components/v3/perf";
-import { newYork, num, pct, rMult, shortDate, sydney, txt, usd } from "@/lib/format";
-import { humanize, isStrategyB, type Tone } from "@/lib/labels";
-import { loadSnapshot } from "@/lib/snapshot";
-import { entries, list, type ForwardPoint, type Snapshot } from "@/lib/types";
+import { PaneBoundary } from "@/components/client/pane-boundary";
+import { RobotsRow } from "@/components/robots-row";
+import { num, rMult, shortDate, txt, usd } from "@/lib/format";
+import { isStrategyB } from "@/lib/labels";
+import { robotLines } from "@/lib/programme";
+import { EVIDENCE } from "@/lib/robot-b";
+import { RETIRED_RULE } from "@/lib/robots";
+import { loadOptionsClone, loadSnapshot } from "@/lib/snapshot";
+import { list, type ForwardPoint, type Snapshot } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Strategies" };
 
-// DEC-0011 was accepted on 2026-10-25: the audit fixes are in code; the re-runs of B it calls for are not run yet.
-const B_NOTICE = "Strategy B's backtest figures predate the 29 Sep audit fixes; their re-run (DEC-0011, accepted) has not run yet.";
+// DEC-0011 was accepted on 2026-10-25: the audit fixes are in code; the re-runs of the rule it calls for were not run.
+const B_NOTICE = "The retired QQQ rule. Its backtest figures predate the 29 Sep audit fixes; their re-run (DEC-0011, accepted) has not run.";
 
 export default async function StrategiesPage() {
-  const result = await loadSnapshot();
+  const [result, clone] = await Promise.all([loadSnapshot(), loadOptionsClone()]);
   return (
     <>
       <PageHeading
         title="Strategies"
-        intro="How each strategy is doing in the forward test (signals recorded live, no orders) and in the paper account (simulated orders at the broker)."
+        intro="The three paper robots, then how each frozen strategy is doing in the forward test (signals recorded live, no orders)."
       />
       {result.status !== "ok" ? (
         <NoSnapshot status={result.status} />
       ) : (
         <>
+          <PaneBoundary name="The robots">
+            <RobotsRow lines={robotLines(result.snapshot, clone.status === "ok" ? clone.doc : null)} note="The options clone and the research arms are on the Paper page; Gap Hunter has its own." />
+          </PaneBoundary>
           <ForwardTable s={result.snapshot} />
           <TrialBooks s={result.snapshot} />
           <ForwardCharts s={result.snapshot} />
-          <div className="grid gap-5 lg:grid-cols-2">
-            <PaperAccount s={result.snapshot} />
-            <PaperEvents s={result.snapshot} />
-          </div>
-          <PerformancePanel s={result.snapshot} />
-          <BlotterPanel s={result.snapshot} />
+          <PaneBoundary name="Retired rule">
+            <RetiredRule s={result.snapshot} />
+          </PaneBoundary>
         </>
       )}
     </>
@@ -184,7 +187,7 @@ function groupForward(points: ForwardPoint[]): { name: string; rows: ForwardPoin
     }
     rows.push({ session: p.session, cum_r: p.cum_r, n: p.n ?? null });
   }
-  order.sort((a, b) => Number(isStrategyB(b)) - Number(isStrategyB(a)));
+  order.sort((a, b) => Number(isStrategyB(a)) - Number(isStrategyB(b)));
   return order.map((name) => ({ name, rows: by.get(name) ?? [] }));
 }
 
@@ -266,119 +269,56 @@ function ForwardCharts({ s }: { s: Snapshot }) {
   );
 }
 
-function PaperAccount({ s }: { s: Snapshot }) {
+/**
+ * The stock rule that ran before Gap Hunter, kept so its history is not silently erased: its verdict, what its paper
+ * desk had done when it stopped, and the decision records behind it. Collapsed, at the foot of the page, and out of
+ * every summary. Counts, R, ids, statuses and dates only.
+ */
+function RetiredRule({ s }: { s: Snapshot }) {
+  const e = EVIDENCE;
   const p = s.ops?.paper;
-  const v = p?.virtual;
-  const change =
-    typeof v?.equity === "number" && typeof v?.start === "number" && v.start !== 0
-      ? ((v.equity - v.start) / v.start) * 100
-      : null;
-  const points = list(s.series?.paper).flatMap((x) =>
-    typeof x.date === "string" && typeof x.equity === "number" ? [{ date: x.date, equity: x.equity }] : [],
-  );
+  const registry = list(s.research?.decisions);
+  const decisions = [
+    ...(e?.trail ?? []).filter((t) => t.kind === "decision").map((t) => ({ id: t.id, status: t.status, date: t.date })),
+    ...RETIRED_RULE.records
+      .filter((id) => !(e?.trail ?? []).some((t) => t.id === id))
+      .map((id) => {
+        const d = registry.find((x) => x.id === id);
+        return { id, status: typeof d?.status === "string" && d.status.length <= 40 ? d.status : "not in this snapshot's registry", date: d?.date ?? null };
+      }),
+  ];
   return (
-    <Panel
-      title="Robot B virtual account (paper)"
-      icon={Wallet}
-      means="A pretend account that sizes Robot B's trades as if real money were at stake. Paper money only; nothing here is real."
-      action={
-        v?.latched === true ? (
-          <StatusBadge tone="bad">Latched</StatusBadge>
-        ) : v?.latched === false ? (
-          <StatusBadge tone="good">Not latched</StatusBadge>
-        ) : null
-      }
-    >
-      <KeyValues
-        items={[
-          { label: "Virtual equity", value: num(v?.equity, 2) },
-          { label: "Started at", value: num(v?.start, 2) },
-          { label: "Change", value: change === null ? "—" : `${change > 0 ? "+" : ""}${pct(change, 2)}` },
-          { label: "Trades", value: num(p?.trades) },
-          { label: "Total R", value: rMult(p?.total_r, 2) },
-          { label: "Mean R", value: rMult(p?.mean_r) },
-          { label: "Armed sessions", value: num(p?.armed_sessions) },
-          { label: "Last armed", value: shortDate(p?.last_armed) },
-          { label: "Unreadable log lines", value: num(p?.bad_lines) },
-        ]}
-      />
-      {v?.latched && v.latch_reason ? <p className="text-bad mt-3 text-sm">Latched because: {v.latch_reason}</p> : null}
-      <div className="mt-4">
-        {points.length >= 2 ? (
-          <>
-            <EquityChart points={points} start={typeof v?.start === "number" ? v.start : null} />
-            <DataDetails>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Day</TableHead>
-                    <TableHead className="text-right">Equity</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {points.map((pt) => (
-                    <TableRow key={pt.date}>
-                      <TableCell>{shortDate(pt.date)}</TableCell>
-                      <TableCell className="text-right">{num(pt.equity, 2)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </DataDetails>
-          </>
-        ) : (
-          <Empty title="Not enough days for a chart yet">The equity line appears after two sessions have ended.</Empty>
-        )}
+    <details className="bg-card rounded-xl border px-4 py-3 shadow-sm" data-testid="retired-rule">
+      <summary className="text-muted-foreground hover:text-foreground cursor-pointer text-sm font-medium max-sm:min-h-11 max-sm:content-center">
+        Retired: QQQ rule ({RETIRED_RULE.records.join(", ")})
+      </summary>
+      <div className="mt-4 grid gap-4">
+        <p className="text-muted-foreground max-w-prose text-sm">
+          The stock rule that ran before Gap Hunter. It is retired and is no part of the three robots above; this is kept so its history is not lost. Paper money only.
+        </p>
+        <KeyValues
+          items={[
+            { label: "Verdict", value: e ? `${e.verdict.word} · ${e.verdict.record} (${e.verdict.status})` : "Not on file" },
+            { label: "Closed paper trades", value: num(p?.trades) },
+            { label: "Total R", value: rMult(p?.total_r, 2) },
+            { label: "Average R per trade", value: rMult(p?.mean_r) },
+            { label: "Sessions armed", value: num(p?.armed_sessions) },
+            { label: "Last armed", value: shortDate(p?.last_armed) },
+          ]}
+        />
+        <div>
+          <h3 className="mb-2 text-sm font-medium">Decision records</h3>
+          <ul className="grid gap-1.5 text-sm">
+            {decisions.map((d) => (
+              <li key={d.id} className="flex flex-wrap items-center gap-2">
+                <span className="font-mono">{d.id}</span>
+                <StatusBadge tone="neutral">{d.status}</StatusBadge>
+                {d.date ? <span className="text-muted-foreground text-xs">{shortDate(d.date)}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
-    </Panel>
-  );
-}
-
-function eventTone(event: string | null | undefined): Tone {
-  const e = String(event ?? "");
-  if (/error|fail|reject/.test(e)) return "bad";
-  if (/blocked|latch|skip|stale/.test(e)) return "warn";
-  if (/armed|entry|filled|open/.test(e)) return "info";
-  if (/end|closed|flat/.test(e)) return "good";
-  return "neutral";
-}
-
-function PaperEvents({ s }: { s: Snapshot }) {
-  const recent = [...list(s.ops?.paper?.recent)].reverse();
-  const counts = entries(s.ops?.paper?.events);
-  return (
-    <Panel
-      title="Recent paper events"
-      icon={ScrollText}
-      means="The latest things the paper runner logged, newest first. Single errors are usually network hiccups; repeated ones are worth a look."
-    >
-      {counts.length > 0 ? (
-        <ul className="mb-3 flex flex-wrap gap-1.5" aria-label="Event counts">
-          {counts.map(([k, n]) => (
-            <li key={k}>
-              <StatusBadge tone={eventTone(k)}>
-                {humanize(k)}: {num(n)}
-              </StatusBadge>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {recent.length === 0 ? (
-        <Empty title="No paper events recorded">Events appear once Robot B runs.</Empty>
-      ) : (
-        <ol className="divide-border grid divide-y">
-          {recent.map((e, i) => (
-            <li key={`${e.ts}-${i}`} className="grid gap-1 py-2.5 first:pt-0 last:pb-0">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                <StatusBadge tone={eventTone(e.event)}>{humanize(e.event)}</StatusBadge>
-                <span>{sydney(e.ts)} Sydney</span>
-                <span className="text-muted-foreground">{newYork(e.ts, false)} NY</span>
-              </div>
-              {e.detail ? <p className="text-muted-foreground font-mono text-xs break-all">{e.detail}</p> : null}
-            </li>
-          ))}
-        </ol>
-      )}
-    </Panel>
+    </details>
   );
 }

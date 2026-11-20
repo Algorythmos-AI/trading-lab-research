@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { OptionsClone } from "@/lib/options-clone.types";
-import { CLONE_MIN_SESSIONS, CLONE_MIN_TRADES, cloneRow, programme, stocksRow, stoppedRow } from "@/lib/programme";
+import { ARMS_STATE, CLONE_MIN_SESSIONS, CLONE_MIN_TRADES, cloneRow, gapHunterRow, programme, retiredRuleRow, robotLines, stoppedRow } from "@/lib/programme";
 import type { Snapshot } from "@/lib/types";
 
 const snap = (paper: Record<string, unknown>) => ({ ops: { paper } }) as unknown as Snapshot;
@@ -16,9 +16,30 @@ describe("the programme", () => {
     expect(m && [Number(m[1]), Number(m[2])]).toEqual([CLONE_MIN_TRADES, CLONE_MIN_SESSIONS]);
   });
 
-  it("reads strategy B from G2 and the stop rule, each against its line", () => {
-    const r = stocksRow(snap({ g2: G2, stop_rule: RULE }));
-    expect(r).toMatchObject({ desk: "Stocks · strategy B", state: "Paper trading", tone: "info", record: "DEC-0037" });
+  it("reads Gap Hunter from its session job and the registry, and never calls it trading on a job's word", () => {
+    const s = { jobs: { last: { "paper-s": { status: "ok", started: "2026-11-19T13:30:00Z" } } }, research: { decisions: [{ id: "DEC-0068", status: "ACCEPTED", date: "2026-11-20" }], hypotheses: [{ id: "HYP-0071", status: "pre-registered" }] } } as unknown as Snapshot;
+    expect(gapHunterRow(s)).toEqual({
+      desk: "Gap Hunter",
+      state: "Session runs",
+      tone: "neutral",
+      lines: ["Last session finished normally", "Rule DEC-0068: ACCEPTED", "Hypothesis HYP-0071: pre-registered"],
+      record: "DEC-0068",
+    });
+    expect(gapHunterRow({} as Snapshot)).toMatchObject({ state: "No session reported yet", lines: ["No session reported yet", "Rule DEC-0068: not in this snapshot's registry", "Hypothesis HYP-0071: not in this snapshot's registry"] });
+    expect(gapHunterRow(null)).toMatchObject({ state: "No data", tone: "neutral" });
+  });
+
+  it("sums the robots up as exactly three, in one order: the options clone, Gap Hunter, the research arms", () => {
+    const lines = robotLines(null, null);
+    expect(lines.map((r) => r.name)).toEqual(["Options clone", "Gap Hunter", "Research arms"]);
+    expect(lines.map((r) => r.href)).toEqual(["/paper#clone-bot", "/gap-hunter", "/paper#research-arms"]);
+    expect(lines[2]).toMatchObject({ state: ARMS_STATE, tone: "neutral" });
+    expect(JSON.stringify(lines)).not.toMatch(/Robot B|QQQ|sleeve/i);
+  });
+
+  it("keeps the retired rule's paper desk readable for the retired section: G2 and the stop rule, each against its line", () => {
+    const r = retiredRuleRow(snap({ g2: G2, stop_rule: RULE }));
+    expect(r).toMatchObject({ desk: "QQQ rule (retired)", state: "Retired", tone: "neutral", record: "DEC-0037" });
     expect(r.lines).toEqual([
       "G2a, the desk runs the rule: 14 of 30 clean sessions · 3 of 20 incident-free in a row · agreement at the bar 4 of 5 (90% needed)",
       "G2b, the rule earns: 4 of 50 trades",
@@ -27,12 +48,12 @@ describe("the programme", () => {
   });
 
   it("says when the stop rule fired, and when no rule exists, loudly; an older snapshot without it stays quiet", () => {
-    const fired = stocksRow(snap({ g2: G2, stop_rule: { ...RULE, cum_r: -6.1, fired: "cum_r" } }));
+    const fired = retiredRuleRow(snap({ g2: G2, stop_rule: { ...RULE, cum_r: -6.1, fired: "cum_r" } }));
     expect(fired).toMatchObject({ tone: "bad", state: "Stopped by its rule" });
     expect(fired.lines.at(-1)).toMatch(/^The stop rule fired \(cum_r\)/);
-    expect(stocksRow(snap({ g2: G2, stop_rule: { present: false } }))).toMatchObject({ tone: "bad" });
-    const old = stocksRow(snap({ g2: { ...G2, agreement_level: "day" } }));
-    expect(old.tone).toBe("info");
+    expect(retiredRuleRow(snap({ g2: G2, stop_rule: { present: false } }))).toMatchObject({ tone: "bad" });
+    const old = retiredRuleRow(snap({ g2: { ...G2, agreement_level: "day" } }));
+    expect(old.tone).toBe("neutral");
     expect(old.lines).toContain("Stop rule: not in this snapshot");
     expect(old.lines[0]).toMatch(/agreement at the bar not readable yet$/);
   });
@@ -49,6 +70,6 @@ describe("the programme", () => {
   it("takes the stopped desks from desks.json, with their records", () => {
     expect(stoppedRow("crypto", "Crypto")).toMatchObject({ state: "Closed", record: "DEC-0036", lines: ["Closed since 24 October 2026: no trial runs and nothing is scheduled"] });
     expect(stoppedRow("hft", "HFT (forex)")).toMatchObject({ state: "Parked", record: "HFT-DEC-0005" });
-    expect(programme(null, null).map((r) => r.desk)).toEqual(["Stocks · strategy B", "Options clone", "Crypto", "HFT (forex)"]);
+    expect(programme(null, null).map((r) => r.desk)).toEqual(["Options clone", "Gap Hunter", "Crypto", "HFT (forex)"]);
   });
 });

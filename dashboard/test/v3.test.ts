@@ -59,7 +59,7 @@ describe("v3 helpers", () => {
     const s = fixtureV3();
     expect(s.risk?.limits?.length).toBeGreaterThan(5);
     expect(s.perf?.curve?.length).toBeGreaterThan(0);
-    expect(s.sla?.cells?.length).toBe(5 * 14);
+    expect(s.sla?.cells?.length).toBe(6 * 14);                      // Gap Hunter's session is a row of its own
     expect(s.digest?.items?.length).toBeGreaterThan(0);
     expect(s.audit?.events?.length).toBeGreaterThan(0);
     expect(s.alerts?.history?.length).toBeGreaterThan(0);

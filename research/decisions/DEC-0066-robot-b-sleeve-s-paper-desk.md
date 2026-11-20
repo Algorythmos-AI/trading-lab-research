@@ -223,3 +223,45 @@ a price or equity). Nothing of sleeve S is run on the development span or the ho
 - Sleeve S's paper account is its own (its number ends `HJU0…` on the owner's login). Its key pair is on the
   owner's console machine only. The host has neither the keys nor a job, and under systemd the runner manages exits
   only: a host session waits for the release that adds the job, its lease and its pages.
+
+### 2026-11-20: the host job
+
+The pull request that carries this note adds what the notes above said the first slice left out: the `paper-s` job
+and its unit, sleeve S's own primary lease (`paper-s`), and phone pages. So the sentence "under systemd the runner
+manages exits only" no longer describes the code. On the host the runner now trades when all of these hold: the
+unit is installed, sleeve S's key pair is in the host's secrets, and the session holds the `paper-s` lease. Without
+the key pair the job is refused before the runner starts; without the lease entries are off and exits are managed.
+
+Not changed by it: nothing in section 3 or 4, and the desk is still not an entry of its own in the desk table, so
+its journal is backed up with `data/live` but its hash chain is not yet verified or anchored by the nightly job.
+
+One rule follows for the owner: once the host timer is on, console sessions stop. A console checkout takes no lease,
+so a console session and the host job on the same account would each adopt and sell the other's position.
+
+
+### 2026-11-20: the owner's direction, and nothing is switched on
+
+The owner set the desk's direction on 2026-11-20, in chat:
+
+- The stock robot is the broad-market funnel: it scans the whole market before the open, narrows it to the day's
+  best names, and trades what comes out. Its display name is **Gap Hunter** (the paper account carries that
+  nickname). The strategy tag, journal, job, lease and record ids keep their names.
+- **HYP-0070 is paused.** The reversal rule on a causal universe was built and proven in replay as the first
+  slice; the owner does not want it traded now. No live session of it was run, so EXP-0051 has no trade.
+- The QQQ rule (sleeve Q) is to be retired. That is a record of its own, to follow.
+- The funnel's daily-chart checks are to become a score. That is a rule change and a new trial, registered by a
+  record of its own before any result exists.
+
+**In the code, from the pull request that carries this note:** the runner reads `S.switched_on` in
+`config/risk.yaml`, the list of trial ids it may trade, and refuses entries for a rule that is not on it. The list
+is empty. Section 2 already said each rule is switched on by a dated note; the list is where the code reads that.
+A rule is switched on by a note here together with its id in that list, in one pull request.
+
+
+### 2026-11-20: no running sleeve Q (DEC-0069)
+
+DEC-0069, accepted by the owner on 2026-11-20, retires the QQQ rule. From the release that carries it, the
+two-sleeve table of section 1 no longer has a running sleeve Q: its job (`paper-b`) leaves the schedule, and its
+journal, plans and virtual account stay as an archive. The sentence in section 1 "refuses if its account number
+equals sleeve Q's" is withdrawn by that record: the desk still requires its own key pair and never falls back to
+`APCA_API_*`, and no longer compares itself with that pair or its account. Nothing else in this record changes.

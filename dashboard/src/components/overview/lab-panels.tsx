@@ -9,29 +9,37 @@ import { Panel } from "@/components/panel";
 import { StatusBadge, TONE_TEXT, ToneIcon } from "@/components/status";
 import { sydney, txt } from "@/lib/format";
 import { humanize, severityRank, severityTone, stateTone } from "@/lib/labels";
+import { aboutRetiredRule, RETIRED_KPI_IDS, RETIRED_PROGRESS_GATE } from "@/lib/robots";
 import { summarize } from "@/lib/summary";
 import { list, type Snapshot } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /** The nightly run in one sentence, with the lab's headline and subline. */
 export function LabSummary({ s }: { s: Snapshot }) {
+  // The host's two lines, less any that is about the retired stock rule (its "best candidate" line still is).
+  const lines = [s.overview?.headline, s.overview?.subline].filter((l): l is string => typeof l === "string" && l.length > 0 && !aboutRetiredRule(l));
   return (
     <section aria-label="Summary" className="grid gap-1.5">
       <p className="max-w-[70ch] text-base leading-relaxed font-medium text-balance sm:text-lg">{summarize(s)}</p>
-      {s.overview?.headline ? <p className="text-muted-foreground max-w-[80ch] text-sm">{s.overview.headline}</p> : null}
-      {s.overview?.subline ? <p className="text-muted-foreground max-w-[80ch] text-sm">{s.overview.subline}</p> : null}
+      {lines.map((l) => (
+        <p key={l} className="text-muted-foreground max-w-[80ch] text-sm">
+          {l}
+        </p>
+      ))}
     </section>
   );
 }
 
 export function GatePanel({ s }: { s: Snapshot }) {
+  // The host still writes G2's progress from the retired stock rule's paper trades: the gate stays, that line goes.
+  const gates = list(s.overview?.gates).map((g) => (g.id === RETIRED_PROGRESS_GATE ? { ...g, progress: null } : g));
   return (
     <Panel
       title="Gate tracker"
       icon={Milestone}
-      means="The fixed steps from research to real money. Each gate must pass before the next one starts; G2 is the paper-trading evidence now being collected."
+      means="The fixed steps from research to real money. Each gate must pass before the next one starts; G2 is the paper-trading evidence step."
     >
-      {list(s.overview?.gates).length > 0 ? <GateRail gates={list(s.overview?.gates)} g2={s.ops?.paper?.g2} /> : <Empty title="No gate data in this snapshot" />}
+      {gates.length > 0 ? <GateRail gates={gates} g2={null} /> : <Empty title="No gate data in this snapshot" />}
     </Panel>
   );
 }
@@ -42,10 +50,10 @@ export function KillNotice({ s }: { s: Snapshot }) {
     <section aria-label="Kill switch" className="bg-warn-soft border-warn/35 flex items-start gap-3 rounded-lg border px-4 py-3">
       <Power aria-hidden className={cn("mt-0.5 size-4 shrink-0", TONE_TEXT.warn)} />
       <div className="min-w-0 text-sm">
-        <p className="font-medium">Kill switch is on: Robot B (paper) will not open new trades.</p>
+        <p className="font-medium">Kill switch is on: the options clone will not open new paper trades.</p>
         <p className="text-muted-foreground mt-0.5 text-[0.8125rem]">
           {s.kill.reason ? `${s.kill.reason} ` : ""}
-          Since {sydney(s.kill.since)} Sydney. Exits are still managed. Removing the switch is done on the host, not here.
+          Since {sydney(s.kill.since)} Sydney. Exits are still managed. Gap Hunter has its own switch. Removing either is done on the host, not here.
         </p>
       </div>
     </section>
@@ -53,7 +61,7 @@ export function KillNotice({ s }: { s: Snapshot }) {
 }
 
 export function Kpis({ s }: { s: Snapshot }) {
-  const kpis = list(s.overview?.kpis);
+  const kpis = list(s.overview?.kpis).filter((k) => !RETIRED_KPI_IDS.has(k.id ?? ""));
   if (kpis.length === 0) return null;
   return (
     <section aria-labelledby="kpi-title" className="grid gap-2">

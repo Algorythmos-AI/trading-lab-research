@@ -39,7 +39,7 @@ The research and paper-trading engine behind Trading Lab. It holds:
 ```
 systemd timers on the VM (/home/wt/trading at a deployed main commit; runtime state in var/)
  ├─ wt-routine    07:30 New York: SPEC-0001 pre-market dry run (stages 08:00 to 09:15, signals check 11:31)
- ├─ wt-paper-b    08:30 New York: strategy B paper session (OMS + pre-trade guard)
+ ├─ wt-paper-s    08:30 New York: Gap Hunter, the stock desk's paper session (its own account, journal and lease)
  ├─ wt-forward    12:40 New York → waits until close + 20 min: forward test of the frozen candidates
  ├─ wt-weekly     Friday 20:00 New York: weekly scorecard
  └─ wt-dashboard  every 5 min in the US session, every 15 otherwise → collect → sanitize → sign → POST
@@ -60,8 +60,8 @@ Vercel (trading-lab-dashboard) ◄─────┘  private Blob storage; page
 | `make gate` | Is it safe to change the live checkout? (no job running, outside the trading night) |
 | `make deploy` | Gate, tag, pull `main`, migrate state, sync the venv, smoke test. Rolls back by itself on failure |
 | `make rollback TAG=runtime-YYYYMMDD-N` | Back to an earlier deploy |
-| `make kill REASON="…"` / `make unkill` | Stop or allow new paper-B entries. Exits keep being managed. `unkill` is refused while paper B is running |
-| `make reset-latch REASON="…"` | Clear the virtual account's loss latch. Owner only; refused while paper B is running; the reset is recorded |
+| `make kill REASON="…"` / `make unkill` | Write or remove the root `KILL` file. The options clone reads it (no new entries; exits keep being managed). The stock desk has its own, `var/smallcap/KILL` |
+| `make reset-latch REASON="…"` | Clears the loss latch of the retired QQQ rule's virtual account (DEC-0069). Nothing trades that account now, so it has no everyday use |
 | `make install-trading-agents` | (Re)install the launchd jobs on a Mac. Not used on the VM, whose units the owner installs with `sudo wt-install-units` |
 | `make publish DRY_RUN=1` | Build the dashboard snapshot without sending it |
 | `make ci` | Lint, type-check and test, as CI does |

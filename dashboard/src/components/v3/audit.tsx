@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { sydney, txt } from "@/lib/format";
 import { humanize } from "@/lib/labels";
+import { alertTitle, siteWords } from "@/lib/robots";
 import { list, type Snapshot } from "@/lib/types";
 import { AUDIT_LABEL, auditRows, auditTone, hasV3, sectionState, type AuditRow } from "@/lib/v3";
 import { V3Missing, V3Pending } from "./pending";
@@ -74,7 +75,7 @@ function AuditTable({ rows }: { rows: AuditRow[] }) {
               </StatusBadge>
             </TableCell>
             <TableCell className="text-muted-foreground">
-              {e.count > 1 ? `${e.count} deploys that day, all passed the smoke test; latest ${txt(e.detail).replace(/; smoke ok$/i, "")}` : txt(e.detail)}
+              {e.count > 1 ? `${e.count} deploys that day, all passed the smoke test; latest ${txt(e.detail).replace(/; smoke ok$/i, "")}` : siteWords(txt(e.detail))}
             </TableCell>
           </TableRow>
         ))}
@@ -117,7 +118,7 @@ export function AlertHistoryPanel({ s }: { s: Snapshot }) {
                     {r.event === "fired" ? "Fired" : "Resolved"}
                   </StatusBadge>
                 </TableCell>
-                <TableCell>{txt(r.title)}</TableCell>
+                <TableCell>{alertTitle(r.key, r.title)}</TableCell>
               </TableRow>
             ))}
           </TableBody>

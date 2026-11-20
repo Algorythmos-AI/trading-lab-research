@@ -4,7 +4,7 @@ import { NoJournal } from "@/components/journal";
 import { KillNotice } from "@/components/overview/lab-panels";
 import { AccountHero, HealthLine, NextSessionPanel, PatternsPanel, PnlOverview, RobotsStrip } from "@/components/overview/home";
 import { computeHealth } from "@/lib/health";
-import { loadJournal, loadOptions, loadRadar, loadSnapshot, pageTime } from "@/lib/snapshot";
+import { loadJournal, loadOptions, loadOptionsClone, loadRadar, loadSnapshot, pageTime } from "@/lib/snapshot";
 import { list } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
  * and the lab's health in a line each. The lab's own panels are on Research and Operations.
  */
 export default async function OverviewPage() {
-  const [journal, snap, options, radar, now] = await Promise.all([loadJournal(), loadSnapshot(), loadOptions(), loadRadar(), pageTime()]);
+  const [journal, snap, options, radar, clone, now] = await Promise.all([loadJournal(), loadSnapshot(), loadOptions(), loadRadar(), loadOptionsClone(), pageTime()]);
   const s = snap.status === "ok" ? snap.snapshot : null;
   const health = computeHealth(s, now);
   const doc = journal.status === "ok" ? journal.doc : null;
@@ -43,8 +43,8 @@ export default async function OverviewPage() {
           <PatternsPanel trades={doc.trades} now={now} />
         </PaneBoundary>
       ) : null}
-      <PaneBoundary name="Robot B (paper) and the scan">
-        <RobotsStrip s={s} />
+      <PaneBoundary name="The robots and the scan">
+        <RobotsStrip s={s} clone={clone.status === "ok" ? clone.doc : null} />
       </PaneBoundary>
       {health.level !== "red" ? (
         <PaneBoundary name="Lab health">

@@ -1,6 +1,6 @@
 import { Check, Minus, TriangleAlert, X, type LucideIcon } from "lucide-react";
 import { dayIn, duration, NEW_YORK, shortDate, txt } from "@/lib/format";
-import { jobKey, jobName, sortJobKeys } from "@/lib/labels";
+import { jobKey, jobName, jobShort, sortJobKeys } from "@/lib/robots";
 import type { JobRun } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { DataDetails } from "./data-details";
@@ -14,14 +14,6 @@ const CELL: Record<CellStatus, { cls: string; Icon: LucideIcon; label: string }>
   timeout: { cls: "bg-warn-fill text-black", Icon: TriangleAlert, label: "Timed out" },
   refused: { cls: "bg-serious-fill text-black", Icon: Minus, label: "Refused" },
   other: { cls: "bg-neutral-fill text-white", Icon: Minus, label: "Other" },
-};
-
-const SHORT_NAMES: Record<string, string> = {
-  routine: "Routine",
-  "paper-b": "Robot B",
-  forward: "Forward",
-  weekly: "Weekly",
-  dashboard: "Dashboard",
 };
 
 const toStatus = (s: string | null | undefined): CellStatus => {
@@ -80,7 +72,7 @@ export function JobHeatmap({ runs, asOf, extraJobs = [] }: { runs: JobRun[]; asO
         {jobs.map((job) => (
           <div role="row" key={job} className="contents">
             <span role="rowheader" className="truncate pr-1 text-xs font-medium" title={jobName(job)}>
-              {SHORT_NAMES[job] ?? jobName(job)}
+              {jobShort(job)}
             </span>
             {days.map((d) => {
               const st = cells.get(`${job}|${d}`);

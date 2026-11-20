@@ -13,8 +13,11 @@ from typing import Any
 
 from wt.core.clock import ET
 
-SLA_JOBS = ("routine", "paper-b", "forward", "weekly", "dashboard")
-SESSION_JOBS = ("routine", "paper-b", "forward")
+SLA_JOBS = ("routine", "paper-s", "paper-b", "forward", "weekly", "dashboard")
+SESSION_JOBS = ("routine", "paper-s", "paper-b", "forward")
+# The QQQ rule's job left the schedule (DEC-0069). Its row stays, with the runs it had; a day after its last run is
+# "none" (not expected), never "missed".
+UNSCHEDULED_JOBS = frozenset({"paper-b"})
 
 
 def _et_date(ts: Any) -> str | None:
@@ -41,12 +44,14 @@ def sla(runs: Sequence[dict[str, Any]], today: dt.date, sessions: Mapping[dt.dat
     run) · none (not expected) · n/a (before the job's first recorded run, or today while it may still run)."""
     by: dict[tuple[str, str], list[str]] = {}
     first: dict[str, str] = {}
+    final: dict[str, str] = {}
     for r in runs:
         job, d = str(r.get("job", "")), _et_date(r.get("started"))
         if job not in SLA_JOBS or d is None:
             continue
         by.setdefault((job, d), []).append(str(r.get("status", "")))
         first[job] = min(first.get(job, d), d)
+        final[job] = max(final.get(job, d), d)
     dates = [today - dt.timedelta(days=i) for i in range(days - 1, -1, -1)]
     cells, summary = [], []
     for job in SLA_JOBS:
@@ -54,7 +59,8 @@ def sla(runs: Sequence[dict[str, Any]], today: dt.date, sessions: Mapping[dt.dat
         for day in dates:
             k = day.isoformat()
             sts = by.get((job, k), [])
-            exp = _expected(job, day, sessions)
+            gone = job in UNSCHEDULED_JOBS and k > final.get(job, "")
+            exp = _expected(job, day, sessions) and not gone
             if sts:
                 bad = [s for s in sts if s not in ("ok", "refused")]
                 if job == "dashboard":
@@ -62,7 +68,7 @@ def sla(runs: Sequence[dict[str, Any]], today: dt.date, sessions: Mapping[dt.dat
                 else:
                     last = sts[-1]
                     status = last if last in ("ok", "refused") else "failed"
-            elif job not in first or k < first[job] or day == today:
+            elif job not in first or k < first[job] or (day == today and not gone):
                 status = "n/a"
             else:
                 status = "missed" if exp else "none"

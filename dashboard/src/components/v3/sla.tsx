@@ -4,7 +4,7 @@ import { Panel } from "@/components/panel";
 import { TONE_FILL } from "@/components/status";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { pct, shortDate } from "@/lib/format";
-import { jobName } from "@/lib/labels";
+import { jobName } from "@/lib/robots";
 import { list, type SlaStatus, type Snapshot } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { SLA_GLYPH, SLA_LABEL, SLA_TONE, sectionState, slaStatus } from "@/lib/v3";

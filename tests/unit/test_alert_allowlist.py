@@ -84,18 +84,6 @@ class Recorder:
 
 # ---- drivers: the real formatting functions, called with hostile inputs --------------------------------------------
 
-def drive_alert_paper() -> list[tuple[str, str]]:
-    from wt.ops import jobs
-    out = []
-    for bad in (True, False):
-        r = Recorder()
-        o = {"not_flat": bad, "unknown_positions": N if bad else 0, "latched": bad, "latch_reason": T,
-             "loop_errors": N if bad else 0, "refused": bad}
-        jobs.alert_paper(o, r)
-        out += r.sent
-    return out
-
-
 def drive_summary(tmp: Path) -> list[tuple[str, str]]:
     from wt.ops import jobs
     # R is what the summary is for (R13: R and % only), so R values are R-like here; everything else is hostile.
@@ -104,14 +92,9 @@ def drive_summary(tmp: Path) -> list[tuple[str, str]]:
         {"session": T, "strategy": f"watchlist_bull_flag {T}", "symbol": NAMES[0], "R": 1.25},
         {"session": T, "strategy": "B_qqq_qqqm", "R": -1.0},
         {"session": T, "session_marker": True}]))
-    rows = [{"event": "armed"}, {"event": "trade_closed", "R": 1.25, "symbol": NAMES[0], "price": N},
-            {"event": "session_end", "outcome": f"blocked:latched:{T}"}]
-    out = []
-    for line in (jobs.paper_summary(rows), jobs.forward_summary(led),
-                 jobs.paper_summary([{"event": "armed"}, {"event": "session_end", "outcome": T}])):
-        assert line
-        out.append(alerts.render("Trading Lab daily summary", line + " Paper B entries are paused (KILL file present)."))
-    return out
+    line = jobs.forward_summary(led)
+    assert line
+    return [alerts.render("Trading Lab daily summary", line + " The KILL file is present: new entries are paused.")]
 
 
 def drive_flag_chain(tmp: Path, monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
@@ -228,6 +211,31 @@ site(f"{RB}::'paper-b:signal-not-acted' | 'Paper B had a signal and did not act'
 site(f"{RB}::'paper-b:stop-rule' | f'paper-b stopped by its stop rule ({{page.record(r",
      {"rule": NS(decision=T), "fired": NS(kind=T, detail=T)})
 site("src/wt/live/runner_b.py::run::'paper-b:second-runner' | 'paper-b: a second runner refused to start'", {})
+RS = "src/wt/live/runner_s.py"
+site(f"{RS}::_start::'paper-s:refused-keys' | 'Gap Hunter refused to start: key pair'", {})
+site(f"{RS}::_start::'paper-s:second-runner' | 'paper-s: a second runner refused to start'", {})
+site(f"{RS}::_session.adopt::'paper-s:orphan' | 'Sleeve S adopted a position it did not open'", {"qty": N})
+site(f"{RS}::_session.consider::'paper-s:clock-skew' | 'Sleeve S clock check: ok'", {})
+site(f"{RS}::_session.consider::'paper-s:clock-skew' | 'Sleeve S skipped an entry: clock check failed'", {"skew": N})
+site(f"{RS}::_session.gap_place::'paper-s:clock-skew' | 'Sleeve S clock check: ok'", {})
+site(f"{RS}::_session.gap_place::'paper-s:clock-skew' | 'Sleeve S skipped an entry: clock check failed'", {"skew": N})
+site(f"{RS}::_session.sweep_positions::'paper-s:over-caps' | 'Sleeve S: a position over its hard caps'",
+     {"pos": NS(symbol=NAMES[0], qty=N, avg_price=N)})
+site(f"{RS}::_session.sweep_positions::'paper-s:short' | 'Sleeve S is SHORT'",
+     {"pos": NS(symbol=NAMES[0], qty=-N, avg_price=N)})
+site(f"{RS}::_session::'paper-s:close-unknown' | 'Sleeve S: session close unknown'", {})
+site(f"{RS}::_session::'paper-s:lease' | 'Sleeve S: no primary lease, entries off'", {})
+site(f"{RS}::_session::'paper-s:lease' | 'Sleeve S: primary lease held'", {})
+site(f"{RS}::_session::'paper-s:not-flat' | 'Sleeve S NOT FLAT at the close'",
+     {"pos": NS(symbol=NAMES[0], qty=N, avg_price=N)})
+site(f"{RS}::_session::'paper-s:not-flat' | 'Sleeve S could not verify flat after the close'", {})
+site(f"{RS}::_session::'paper-s:not-flat' | 'Sleeve S: no long position after the close'", {})
+site(f"{RS}::_session::'paper-s:not-paper' | 'Sleeve S stopped: not a paper account'", {})
+site(f"{RS}::_session::'paper-s:short-at-close' | 'Sleeve S is SHORT at the close'",
+     {"pos": NS(symbol=NAMES[0], qty=-N, avg_price=N)})
+site(f"{RS}::_session::'paper-s:short-at-close' | 'Sleeve S: no short position after the close'", {})
+site(f"{RS}::_session::'paper-s:stop-rule' | f'paper-s stopped by its stop rule ({{page.record(r",
+     {"rule": NS(decision=T), "fired": NS(kind=T, detail=T)})
 RO = "src/wt/live/runner_o.py::Runner"
 site(f"{RO}.give_up_arm::'arm-broker' | 'Options clone: broker unreachable at arm'", {"e": E})
 site(f"{RO}.connect_at_arm::'flatten-required' | 'Options clone: a position no plan knows'", {})
@@ -274,9 +282,6 @@ site(f"{DP}::sync_ml::'deploy-ml' | 'ML environment in sync'", {})
 site("src/wt/ops/evidence.py::run::ALERT_PREFIX + step | 'Weekly evidence published again'", {"week": T})
 site("src/wt/ops/evidence.py::run::ALERT_PREFIX + word(e.step, STEPS, 'other') | title", lambda *_: drive_stop_page())
 JB = "src/wt/ops/jobs.py"
-site(f"{JB}::alert_paper::'paper-b:refused-to-arm' | 'Paper B refused to arm'", {})
-site(f"{JB}::alert_paper::key | f\"{{title.split(':')[0]}}: cleared\"", lambda *_: drive_alert_paper())
-site(f"{JB}::alert_paper::key | title", lambda *_: drive_alert_paper())
 site(f"{JB}::publish_evidence::'evidence' | 'Weekly evidence PR failed'", {})
 site(f"{JB}::publish_evidence::'evidence' | 'Weekly evidence PR failed'#2", {})
 site(f"{JB}::run_job::'summary' | 'Trading Lab daily summary'", lambda tmp, mp: drive_summary(tmp))
@@ -291,10 +296,9 @@ def _fails() -> list[Any]:
     return [Check(T, False, T), Check("free disk", False, T)]
 
 
-site(f"{JB}::run_job::f'refuse:{{job.name}}' | f\"{{word(job.name, KNOWN_JOBS, 'a job')}}: entries o",
-     {"job": _job(), "fails": _fails()})
 site(f"{JB}::run_job::job | 'a deploy is still changing the checkout after 30 ", {"job": _job()})
 site(f"{JB}::run_job::job | 'another run of this job is still in progress'", {"job": _job()})
+site(f"{JB}::run_job::job | 'the stock desk's key pair is not on this host'", {"job": _job()})
 site(f"{JB}::run_job::job | 'the forward test is still running after 3 hours'", {"job": _job()})
 site(f"{JB}::run_job::job | reason", {"job": _job(), "reason": T, "fails": _fails()})
 VP = "src/wt/ops/visibility.py::page"
@@ -397,23 +401,6 @@ def test_preflight_check_names_are_a_closed_set():
             and n.args and isinstance(n.args[0], ast.Constant)}
     assert made and made <= preflight.CHECK_NAMES
     assert preflight.page_reason([preflight.Check(T, False, T)]) == "Preflight failed: a check. The job's log has the detail."
-
-
-def test_runner_b_blocker_codes_are_a_closed_set():
-    """The daily summary names a blocked signal's code (jobs.BLOCKER_CODES): every code runner_b writes is in it."""
-    import ast
-    from wt.ops import jobs
-    tree = ast.parse((ROOT / "src" / "wt" / "live" / "runner_b.py").read_text())
-    codes = set()
-    for n in ast.walk(tree):
-        if isinstance(n, ast.Call) and getattr(n.func, "attr", "") == "append" and getattr(n.func.value, "id", "") == "blockers":
-            a = n.args[0]
-            text = a.value if isinstance(a, ast.Constant) else a.values[0].value if isinstance(a, ast.JoinedStr) else ""
-            codes.add(str(text).split(":")[0])
-        if isinstance(n, ast.Assign) and any(getattr(t, "id", "") == "blockers" for t in n.targets) \
-                and isinstance(n.value, ast.ListComp) and isinstance(n.value.elt, ast.JoinedStr):
-            codes.add(str(n.value.elt.values[0].value).split(":")[0])
-    assert codes and codes <= jobs.BLOCKER_CODES, codes - jobs.BLOCKER_CODES
 
 
 def test_the_deploy_reasons_a_page_names_match_what_the_code_says():
@@ -566,6 +553,21 @@ RECORDS = [
     ("src/wt/live/runner_b.py", "_session", "'Paper B is SHORT'", "log('short_position'"),
     ("src/wt/live/runner_b.py", "_session", "NOT FLAT at the close", "log('END_OF_DAY_NOT_FLAT', qty=qty, plan="),
     ("src/wt/live/runner_b.py", "_session", "SHORT at the close", "log('END_OF_DAY_NOT_FLAT', qty=qty, short=True"),
+    ("src/wt/live/runner_s.py", "_start", "refused to start: key pair", "log('refuse_to_start'"),
+    ("src/wt/live/runner_s.py", "_start", "a second runner refused to start", "log('refuse_to_start'"),
+    ("src/wt/live/runner_s.py", "_session", "no primary lease", "refuse(f'primary lease not held"),
+    ("src/wt/live/runner_s.py", "_session", "not a paper account", "log('refuse_to_arm', reason='account not paper'"),
+    ("src/wt/live/runner_s.py", "_session", "session close unknown", "log('close_unknown'"),
+    ("src/wt/live/runner_s.py", "_session", "stopped by its stop rule", "log('stop_rule'"),
+    ("src/wt/live/runner_s.py", "_session.adopt", "adopted a position", "log('adopted_orphan'"),
+    ("src/wt/live/runner_s.py", "_session.sweep_positions", "over its hard caps", "log('position_over_caps'"),
+    ("src/wt/live/runner_s.py", "_session.sweep_positions", "'Sleeve S is SHORT'", "log('short_position'"),
+    ("src/wt/live/runner_s.py", "_session.consider", "clock check failed", "log('clock_skew'"),
+    ("src/wt/live/runner_s.py", "_session", "NOT FLAT at the close",
+     "log('END_OF_DAY_NOT_FLAT', symbol=pos.symbol, qty=pos.qty)"),
+    ("src/wt/live/runner_s.py", "_session", "SHORT at the close",
+     "log('END_OF_DAY_NOT_FLAT', symbol=pos.symbol, qty=pos.qty, short=True"),
+    ("src/wt/live/runner_s.py", "_session", "could not verify flat", "log('END_OF_DAY_NOT_FLAT', error="),
     ("src/wt/live/runner_o.py", "Runner.give_up_arm", "broker unreachable at arm",
      "pg.say(f'broker unreachable at arm"),
     ("src/wt/live/runner_o.py", "Runner.on_fill", "Options clone entered", "self.write('filled'"),
@@ -574,7 +576,6 @@ RECORDS = [
     ("src/wt/live/runner_o.py", "Runner.exit", "an exit has not filled", "self.oms.note(p, 'exit-failed-paged')"),
     ("src/wt/live/runner_o.py", "Runner.check_feed_fit", "feed unfit", "self.write('feed_unfit'"),
     ("src/wt/ops/jobs.py", "refuse", "refused to run", "log(f'REFUSED"),
-    ("src/wt/ops/jobs.py", "run_job", "entries off, exits only", "log(f'preflight refused"),
     ("src/wt/ops/backup.py", "flag_chain", "title", "flag.write_text("),
     ("src/wt/ops/backup.py", "nightly", "Daily evidence anchor failed", "print(f'anchor: {why}')"),
     ("src/wt/ops/deploy.py", "sync_ml", "ML environment did not sync", "say(f'ML environment did not sync"),

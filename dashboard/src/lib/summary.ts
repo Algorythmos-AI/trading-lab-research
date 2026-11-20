@@ -1,28 +1,19 @@
-import { JOB_ORDER, sortJobKeys } from "./labels";
+import { GAP_HUNTER, jobSaid, SESSION_JOBS, sortJobKeys } from "./robots";
 import { scanSentence } from "./today";
-import { tradeSentence } from "./trading";
 import { entries, list, type JobResult, type Snapshot } from "./types";
 
-const SHORT: Record<string, string> = {
-  routine: "routine",
-  "paper-b": "Robot B",
-  forward: "forward test",
-  weekly: "weekly scorecard",
-  dashboard: "dashboard publish",
-};
-const CORE = new Set(JOB_ORDER.slice(0, 3));
+/** The session's own jobs are worth a clause when they finish normally; every other job only when it did not. */
+const CORE = new Set(SESSION_JOBS);
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 function clause(key: string, job: JobResult, s: Snapshot): string | null {
-  const name = SHORT[key] ?? key;
+  const name = jobSaid(key);
   const status = String(job.status ?? "").toLowerCase();
   const exit = typeof job.exit === "number" ? ` (exit ${job.exit})` : "";
   switch (status) {
     case "ok": {
-      if (key === "paper-b") {
-        return `Robot B finished normally${s.kill?.on === true ? " with entries paused (kill switch)" : ""}`;
-      }
+      if (key === GAP_HUNTER.job) return `${GAP_HUNTER.name} finished normally`;
       if (key === "forward") {
         const n = s.ops?.forward?.sessions;
         return typeof n === "number" ? `forward test recorded ${plural(n, "session", "sessions")}` : "forward test finished normally";
@@ -53,11 +44,11 @@ export function summarize(s: Snapshot | null): string {
     const c = job ? clause(key, job, s) : null;
     if (c) parts.push(c);
   }
-  if (s.kill?.on === true && !last["paper-b"]) parts.push("the kill switch is on");
+  if (s.kill?.on === true) parts.push("the kill switch is on");
 
   const head = parts.length > 0 ? `Tonight: ${parts.join(", ")}.` : "No job results in this snapshot.";
   const n = list(s.overview?.needs_you).length;
   const tail = n === 0 ? "Nothing needs you." : n === 1 ? "1 thing needs you." : `${n} things need you.`;
-  const middle = [tradeSentence(s), scanSentence(s)].filter(Boolean).join(" ");
+  const middle = scanSentence(s) ?? "";
   return middle ? `${head} ${middle} ${tail}` : `${head} ${tail}`;
 }

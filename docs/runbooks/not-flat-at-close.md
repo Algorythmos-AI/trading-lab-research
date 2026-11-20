@@ -1,5 +1,9 @@
 # Not flat at the close
 
+> **2026-11-20 (DEC-0069):** the QQQ rule is retired and its job (`paper-b`) no longer runs, so the "Paper B" pages
+> below no longer fire from a scheduled session. The stock desk's own not-flat pages (`paper-s:not-flat`,
+> `paper-s:short-at-close`) are in [position-alerts.md](position-alerts.md).
+
 **Signal:**
 - ntfy priority 5 "Paper B NOT FLAT at the close", or "Paper B is SHORT" / "Paper B is SHORT at the close".
 - The journal (`data/live/journal.jsonl`) contains `END_OF_DAY_NOT_FLAT` (with `"short": true` for a short) or

@@ -20,19 +20,37 @@ def cell(m, job, day):
 
 def test_sla_cells_and_summary():
     d1, d2, d3 = TODAY - dt.timedelta(days=3), TODAY - dt.timedelta(days=2), TODAY - dt.timedelta(days=1)
-    runs = [run("paper-b", d1), run("paper-b", d2, "refused"), run("dashboard", d1), run("dashboard", d2),
-            run("dashboard", d2, "failed"), run("dashboard", d3, "failed"), run("forward", d1, "timeout")]
+    runs = [run("forward", d1), run("forward", d2, "refused"), run("dashboard", d1), run("dashboard", d2),
+            run("dashboard", d2, "failed"), run("dashboard", d3, "failed"), run("routine", d1, "timeout")]
     m = ov.sla(runs, TODAY, SESSIONS)
     assert len(m["days"]) == 14 and m["days"][-1] == str(TODAY)
-    assert cell(m, "paper-b", d1)["status"] == "ok" and cell(m, "paper-b", d2)["status"] == "refused"
-    assert cell(m, "paper-b", d3)["status"] == "missed"                      # a session day with no run
-    assert cell(m, "paper-b", TODAY)["status"] == "n/a"                      # today may still run
-    assert cell(m, "paper-b", TODAY - dt.timedelta(days=4))["status"] == "n/a"   # before its first run
+    assert cell(m, "forward", d1)["status"] == "ok" and cell(m, "forward", d2)["status"] == "refused"
+    assert cell(m, "forward", d3)["status"] == "missed"                      # a session day with no run
+    assert cell(m, "forward", TODAY)["status"] == "n/a"                      # today may still run
+    assert cell(m, "forward", TODAY - dt.timedelta(days=4))["status"] == "n/a"   # before its first run
     assert cell(m, "dashboard", d2) == {"job": "dashboard", "date": str(d2), "status": "partial", "runs": 2}
-    assert cell(m, "dashboard", d3)["status"] == "failed" and cell(m, "forward", d1)["status"] == "failed"
-    assert cell(m, "routine", d1)["status"] == "n/a"                          # never ran at all
+    assert cell(m, "dashboard", d3)["status"] == "failed" and cell(m, "routine", d1)["status"] == "failed"
+    assert cell(m, "weekly", d1)["status"] == "n/a"                           # never ran at all
+    sat = TODAY + dt.timedelta(days=1)                                        # today is never judged, session day or not
+    w = ov.sla([run("weekly", d1), run("forward", d1)], sat, SESSIONS)
+    assert cell(w, "weekly", sat)["status"] == "n/a" and cell(w, "forward", sat)["status"] == "n/a"
+    fw = next(s for s in m["summary"] if s["job"] == "forward")
+    assert fw == {"job": "forward", "expected": 3, "ok": 1, "refused": 1, "failed": 0, "missed": 1, "ok_pct": 33.3}
+
+
+def test_sla_the_retired_qqq_job_is_not_expected_after_its_last_run():
+    """DEC-0069: paper-b left the schedule. Its row and its past runs stay; a session day after its last run is
+    "none", never "missed", and does not count against it. A gap before its last run is still a miss."""
+    d1, d2, d3 = TODAY - dt.timedelta(days=3), TODAY - dt.timedelta(days=2), TODAY - dt.timedelta(days=1)
+    m = ov.sla([run("paper-b", TODAY - dt.timedelta(days=7)), run("paper-b", d1, "refused")], TODAY, SESSIONS)
+    assert "paper-b" in ov.UNSCHEDULED_JOBS and "paper-b" in ov.SLA_JOBS
+    assert cell(m, "paper-b", d1)["status"] == "refused"
+    assert cell(m, "paper-b", d1 - dt.timedelta(days=1))["status"] == "missed"       # between two of its runs
+    assert [cell(m, "paper-b", d)["status"] for d in (d2, d3, TODAY)] == ["none", "none", "none"]
     pb = next(s for s in m["summary"] if s["job"] == "paper-b")
     assert pb == {"job": "paper-b", "expected": 3, "ok": 1, "refused": 1, "failed": 0, "missed": 1, "ok_pct": 33.3}
+    quiet = ov.sla([], TODAY, SESSIONS)                                        # its runs have aged out of the window
+    assert {c["status"] for c in quiet["cells"] if c["job"] == "paper-b"} == {"n/a"}
 
 
 def test_sla_weekend_is_none_not_missed():

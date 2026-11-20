@@ -30,9 +30,16 @@ days), `wt-leases` (no lock). One API token per bucket (Object Read & Write, tha
 without it the backups are unreadable). Initialise once: `restic init`.
 
 ## The primary lease
-On the VM, paper B arms entries only while it holds `wt-leases/paper-b` (20 h, the store's clock). Refused
+The QQQ rule's lease is `wt-leases/paper-b`. Its job is retired (DEC-0069, 2026-11-20), so nothing takes that
+lease any more; the object stays in the bucket. While the job ran: on the VM, paper B armed entries only while it
+held `wt-leases/paper-b` (20 h, the store's clock). Refused
 ("held by …", "lost a race", "unreachable") means entries off, exits managed, page "no primary lease".
 **Break it** (owner, only when the other holder is certainly stopped): `python -m wt.ops.lease break`.
+
+Sleeve S (job `paper-s`, DEC-0066) has a lease of its own in the same bucket, `wt-leases/paper-s`, with the same
+rules and the same token: neither lease says anything about the other. Refused means sleeve S's entries are off,
+its exits are managed, and the page is "Sleeve S: no primary lease". Break it with
+`python -m wt.ops.lease break paper-s` (`make lease-break LEASE=paper-s`). A console checkout takes no lease.
 
 ## Shadow role
 `WT_ROLE=shadow` (Vault) makes the VM's runner turn entries off for every session and wraps its broker so any

@@ -1,5 +1,9 @@
 # Loss latch reset
 
+> **2026-11-20 (DEC-0069):** this is the QQQ rule's virtual account (`data/live/virtual_account.json`). The rule is
+> retired and no job trades that account, so there is nothing to resume. The page is kept for the archive. The stock
+> desk's book (`var/smallcap/virtual_account.json`) has no reset command.
+
 The virtual account latches at a −2% day, a −4% week, or a −10% drawdown from its high-water mark. While
 latched, it refuses new entries.
 

@@ -17,6 +17,10 @@ LOCK_DIR = STATE_DIR / "locks"
 # Held by the paper-B runner process itself for its whole session (the job lock is held by the jobs.py wrapper,
 # which runs the runner in its own session: if the wrapper dies, this is what still marks the runner as live).
 RUNNER_LOCK = "paper-b-runner"
+# Sleeve S's runner process holds its own (wt.live.runner_s, DEC-0066). The deploy gate and the host sync read both:
+# a runner orphaned by a dead wrapper holds nothing else.
+RUNNER_LOCK_S = "paper-s-runner"
+RUNNER_LOCKS = (RUNNER_LOCK, RUNNER_LOCK_S)
 DEPLOY_LOCK = "deploy"             # held while a deploy or rollback changes the live checkout; jobs wait for it
 
 

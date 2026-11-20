@@ -1,10 +1,13 @@
-// The Paper options page under its heading (DEC-0057): the glance, then the options clone, the hand-placed paper
-// trades and the research arms. Three sources, each in a frame of its own evidence class, never added together.
-// Server-rendered; apart from the page file so a test can render it.
+// The Paper options page under its heading (DEC-0057): the glance, then the options clone and the research arms.
+// Two books, each in a frame of its own evidence class, never added together. Server-rendered; apart from the page
+// file so a test can render it.
+//
+// The hand-traded paper account this page once showed was closed by the owner (2026-11-20). A history document that
+// still carries its `manual` block is read as before and that block is ignored.
 //
 // The arithmetic is the Trades page's own (lib/journal.ts) on rows read into the journal's shape (lib/paper.ts), and
 // the charts are the ones the Trades page draws. Each group sits behind a pane boundary of its own.
-import { Bot, CalendarDays, ChartColumn, ChartLine, ChartNoAxesCombined, Crosshair, FlaskConical, Hand, Inbox, Layers, Lightbulb, ListOrdered, Target, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { Bot, CalendarDays, ChartColumn, ChartLine, ChartNoAxesCombined, Crosshair, FlaskConical, Inbox, Layers, ListOrdered, Target, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import Link from "next/link";
 import { DayLimitBars } from "@/components/charts/day-limit-bars";
 import { MonthBars } from "@/components/charts/month-bars";
@@ -29,20 +32,15 @@ import {
   applyFilter,
   contractLabel,
   daily,
-  DTE_ORDER,
-  dteKey,
   filterHref,
   groupBy,
   HOLD_ORDER,
   holdKey,
   HOUR_ORDER,
   hourKey,
-  lessons,
   MONTH,
   parseFilter,
   shortDay,
-  SIZE_ORDER,
-  sizeKey,
   summarize,
   WEEKDAY_ORDER,
   weekdayKey,
@@ -59,7 +57,6 @@ import {
   expiryKey,
   glance,
   hypKey,
-  manualBook,
   MIN_SAMPLE,
   paperRows,
   paperStale,
@@ -80,8 +77,7 @@ import {
   type PaperBook,
 } from "@/lib/paper";
 import type { PaperOptions } from "@/lib/paper-options.types";
-import { positionRows, positionsAge, positionsTotal } from "@/lib/positions";
-import type { OptionsCloneResult, OptionsLiveResult, PaperOptionsResult } from "@/lib/snapshot";
+import type { OptionsCloneResult, PaperOptionsResult } from "@/lib/snapshot";
 import { cn } from "@/lib/utils";
 
 type Query = Record<string, string | string[] | undefined>;
@@ -94,15 +90,12 @@ type PaperEnv = "paper" | "shadow";
 export const PAPER_FRAMES = {
   cloneGlance: "Options clone at a glance",
   clone: "Options clone history",
-  manualGlance: "Manual option trades at a glance",
-  manual: "Manual option trades",
   armsGlance: "Research arms at a glance",
   arms: "Research arms",
 } as const;
 
 const GROUPS = {
   clone: { id: "clone-bot", label: "Clone bot", short: "Clone" },
-  manual: { id: "my-paper-trades", label: "My paper trades", short: "Mine" },
   arms: { id: "research-arms", label: "Research arms", short: "Arms" },
 } as const;
 
@@ -113,10 +106,10 @@ const signedPct = (v: number | null | undefined, digits = 1) => (v === null || v
 const signedR = (v: number | null | undefined) => (v === null || v === undefined ? "—" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(2)}R`);
 const count = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
 
-export function PaperBody({ result, clone, live, q, now }: { result: PaperOptionsResult; clone: OptionsCloneResult; live: OptionsLiveResult; q: Query; now: Date }) {
+export function PaperBody({ result, clone, q, now }: { result: PaperOptionsResult; clone: OptionsCloneResult; q: Query; now: Date }) {
   const filter = parseFilter(q);
   const doc = result.status === "ok" ? result.doc : null;
-  const links: JumpLink[] = (["clone", "manual", "arms"] as const).map((k) => ({ href: `#${GROUPS[k].id}`, label: GROUPS[k].label, short: GROUPS[k].short, level: 1 }));
+  const links: JumpLink[] = (["clone", "arms"] as const).map((k) => ({ href: `#${GROUPS[k].id}`, label: GROUPS[k].label, short: GROUPS[k].short, level: 1 }));
   return (
     <>
       <TradesJumpBar links={links} />
@@ -124,8 +117,8 @@ export function PaperBody({ result, clone, live, q, now }: { result: PaperOption
         <Empty title="Storage could not be read">The dashboard could not read the paper trade history. Reload in a minute.</Empty>
       ) : result.status === "missing" ? (
         <Empty icon={Inbox} title="No paper trade history has been sent yet">
-          It fills in once the trading host has sent it, and refreshes every few minutes through the session. Today&apos;s clone session and the open positions below come from their own
-          documents and show as soon as they exist.
+          It fills in once the trading host has sent it, and refreshes every few minutes through the session. Today&apos;s clone session below comes from its own document and shows as soon
+          as it exists.
         </Empty>
       ) : null}
       {doc ? (
@@ -142,11 +135,6 @@ export function PaperBody({ result, clone, live, q, now }: { result: PaperOption
             <CloneHistory doc={doc} clone={clone} filter={filter} now={now} />
           </PaneBoundary>
         ) : null}
-      </Group>
-      <Group group="manual" intro="The option trades you place by hand in the Alpaca paper account: what is open now, and every round trip closed so far.">
-        <PaneBoundary name="My paper trades">
-          <ManualSection doc={doc} live={live} filter={filter} now={now} />
-        </PaneBoundary>
       </Group>
       <Group group="arms" intro="Variations of the clone's rules, run beside it as simulated trades until 17 Nov 2026. Counting ended then with too few sessions; each trial closes on 5 Nov 2027 with no verdict. No order was ever sent for them.">
         <PaneBoundary name="Research arms">
@@ -265,13 +253,12 @@ function GlanceCard({ label, title, href, icon: Icon, g, empty }: { label: strin
   );
 }
 
-/** The three sources at a glance, then the period, kind and ticker they and the rest of the page follow. */
+/** The two books at a glance, then the period, kind and ticker they and the rest of the page follow. */
 function Top({ doc, filter, now }: { doc: PaperOptions; filter: Filter; now: Date }) {
   const clone = cloneBook(doc);
-  const manual = manualBook(doc);
   const arms = armBooks(doc);
-  const all = [...clone.trades, ...(manual?.trades ?? []), ...(arms ?? []).flatMap((a) => a.trades)];
-  // The tickers worth a chip: the ten most traded across the three sources, plus the one in the address.
+  const all = [...clone.trades, ...(arms ?? []).flatMap((a) => a.trades)];
+  // The tickers worth a chip: the ten most traded across the two books, plus the one in the address.
   const symbols = groupBy(all, (t) => t.symbol)
     .sort((a, b) => b.trades - a.trades)
     .slice(0, 10)
@@ -285,16 +272,8 @@ function Top({ doc, filter, now }: { doc: PaperOptions; filter: Filter; now: Dat
           This history was last sent on {newYork(doc.as_of)} New York time. Trades closed since then are not in it yet.
         </Notice>
       ) : null}
-      <div className="grid gap-3 md:grid-cols-3" data-paper-glance="">
+      <div className="grid gap-3 md:grid-cols-2" data-paper-glance="">
         <GlanceCard label={PAPER_FRAMES.cloneGlance} title="Clone bot" href={`#${GROUPS.clone.id}`} icon={Bot} g={glance(cut(clone.trades), now)} empty="No closed clone trades in this view." />
-        <GlanceCard
-          label={PAPER_FRAMES.manualGlance}
-          title="My paper trades"
-          href={`#${GROUPS.manual.id}`}
-          icon={Hand}
-          g={manual ? glance(cut(manual.trades), now) : null}
-          empty={manual ? "No closed hand-placed trades in this view." : "The hand-placed history is not being sent yet."}
-        />
         <EnvFrame env="shadow" label={PAPER_FRAMES.armsGlance} className="grid content-start gap-2">
           <a href={`#${GROUPS.arms.id}`} className="hover:text-foreground focus-visible:outline-ring flex items-center gap-1.5 text-sm font-medium focus-visible:outline-2">
             <FlaskConical aria-hidden className="text-muted-foreground size-4 shrink-0" />
@@ -321,7 +300,7 @@ function Top({ doc, filter, now }: { doc: PaperOptions; filter: Filter; now: Dat
         </EnvFrame>
       </div>
       <Filters filter={filter} symbols={symbols.sort()} />
-      <p className="text-muted-foreground max-w-prose text-xs">Three separate books. They are never added together: the clone and your own trades use different paper money, and the arms are simulated.</p>
+      <p className="text-muted-foreground max-w-prose text-xs">Two separate books. They are never added together: the clone trades paper money at the broker, and the arms are simulated.</p>
     </div>
   );
 }
@@ -534,154 +513,6 @@ function CloneHistory({ doc, clone, filter, now }: { doc: PaperOptions; clone: O
   );
 }
 
-// ── The hand-placed paper account ────────────────────────────────────────────────────────────────────────────────
-
-function OpenPositions({ live, now }: { live: OptionsLiveResult; now: Date }) {
-  if (live.status !== "ok") {
-    return <p className="text-muted-foreground text-xs">{live.status === "missing" ? "Open positions have not been sent yet." : "Open positions could not be read; the next update will try again."}</p>;
-  }
-  // As on the Options desk: positions the host stopped sending are greyed with a warning, then not shown at all.
-  const close = Date.parse(live.doc.market?.next_close ?? "");
-  const open = live.doc.market?.is_open === true && (!Number.isFinite(close) || now.getTime() < close);
-  const age = positionsAge(live.doc.as_of, now.getTime(), open);
-  if (age.state === "gone") return <p className="text-muted-foreground text-xs">Open positions were last sent on {newYork(live.doc.as_of)} New York time, too long ago to show. Check the paper account itself.</p>;
-  const rows = positionRows(live.doc, new Set(), now.getTime());
-  const total = positionsTotal(rows);
-  if (rows.length === 0) return <p className="text-muted-foreground text-xs">No open option positions in the paper account, as of {newYork(live.doc.as_of, false)} New York time.</p>;
-  return (
-    <div className={cn("grid gap-2", age.state === "old" && "opacity-70")} data-positions={age.state}>
-      {age.state === "old" ? (
-        <Notice role="status">
-          These are {Math.round(age.minutes ?? 0)} minutes old: the host has stopped sending them. Check the paper account before relying on them.
-        </Notice>
-      ) : null}
-      <Table label="Open paper option positions">
-        <TableHeader>
-          <TableRow>
-            <TableHead>Contract</TableHead>
-            <TableHead className="text-right">Qty</TableHead>
-            <TableHead className="text-right">Paid</TableHead>
-            <TableHead className="text-right">Mark</TableHead>
-            <TableHead className="text-right">Open result</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((r) => (
-            <TableRow key={r.contract}>
-              <TableCell>
-                {contractLabel(r)}
-                {r.expired ? <span className="text-muted-foreground ml-1.5 text-xs">expired</span> : r.days !== null ? <span className="text-muted-foreground ml-1.5 text-xs">{r.days === 0 ? "expires today" : `${r.days} d`}</span> : null}
-              </TableCell>
-              <TableCell className="text-right font-mono">{r.qty}</TableCell>
-              <TableCell className="text-right font-mono">{r.avgPrice === null ? "—" : r.avgPrice.toFixed(2)}</TableCell>
-              <TableCell className="text-right font-mono">{r.price === null ? "—" : r.price.toFixed(2)}</TableCell>
-              <TableCell className={cn("text-right font-mono font-semibold", textTone(r.unrealized))}>
-                <Dollars env="paper" value={r.unrealized} signed />
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      <p className="text-muted-foreground text-xs">
-        {total !== null ? (
-          <>
-            Open result in all <Dollars env="paper" value={total} signed className={cn("font-mono font-medium", textTone(total))} /> ·{" "}
-          </>
-        ) : null}
-        as of {newYork(live.doc.as_of, false)} New York time. Not closed, so in no total below.
-      </p>
-    </div>
-  );
-}
-
-/** Why fills in the account are missing from this section: the clone bot made them, and they are in its own section. */
-export function cloneFillsLeftOut(n: number): string {
-  return `${count(n, "fill")} in this account ${n === 1 ? "was" : "were"} the clone bot's own, from when it traded here: ${n === 1 ? "it is" : "they are"} left out, and counted in its section above.`;
-}
-
-function ManualSection({ doc, live, filter, now }: { doc: PaperOptions | null; live: OptionsLiveResult; filter: Filter; now: Date }) {
-  const env = "paper" as const;
-  const whole = doc ? manualBook(doc) : null;
-  const book = whole ? withTrades(whole, applyFilter(whole.trades, filter, now)) : null;
-  const gaps = doc?.manual?.gaps?.length ?? 0;
-  const excluded = doc?.manual?.excluded_clone_fills ?? 0;
-  const s = book && book.trades.length > 0 ? summarize(book.trades) : null;
-  const days = book ? daily(book.trades) : [];
-  const found = book ? lessons(book.trades) : [];
-  return (
-    <EnvFrame env="paper" label={PAPER_FRAMES.manual} className="grid gap-5">
-      <Panel id="manual-open" title="Open now" icon={Hand} means="What the paper account holds right now, at the broker's mark. It refreshes every five minutes through the session.">
-        <OpenPositions live={live} now={now} />
-      </Panel>
-      {!whole || !book ? (
-        <Empty icon={Inbox} title="Your closed paper trades are not being sent yet">
-          The trading host reads the paper account&apos;s filled orders and matches them into round trips. Until it does, only what is open shows here.
-        </Empty>
-      ) : !s ? (
-        <Empty title={whole.trades.length === 0 ? "No closed hand-placed trades yet" : "No hand-placed trades in this view"}>
-          {whole.trades.length === 0 ? "A round trip shows here within a few minutes of its close." : "Pick another period, ticker or kind above."}
-          {whole.trades.length === 0 && excluded > 0 ? ` ${cloneFillsLeftOut(excluded)}` : ""}
-        </Empty>
-      ) : (
-        <>
-          {whole.skipped > 0 ? (
-            <p data-paper-skipped={whole.skipped} className="text-warn text-xs font-medium">
-              {count(whole.skipped, "row")} could not be read and {whole.skipped === 1 ? "is" : "are"} left out.
-            </p>
-          ) : null}
-          <Tiles env={env} s={s} />
-          <p className="text-muted-foreground max-w-prose text-xs">
-            Before fees: the paper account charges none. Filled orders are matched first in, first out, so one round trip can be several rows; a contract left to expire closes at zero.
-            {gaps > 0 ? ` ${count(gaps, "position")} left by exercise or assignment, not a sale: no result is booked for ${gaps === 1 ? "it" : "them"}.` : ""}
-            {excluded > 0 ? ` ${cloneFillsLeftOut(excluded)}` : ""}
-          </p>
-          <Panel id="manual-curve" title="Running total" icon={ChartLine} means="Every closed hand-placed trade added up, day by day. The shaded band is how far the total stood below its best so far.">
-            <PnlCurve points={days.map((d) => ({ day: d.day, pnl: d.pnl, cum: d.cum, dd: d.dd, trades: d.trades }))} />
-          </Panel>
-          <div className="grid gap-5 lg:grid-cols-2">
-            <Panel id="manual-each" title="Trade by trade" icon={ChartNoAxesCombined} means={`Each closed trade in the order they ended, in R: one R is ${Math.round(R_UNIT * 100)}% of the premium paid, your own stop. A bar far below −1R ran past it.`}>
-              <TradeBars trades={tradeBars(book)} whenLabel="Closed (New York)" label="Result of each closed hand-placed trade in R, oldest first" />
-            </Panel>
-            <Panel id="manual-spread" title="How the results are spread" icon={Layers} means="Trades by their result on the premium paid. The count is the bar; the dollars beside it are what that band made or lost in all.">
-              <Histogram book={book} />
-            </Panel>
-          </div>
-          <Panel id="manual-calendar" title="Trading calendar" icon={CalendarDays} means="The latest months with trades, Monday to Friday. Green made money that day, red lost it; the stronger the colour, the bigger the day.">
-            <CalendarGrid days={days} />
-          </Panel>
-          {found.length > 0 ? (
-            <Panel id="manual-lessons" title="What the record says" icon={Lightbulb} means="Patterns measured from these trades, each comparing like with like. They describe what happened; they predict nothing.">
-              <ul className="grid gap-3 md:grid-cols-2">
-                {found.map((l) => (
-                  <li key={l.id} className={cn("bg-card relative grid content-start gap-1.5 overflow-hidden rounded-lg border py-3 pr-3.5 pl-4", "before:absolute before:inset-y-0 before:left-0 before:w-1", LESSON_EDGE[l.tone])}>
-                    <p className="text-sm leading-snug font-semibold">{l.title}</p>
-                    <p className="text-muted-foreground text-[0.8125rem] leading-snug">{l.finding}</p>
-                  </li>
-                ))}
-              </ul>
-            </Panel>
-          ) : null}
-          <Panel id="manual-breakdown" title="Where it was made and lost" icon={Layers} means="The same trades cut six ways. Each bar is the dollars made or lost; the small numbers are how many trades and the share that won.">
-            <div className="grid gap-x-8 gap-y-6 md:grid-cols-2">
-              <Breakdown title="By ticker" rows={groupBy(book.trades, (t) => t.symbol).sort((a, b) => b.pnl - a.pnl)} />
-              <Breakdown title="Calls and puts" rows={groupBy(book.trades, (t) => t.kind, KINDS)} />
-              <Breakdown title="Time of entry (New York)" rows={groupBy(book.trades, hourKey, HOUR_ORDER)} />
-              <Breakdown title="How long it was held" rows={groupBy(book.trades, holdKey, HOLD_ORDER)} />
-              <Breakdown title="Time to expiry when opened" rows={groupBy(book.trades, dteKey, DTE_ORDER)} />
-              <Breakdown title="Position size" rows={groupBy(book.trades, sizeKey, SIZE_ORDER)} note="Contracts per matched piece" />
-            </div>
-          </Panel>
-          <Panel id="manual-trades" title="Every hand-placed trade" icon={ListOrdered} means="Each closed round trip, newest first. Click a heading to sort; times are New York. “On premium” is the result over what was paid, with the same in R beside it.">
-            <PaperTable rows={paperRows(book)} env={env} label="Every hand-placed paper trade" />
-          </Panel>
-        </>
-      )}
-    </EnvFrame>
-  );
-}
-
-const LESSON_EDGE = { good: "before:bg-good-fill", bad: "before:bg-bad-fill", warn: "before:bg-warn-fill", info: "before:bg-info-fill" } as const;
-
 // ── The research arms ────────────────────────────────────────────────────────────────────────────────────────────
 
 function ArmsSection({ doc, filter, now }: { doc: PaperOptions | null; filter: Filter; now: Date }) {
@@ -753,7 +584,7 @@ function ArmsSection({ doc, filter, now }: { doc: PaperOptions | null; filter: F
 function Source({ doc }: { doc: PaperOptions }) {
   return (
     <p className="text-muted-foreground max-w-prose text-xs">
-      Built on the trading host on {newYork(doc.as_of)} New York time from its own records: the clone&apos;s journal, the paper account&apos;s filled orders and the arms&apos; simulated book. Results are in US
+      Built on the trading host on {newYork(doc.as_of)} New York time from its own records: the clone&apos;s journal and the arms&apos; simulated book. Results are in US
       dollars and days are New York trading days. A record only: nothing here can trade. The focus cards&apos; modelled option results are a different thing and are on{" "}
       <Link href="/options/record" className="hover:text-foreground underline underline-offset-2">
         Card record

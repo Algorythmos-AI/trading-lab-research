@@ -1,18 +1,17 @@
 """Run a nightly job the way launchd should: locked, pre-flighted, time-boxed, observed.
 
-    python -m wt.ops.jobs run <routine|paper-b|forward|weekly> [--preflight-only]
+    python -m wt.ops.jobs run <routine|paper-s|forward|weekly> [--preflight-only]
     python -m wt.ops.jobs status
 
 For every run:
   1. Take the job's own lock. If another run holds it, this is a refusal.
   2. Run the preflight checks (`wt.ops.preflight`). A failure is a refusal: one alert per job per day, exit 0.
-     Exception (phase-2 L1): paper-b still starts, in exits-only mode, when strategy B holds a position and every
-     failed check is one that can't make exit management unsafe (disk, .env mode, legacy state). Unreviewed code,
-     a venv mismatch or a held lock never start a runner.
+     No job starts after a failed check (the exits-only start was the QQQ rule's job's alone, and left with it:
+     DEC-0069). paper-s is also refused outright on a host without the stock desk's own key pair.
   3. Wait in-process where the job needs it (forward: until close + 20 min ET).
   4. Run the job as a child process under a deadline, with its output appended to logs/<log>_<YYYYMMDD>.log.
-  5. Inspect the outcome: exit code, and for paper-b the journal (not flat, unknown position, latch, loop errors).
-     Alerts fire on transitions and resolve when the problem clears.
+  5. Inspect the outcome: the exit code. Alerts fire on transitions and resolve when the problem clears. The
+     paper runners page their own position alerts during the session.
   6. Write the heartbeat.
 
 Exit code: the child's exit code, 0 for a refusal, 124 for a deadline kill.
@@ -33,7 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from wt.core.clock import ET, et
-from wt.core.config import DATA_DIR, FORWARD_LEDGER, ROOT
+from wt.core.config import FORWARD_LEDGER, ROOT
 from wt.core.desk import DESKS, installed, moved, moved_marker
 from wt.ops import hc, host, preflight
 from wt.ops.alerts import Alerts, count, ratio, word
@@ -43,13 +42,10 @@ from wt.ops.locks import DEPLOY_LOCK, job_lock
 from wt.ops.schedule import JOBS, PY, SYDNEY, Job
 from wt.ops.window import CalendarFault, Session, forward_wait_until, load_sessions
 
-JOURNAL = DATA_DIR / "live" / "journal.jsonl"
 KILL = ROOT / "KILL"
 WEEKLY_WAIT_S = 3 * 3600
 DEPLOY_WAIT_S = 30 * 60           # a job due while a deploy switches the checkout waits for it, then starts
 KILL_GRACE_S = 30
-# preflight failures that still let paper-b manage an open position (entries stay off)
-EXITS_ONLY_CHECKS = frozenset({"free disk", ".env private", "runtime state migrated", "paging configured"})
 
 
 def _now() -> dt.datetime:
@@ -87,7 +83,7 @@ def deadline_for(job: Job, start: dt.datetime, sessions: dict[dt.date, Session])
     s = sessions.get(start.astimezone(ET).date())
     if job.name == "routine":
         return et(s.date, "12:30") if s else start + dt.timedelta(minutes=15)
-    if job.name in ("paper-b", "paper-o"):
+    if job.name in ("paper-s", "paper-o"):
         return s.close + dt.timedelta(minutes=45) if s else start + dt.timedelta(minutes=15)
     return start + dt.timedelta(minutes=job.deadline_min) if job.deadline_min else None
 
@@ -155,58 +151,6 @@ def run_child(job: Job, root: Path, log: Log, deadline: dt.datetime | None,
         return code, False, False
 
 
-def journal_since(start: dt.datetime, path: Path | None = None) -> list[dict[str, Any]]:
-    path = path or JOURNAL                  # resolved at call time, so the module-level path can be redirected
-    rows: list[dict[str, Any]] = []
-    try:
-        lines = path.read_text().splitlines()
-    except OSError:
-        return rows
-    for line in lines:
-        try:
-            r = json.loads(line)
-            if dt.datetime.fromisoformat(str(r.get("ts"))) >= start:
-                rows.append(r)
-        except (ValueError, TypeError):
-            continue
-    return rows
-
-
-def paper_outcome(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    """Trading-critical facts from one paper session's journal rows."""
-    events = [str(r.get("event")) for r in rows]
-    unknown = [a for r in rows if str(r.get("event", "")).startswith("reconcile")
-               for a in (r.get("actions") or []) if any(k in str(a) for k in ("UNKNOWN", "SHORT", "UNPROTECTED"))]
-    end = next((r for r in reversed(rows) if r.get("event") == "session_end"), None)
-    virtual = (end or {}).get("virtual") or {}
-    return {"armed": "armed" in events, "no_session": "no_session" in events or "too_early" in events,
-            "not_flat": "END_OF_DAY_NOT_FLAT" in events, "unknown_positions": len(unknown),
-            "loop_errors": events.count("loop_error"), "latched": bool(virtual.get("latched")),
-            "latch_reason": str(virtual.get("latch_reason") or ""), "refused": "refuse_to_arm" in events,
-            "trades": events.count("trade_closed"),
-            "r": [r.get("R") for r in rows if r.get("event") == "trade_closed" and isinstance(r.get("R"), int | float)]}
-
-
-def alert_paper(o: dict[str, Any], alerts: Alerts) -> None:
-    pairs = [
-        ("paper-b:not-flat", o["not_flat"], 5, "Paper B NOT FLAT at the close",
-         "The runner ended the session with an open position. Check the broker and flatten if needed."),
-        ("paper-b:unknown-position", o["unknown_positions"] > 0, 5, "Paper B: unknown position",
-         f"Reconcile found {count(o['unknown_positions'])} unprotected position(s) it does not manage."),
-        ("paper-b:latched", o["latched"], 5, "Paper B loss limit latched",
-         "The virtual account latched; the session's journal (session_end) says why. Entries stay off until reset."),
-        ("paper-b:loop-errors", o["loop_errors"] >= 3, 4, "Paper B: repeated loop errors",
-         f"{count(o['loop_errors'])} loop errors in tonight's session. See logs/paper_b_*.log."),
-    ]
-    for key, bad, prio, title, msg in pairs:
-        if bad:
-            alerts.fire(key, title, msg, prio, ("rotating_light",) if prio == 5 else ())
-        else:
-            alerts.resolve(key, f"{title.split(':')[0]}: cleared", "Back to normal.")
-    if o["refused"]:
-        alerts.once_per_day("paper-b:refused-to-arm", "Paper B refused to arm", "See the paper_b log for the reason.", 3)
-
-
 def forward_summary(ledger: Path = FORWARD_LEDGER) -> str | None:
     """One line on the latest completed forward session: trades and total R (R only, plan R13). Never a strategy's
     name: the names carry setups (restricted) and symbols, and the page goes to a public topic. The dashboard has the
@@ -227,40 +171,6 @@ def forward_summary(ledger: Path = FORWARD_LEDGER) -> str | None:
             f"{count(strategies)} strategy(ies). Sessions recorded: {count(len(done))}.")
 
 
-# The codes a blocked signal can carry (wt.live.runner_b, `blockers`); the summary names the code, never what follows
-# it (a latch's reason, an event's name). A test keeps runner_b's blockers inside this set.
-BLOCKER_CODES = frozenset({"entries_off", "plan_not_persisted", "account_not_persisted", "kill_file", "latched",
-                           "max_1_trade_per_day", "exposure_exists", "event", "stale_signal_data", "spread_or_no_quote"})
-
-
-OUTCOME_WORDS = {"traded": "traded", "no_signal": "no signal", "signal_not_acted": "a signal fired and was NOT acted on",
-                 "no_inputs": "the signal could NOT be checked (its prices were missing all session)"}
-
-
-def paper_summary(rows: list[dict[str, Any]]) -> str | None:
-    """One line on Paper B's session from its journal rows: what it did, in R only (plan R13). None when it never
-    armed."""
-    if not any(r.get("event") == "armed" for r in rows):
-        return None
-    end = next((r for r in reversed(rows) if r.get("event") == "session_end"), None)
-    outcome = str((end or {}).get("outcome") or "")
-    rs = [float(r["R"]) for r in rows if r.get("event") == "trade_closed" and isinstance(r.get("R"), int | float)]
-    if outcome.startswith("blocked"):
-        words = f"a signal was blocked ({word(outcome.split(':')[1] if ':' in outcome else '', BLOCKER_CODES, 'a block')})"
-    else:
-        words = OUTCOME_WORDS.get(outcome, "session not finished" if end is None else "no trade")
-    return f"Paper B: {words}" + (f", {ratio(sum(rs), '+.2f')}R on {count(len(rs))} closed trade(s)" if rs else "") + "."
-
-
-def daily_summary(start: dt.datetime) -> str | None:
-    """The end-of-day message sent to the owner's phone after the forward test: Paper B and the forward test, one
-    line each. Statuses, counts and R: never money."""
-    day_start = dt.datetime.combine(start.astimezone(ET).date(), dt.time(0), tzinfo=ET)
-    lines = [paper_summary(journal_since(day_start)), forward_summary()]
-    text = " ".join(x for x in lines if x)
-    return text or None
-
-
 def launchd_loaded(label: str) -> bool:
     """True if the service manager knows the job's agent/unit (launchd or systemd, wt.ops.host). Used for the
     follower fallback while agents are being (re)installed; unknown counts as installed."""
@@ -269,13 +179,10 @@ def launchd_loaded(label: str) -> bool:
 
 
 def run_followers(job: Job, root: Path, alerts: Alerts, log: Log) -> None:
-    """Until the owner installs the split agents, paper-b still runs the forward test (and forward the Saturday
-    scorecard), as the old combined script did. Each follower takes its own lock, so nothing runs twice."""
-    if job.name == "paper-b" and not launchd_loaded(JOBS["forward"].label):
-        log("com.wt.forward is not installed: running the forward test inline (run `make install-trading-agents`)")
-        run_job(JOBS["forward"], root, alerts=alerts)
-    elif (job.name == "forward" and not launchd_loaded(JOBS["weekly"].label)
-          and dt.datetime.now(SYDNEY).isoweekday() == 6):
+    """Until the owner installs the split agents, forward still runs the Saturday scorecard, as the old combined
+    script did. The follower takes its own lock, so nothing runs twice."""
+    if (job.name == "forward" and not launchd_loaded(JOBS["weekly"].label)
+            and dt.datetime.now(SYDNEY).isoweekday() == 6):
         log("com.wt.weekly is not installed: running the weekly scorecard inline")
         run_job(JOBS["weekly"], root, alerts=alerts)
 
@@ -310,34 +217,24 @@ def redact_tokens(text: str) -> str:
     return redact(text)
 
 
-def exits_only_allowed(fails: list[preflight.Check]) -> bool:
-    return bool(fails) and all(c.name in EXITS_ONLY_CHECKS for c in fails)
-
-
-def b_exposure() -> bool:
-    """Does the paper account hold any of strategy B's symbols? Read-only (AccountReader has no order methods).
-    Unknown counts as yes: the exits-only runner re-reads the broker and does nothing if flat."""
-    try:
-        from wt.brokers.alpaca_read import AccountReader
-        from wt.risk.pretrade import load_limits
-        allow = load_limits("B").allowlist
-        return any(sym in allow and qty for sym, qty in AccountReader().positions())
-    except Exception:  # noqa: BLE001
-        return True
-
-
 # jobs with a healthchecks.io check
 # pipeline-check and options-review joined on 2026-10-25 (plan C1): a check that never ran is otherwise silent (a
 # failed pipeline check pages through ntfy on its own), and the nightly review is what the clone's verdict is read from.
-HC_JOBS = frozenset({"routine", "paper-b", "forward", "weekly", "paper-o", "pipeline-check", "options-review"})
+# paper-s joined with its host job (DEC-0066): its runner pages on its own, but only a check sees a session that never ran.
+# paper-b left on 2026-11-20 with its job (DEC-0069): its two checks, wt-paper-b and wt-paper-b-armed, get no more pings.
+HC_JOBS = frozenset({"routine", "paper-s", "forward", "weekly", "paper-o", "pipeline-check", "options-review"})
 
 # Jobs that left the schedule (DEC-0036: the crypto desk is closed). A unit for one can still be installed and fire
 # until the owner runs `sudo wt-install-units`, which removes it. `main` exits 0 quietly for these: no lock, no
 # heartbeat, no ping, no child, and no failure for the unit's OnFailure= to page.
 RETIRED_JOBS = frozenset({"crypto", "dashboard-crypto", "crypto-challengers", "crypto-learn"})
+# The QQQ rule's job (DEC-0069: the rule is retired). The same quiet exit 0 for a unit still installed. Kept apart from
+# RETIRED_JOBS because the publisher hides those jobs' past runs, and this job's history stays on the record.
+ARCHIVED_JOBS = frozenset({"paper-b"})
+GONE_JOBS = {**dict.fromkeys(RETIRED_JOBS, "DEC-0036"), **dict.fromkeys(ARCHIVED_JOBS, "DEC-0069")}   # job: its record
 
 
-KNOWN_JOBS = frozenset(JOBS) | RETIRED_JOBS      # the job names a page may carry
+KNOWN_JOBS = frozenset(JOBS) | frozenset(GONE_JOBS)      # the job names a page may carry
 KNOWN_LOGS = frozenset(j.log for j in JOBS.values())
 _LOG_NAME = re.compile(r"([a-z0-9_]+)_\d{8}\.log")
 
@@ -351,6 +248,14 @@ def log_page(path: Path) -> str:
     """A job's log as a page names it: logs/<job log>_<YYYYMMDD>.log, for a log name the schedule defines."""
     m = _LOG_NAME.fullmatch(path.name)
     return f"logs/{path.name}" if m and m.group(1) in KNOWN_LOGS else "the job's log"
+
+
+S_KEYS = ("APCA_S_KEY_ID", "APCA_S_SECRET_KEY")     # wt.live.runner_s reads no other pair (DEC-0066)
+
+
+def sleeve_s_keys() -> bool:
+    """Are both of the stock desk's keys in this process's environment (the host's secrets file, or .env)?"""
+    return all(os.environ.get(k, "").strip() for k in S_KEYS)
 
 
 def hc_slug(job: Job) -> str:
@@ -368,8 +273,6 @@ def refuse(job: Job, reason: str, alerts: Alerts, log: Log, hb: Heartbeat | None
         hb.finish("refused", 0, reason)
     if ping and job.name in HC_JOBS:
         hc.ping(hc_slug(job), "fail", f"refused: {reason}")
-        if job.name == "paper-b":
-            hc.ping("wt-paper-b-armed", "fail", "refused before arming")
     return 0
 
 
@@ -402,16 +305,14 @@ def run_job(job: Job, root: Path = ROOT, preflight_only: bool = False, alerts: A
             # not a failure: the run that holds the lock is the one that pings
             return refuse(job, "another run of this job is still in progress", alerts, log, ping=False)
         hb = Heartbeat(job.name, _sha(root))
+        if job.name == "paper-s" and not sleeve_s_keys():
+            # The runner would refuse to start and exit 1, which systemd restarts and pages as a failure. A host
+            # whose owner has not stored the pair has nothing to run: a refusal, once a day, exit 0.
+            return refuse(job, "the stock desk's key pair is not on this host", alerts, log, hb)
         fails = preflight.failures(preflight.run_checks(root)) if job.preflight else []
-        extra_env: dict[str, str] = {}
         if fails:
             reason = "; ".join(f"{c.name}: {c.detail}" for c in fails)
-            if not (job.name == "paper-b" and exits_only_allowed(fails) and b_exposure()):
-                return refuse(job, reason, alerts, log, hb, page=preflight.page_reason(fails))
-            log(f"preflight refused ({reason}), but strategy B holds a position: starting in exits-only mode")
-            alerts.once_per_day(f"refuse:{job.name}", f"{word(job.name, KNOWN_JOBS, 'a job')}: entries off, exits only",
-                                preflight.page_reason(fails), 4)
-            extra_env["WT_EXITS_ONLY"] = "1"
+            return refuse(job, reason, alerts, log, hb, page=preflight.page_reason(fails))
 
         start = _now()
         sessions, exact = load_sessions(start)
@@ -430,39 +331,28 @@ def run_job(job: Job, root: Path = ROOT, preflight_only: bool = False, alerts: A
 
         work_start = _now()
         try:
-            code, killed, terminated = run_child(job, root, log, deadline_for(job, work_start, sessions), extra_env)
+            code, killed, terminated = run_child(job, root, log, deadline_for(job, work_start, sessions))
         except OSError as e:            # the child could not start (missing interpreter, fork failure, ...)
             log(f"could not start {job.name}: {e.__class__.__name__}: {e}")
             code, killed, terminated = 127, False, False
         log(f"end {job.name}: exit {code}{' (deadline kill)' if killed else ''}{' (SIGTERM)' if terminated else ''}")
 
-        if job.name == "paper-b":
-            outcome = paper_outcome(journal_since(start))
-            alert_paper(outcome, alerts)
-            if not outcome["armed"]:
-                # The runner pings "armed" itself when its loop reaches the open. A day with no session (or a run
-                # that started too early and handed over to the scheduled start) is fine; anything else is not.
-                if outcome["no_session"]:
-                    hc.ping("wt-paper-b-armed", "", "no session today")
-                else:
-                    hc.ping("wt-paper-b-armed", "fail", f"never armed (exit {code})")
         if job.name in HC_JOBS:
             hc.ping(hc_slug(job), "" if code == 0 else "fail", f"exit {code}")
         key = f"job:{job.name}"
         if code == 0:
             alerts.resolve(key, f"{word(job.name, KNOWN_JOBS, 'a job')} recovered",
                            f"{word(job.name, KNOWN_JOBS, 'a job')} completed normally.")
-            if job.name == "forward" and (line := daily_summary(start)):
-                paused = " Paper B entries are paused (KILL file present)." if KILL.exists() else ""
+            if job.name == "forward" and (line := forward_summary()):
+                paused = " The KILL file is present: new entries are paused." if KILL.exists() else ""
                 alerts.once_per_day("summary", "Trading Lab daily summary", line + paused, 2)
             if job.name == "weekly":
                 publish_evidence(root, log, alerts)
             hb.finish("ok", 0)
         else:
-            prio = 5 if ((killed or terminated) and job.name == "paper-b") else 4
             alerts.fire(key, f"{word(job.name, KNOWN_JOBS, 'a job')} failed",
                         f"{word(job.name, KNOWN_JOBS, 'a job')} {failed_how(killed, terminated, code)}. "
-                        f"See {log_page(log.path)}.", prio)
+                        f"See {log_page(log.path)}.", 4)
             hb.finish("timeout" if killed else "terminated" if terminated else "failed", code)
     run_followers(job, root, alerts, log)
     return code
@@ -483,7 +373,7 @@ def cadence(now: dt.datetime | None = None, heartbeats: Path | None = None) -> l
 
 def status(root: Path = ROOT) -> int:
     """What's going on, in the terminal: last runs, firing alerts, kill switch, preflight."""
-    print(f"KILL switch: {'ON (no new paper-B entries)' if (root / 'KILL').exists() else 'off'}")
+    print(f"KILL switch: {'ON (no new entries)' if (root / 'KILL').exists() else 'off'}")
     print("Last runs:")
     for name, r in last_runs().items():
         print(f"  {name:8} {r.get('status', '?'):8} exit={r.get('exit')} started={r.get('started')} "
@@ -502,14 +392,14 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m wt.ops.jobs")
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run")
-    r.add_argument("job", choices=sorted(JOBS.keys() | RETIRED_JOBS))
+    r.add_argument("job", choices=sorted(JOBS.keys() | GONE_JOBS.keys()))
     r.add_argument("--preflight-only", action="store_true")
     sub.add_parser("status")
     a = ap.parse_args(argv)
     if a.cmd == "status":
         return status()
     if a.job not in JOBS:                   # a leftover unit of a retired job: nothing to run, nothing wrong
-        print(f"{a.job} is no longer a job in this release (DEC-0036); nothing run", file=sys.stderr)
+        print(f"{a.job} is no longer a job in this release ({GONE_JOBS[a.job]}); nothing run", file=sys.stderr)
         return 0
     return run_job(JOBS[a.job], preflight_only=a.preflight_only)
 

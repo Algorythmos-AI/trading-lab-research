@@ -8,7 +8,7 @@ Claude never installs or reloads units: `wt-deploy` renders them into var/units/
 
 Design (reviewed 2026-09-29):
   * Jobs run as the unprivileged `wt` user. Secrets come from the tmpfs file root's wt-secrets.service writes once
-    per boot; `Wants=` (not `Requires=`), so restarting wt-secrets for a key rotation never restarts paper-b.
+    per boot; `Wants=` (not `Requires=`), so restarting wt-secrets for a key rotation never restarts a paper runner.
   * Type=exec with RuntimeMaxSec above each job's own deadline plus its in-process wait: the jobs time themselves;
     systemd only catches a runaway. RestartPreventExitStatus=124 keeps a deadline kill from restarting.
   * Restart=on-failure with RestartSec=60 and at most 3 starts in 6 h, so a crash loop can't burn through. Only
@@ -18,7 +18,7 @@ Design (reviewed 2026-09-29):
     writes its heartbeat and pages (wt.ops.jobs); systemd kills the rest after 60 s.
   * OnFailure pages through wt-alert@, which doesn't depend on the secrets unit.
   * Timers fire in America/New_York (`Job.et`), AccuracySec=1s, Persistent=false: a missed start is not replayed
-    after a reboot; wt-boot-reconcile starts paper-b and forward if the boot falls inside their windows.
+    after a reboot; wt-boot-reconcile starts the paper runners and forward if the boot falls inside their windows.
 """
 from __future__ import annotations
 
@@ -38,8 +38,8 @@ STATIC_DIR = Path("deploy/oci/systemd")       # installed to /etc/systemd/system
 # cgroup memory per job on the 4 GB VM (e2-medium): (MemoryHigh, MemoryMax, MemorySwapMax). The heavy jobs throttle at
 # High and are killed at Max rather than pushing the paper runner, which runs at the same time, into the OOM killer.
 # The tail loader keeps them near 1 GB, so these are fuses, not budgets. The publisher's limit covers its collector
-# child too. The runner itself is never capped (OOMScoreAdjust=-500 instead): killing it mid-session is the worst
-# outcome.
+# child too. The runners themselves are never capped (OOMScoreAdjust=-500 instead): killing one mid-session is the
+# worst outcome.
 MEMORY: dict[str, tuple[str | None, str, str | None]] = {
     "routine": ("1536M", "2G", "512M"),
     "forward": ("1536M", "2G", "512M"),
@@ -97,7 +97,7 @@ def service(job: Job, root: Path, user: str = USER) -> str:
         "PrivateTmp=yes",
         "ProtectSystem=full",
     ]
-    if job.name in ("paper-b", "paper-o"):
+    if job.name in ("paper-s", "paper-o"):
         lines.append("OOMScoreAdjust=-500")                    # the last thing the kernel should kill
     if job.name == "lab-tape":
         lines += list(LAB_CAPS)
