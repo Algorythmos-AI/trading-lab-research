@@ -425,9 +425,9 @@ def gap_e2(bars: pd.DataFrame, ctx: dict[str, Any], now_min: int,
     h, low = bars.h.to_numpy(float), bars.l.to_numpy(float)
     trig1, stop1 = round(h[0] + TICK, 4), round(low[0] - TICK, 4)
     if _room(ctx, trig1, stop1):
-        if len(bars) == 1:
-            return GapOrder("e2", trig1, stop1, 0, E2_ONE_MIN + 1, one_bar=True) if now_min == E2_ONE_MIN else None
-        if int(m[1]) == E2_ONE_MIN and h[1] >= trig1:
+        if len(bars) == 1 and now_min == E2_ONE_MIN:
+            return GapOrder("e2", trig1, stop1, 0, E2_ONE_MIN + 1, one_bar=True)
+        if len(bars) > 1 and int(m[1]) == E2_ONE_MIN and h[1] >= trig1:
             return None                                        # it triggered: the ladder's one attempt is spent
     if now_min < E2_FIVE_FROM:
         return None

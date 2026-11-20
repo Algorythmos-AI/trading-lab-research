@@ -1,11 +1,34 @@
 """Synthetic gap days for the Gap Hunter tests (tests/unit/test_gap_live.py, test_runner_s_gap.py). No market data."""
 from __future__ import annotations
 
+import datetime as dt
+
 import numpy as np
 import pandas as pd
 from spec_bars import flat, minute_bars
 
 from wt.signals.patterns import Pattern
+
+POOL_DAY = dt.date(2024, 3, 1)
+
+
+# ---- a 09:25 pool, as scripts/build_pool.py writes the columns Gap Hunter reads -----------------------------------------
+def pool_row(symbol: str, **kw) -> dict:
+    """A pool row that passes Gap Hunter's hard filters with no headline (volume carries it)."""
+    base = {"date": POOL_DAY, "symbol": symbol, "price_0925": 5.0, "gap_pct": 20.0, "pm_volume": 300_000.0, "rvol_pm": 5.0,
+            "float_shares": 10_000_000.0, "catalyst_status": "none", "catalyst_category": "", "catalyst_score": 0.0,
+            "former_runner": False, "headlines_n": 0, "trend_ok": False, "window_ok": False, "pm_consolidation": False,
+            "suspect_split": False, "pm_high": float("nan"), "pm_pattern": None, "pm_pattern_trigger": float("nan"),
+            "pm_pattern_stop": float("nan"), "overhead_levels": [99.0]}
+    return {**base, **kw}
+
+
+def write_pool(root, *rows: dict, pm: pd.DataFrame | None = None, day: dt.date = POOL_DAY) -> None:
+    (root / "candidates").mkdir(exist_ok=True)
+    pd.DataFrame(list(rows)).to_parquet(root / "candidates" / f"{day}.parquet")
+    if pm is not None:
+        (root / "pm_bars").mkdir(exist_ok=True)
+        pm.to_parquet(root / "pm_bars" / f"{day}.parquet")
 
 
 def bucket(o: float, h: float, low: float, c: float, v: float) -> list[tuple]:

@@ -135,3 +135,30 @@ def test_a_failed_breakout_bar_exits_at_the_next_open_and_only_then():
     assert [a.reason for a in sl.wt_step(bars.iloc[:11], s)] == ["breakout_volume_fail"]
     ok = sl.wt_start(10.0, 9.8, 4, t, None)
     assert sl.wt_step(bars.iloc[:11], ok) == []
+
+
+@pytest.mark.parametrize("wait", [0, 2, 4])
+def test_a_breakout_check_known_some_bars_after_the_entry_exits_as_the_engine_does(wait):
+    """The five-minute entry's check completes with its five-minute bar, up to four bars after the fill. The engine
+    then exits at the next open, asking the check before that bar's target; so does the live exit."""
+    checked, reasons, after_partial = 0, set(), 0
+    for drift in (0.0, 0.03, 0.15):
+        for seed in range(40):
+            bars = tape(seed, drift=drift)
+            trigger = round(float(bars.c.iloc[5]) + 0.02, 2)
+            n = len(bars)
+            for ok in (False, True):
+                bv = {"complete": np.minimum(np.arange(n) + wait, n - 1), "ok": np.full(n, ok)}
+                sig = EntrySignal(5, trigger, round(trigger - 0.20, 2), None, "GG-3", meta={"strict_collar": True, "bv": bv})
+                tr = engine(bars, sig, 1.0, flatten=230)
+                if tr is None:
+                    continue
+                entry_i = int(np.nonzero(pd.to_datetime(bars.t, utc=True) == tr.entry_time)[0][0])
+                mine = walk(bars, sig, entry_i, tr.entry, tr.qty, flatten=230, bv_fail=not ok, bv_i=entry_i + wait)
+                assert same(mine, tr.exits), (seed, wait, ok, mine, tr.exits)
+                checked += 1
+                reasons |= {e[3] for e in tr.exits}
+                after_partial += [e[3] for e in tr.exits] == ["partial_t1", "breakout_volume_fail"]
+    assert checked > 80 and "breakout_volume_fail" in reasons
+    if wait:
+        assert after_partial > 0              # the first target can come before the check is known; the rest still leaves

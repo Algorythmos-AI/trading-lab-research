@@ -933,6 +933,8 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                 gap_dead.add(str(r["dead"]))
         if primary is not None:
             allow({primary})
+        if isinstance(plan, GapPlan):                          # the order (or position) this restart found in play
+            gap_rested[0] = f"{plan.code}|{plan.signal_t}|{plan.trigger:.2f}|{plan.initial_stop:.2f}"
 
     kill_on = KILL.exists()
     log("armed", day=day, trial=trial, entries_off=off, kill=kill_on, flatten=flatten_dt, symbols=len(symbols),
@@ -1286,6 +1288,8 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         b = bars.get(primary)
         if minute == gap_minute[0] or b is None or not len(b):
             return
+        if pd.Timestamp(now).floor("min") != minute:
+            return      # the first seconds of a minute, whose predecessor's bar is not read yet: nothing is decided
         gap_minute[0] = minute
         local = minute.tz_convert(ET)
         now_min = local.hour * 60 + local.minute

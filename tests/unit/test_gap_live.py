@@ -174,6 +174,18 @@ def test_an_order_rests_only_inside_its_own_window():
     assert sl.gap_orders(bars.iloc[:0], ctx, 571) == [] and sl.gap_orders(bars, ctx, 660) == []
 
 
+def test_the_ladder_goes_on_to_its_five_minute_leg_when_no_bar_prints_until_0935():
+    rows = OPEN + flat(40, 5.02)
+    bars = minute_bars(rows).drop(index=[1, 2, 3, 4]).reset_index(drop=True)     # 09:31 to 09:34 never print
+    ctx = {"overhead": []}
+    assert sl.gap_e2(bars.iloc[:1], ctx, 573) is None
+    five = sl.gap_e2(bars.iloc[:1], ctx, 575)                          # the first five minutes are the 09:30 bar alone
+    assert (five.trigger, five.stop, five.signal_i, five.one_bar) == (5.06, 4.94, 0, False)
+    sig = orb_ladder(bars, ctx)
+    assert sig.setup == "GG-2:orb_5m" and (sig.trigger, sig.stop, sig.bar_index) == (5.06, 4.94, 0)
+    assert not compare("e2", bars, ctx, 0.01)["trade"]                 # the flat tape never reaches it: both agree
+
+
 def test_an_order_whose_trigger_was_reached_or_whose_stop_traded_first_is_gone():
     ctx = {"pm_high": 5.10, "overhead": []}
     reached = minute_bars(OPEN + flat(3, 5.02) + [(5.02, 5.11, 5.02, 5.10, 50_000)] + flat(5, 5.10))

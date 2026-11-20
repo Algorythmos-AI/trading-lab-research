@@ -12,6 +12,7 @@ import json
 
 import pandas as pd
 import pytest
+from gap_days import pool_row, write_pool
 from spec_bars import minute_bars
 from test_runner_s import (DAY, KEYS, PREV, SESSIONS, at, events, flat_and_clean, journal, one)
 from test_runner_s import env as env  # noqa: F401 — the shared state fixture
@@ -53,24 +54,6 @@ def tape_of(rows: list[tuple], spread: float = 0.02, more: dict[str, list[tuple]
         bars[sym] = pd.concat([prev, today], ignore_index=True)
         quotes[sym] = quotes_for(today, spread)
     return Tape(bars, quotes)
-
-
-def pool_row(symbol: str, **kw) -> dict:
-    """A pool row that passes Gap Hunter's hard filters with no headline (volume carries it)."""
-    base = {"date": DAY, "symbol": symbol, "price_0925": 5.0, "gap_pct": 20.0, "pm_volume": 300_000.0, "rvol_pm": 5.0,
-            "float_shares": 10_000_000.0, "catalyst_status": "none", "catalyst_category": "", "catalyst_score": 0.0,
-            "former_runner": False, "headlines_n": 0, "trend_ok": False, "window_ok": False, "pm_consolidation": False,
-            "suspect_split": False, "pm_high": float("nan"), "pm_pattern": None, "pm_pattern_trigger": float("nan"),
-            "pm_pattern_stop": float("nan"), "overhead_levels": [99.0]}
-    return {**base, **kw}
-
-
-def write_pool(root, *rows: dict, pm: pd.DataFrame | None = None, day: dt.date = DAY) -> None:
-    (root / "candidates").mkdir(exist_ok=True)
-    pd.DataFrame(list(rows)).to_parquet(root / "candidates" / f"{day}.parquet")
-    if pm is not None:
-        (root / "pm_bars").mkdir(exist_ok=True)
-        pm.to_parquet(root / "pm_bars" / f"{day}.parquet")
 
 
 @pytest.fixture
@@ -494,3 +477,67 @@ def test_a_gap_plan_keeps_its_own_fields_across_a_restart(gap):
     assert (staged.trigger, staged.stop, staged.expires_at.minute) == (5.06, 4.94, 32)
     assert runner_s.staged_of(runner_s.GapPlan(date=str(DAY), strategy="S", symbol="ABC", qty=1, trigger=1.0,
                                                limit=1.1, stop=0.9, target=0.0)) is None
+
+
+def test_a_restart_between_repriced_orders_numbers_the_next_plan_after_the_days_last(gap):
+    _, sim = simulated("e4", TURN)
+    tape = tape_of(TURN)
+    b = crashed(tape, at(9, 32, 40))                                   # two entry orders sent; the second is resting
+    assert sum(1 for c in b.placed if b.orders[c].side == "buy") == 2
+    session(tape, start=(9, 33), broker=b)
+    same_trade(gap, b, sim, "e4")
+    j = journal(gap)
+    assert [p["attempt"] for p in events(j, "entry_placed")] == [1, 2, 3] and not events(j, "entry_not_placed")
+    assert len(b.placed) == len(set(b.placed))                         # no order id was sent twice
+
+
+def test_an_entry_stopped_on_the_bar_it_filled_on_is_the_days_trade(gap):
+    # 09:31 breaks the high and falls through the stop in the same minute: in and out before the next poll
+    rows = [OPEN, (5.03, 5.10, 4.90, 4.92, 80_000)] + RUN[2:]
+    _, sim = simulated("e2", rows)
+    assert [e[3] for e in sim.exits] == ["stop"] and sim.exits[0][0] == sim.entry_time
+    b = session(tape_of(rows))
+    closed = same_trade(gap, b, sim, "e2")
+    j = journal(gap)
+    assert closed["reason"] == "stop" and one(j, "gap_day_done")["reason"] == "traded"   # a trade, not a missed order
+    assert len(events(j, "entry_placed")) == 1                         # and the later rules' orders are never sent
+
+
+def test_a_filled_plan_of_today_is_the_days_trade_even_when_the_journal_lost_it(gap):
+    # the plan file says today's trade happened and closed; the journal row that says so was never written
+    p = runner_s.GapPlan(date=str(DAY), strategy="S", symbol="ABC", qty=10, trigger=5.06, limit=5.07, stop=4.94,
+                         target=0.0, attempt=1, seq=runner_s.plan_seq(1) + 3, filled_qty=10, avg_entry=5.07,
+                         exit_fill_price=4.93, exit_reason="stop", state="closed", entry_counted=True, recorded=True,
+                         code="e2", signal_t="2024-03-01T14:30:00+00:00", expires="2024-03-01T09:32:00-05:00")
+    runner_s.Store().save(p)
+    b = session(tape_of(NO_ENTRY[:1] + RUN[2:]), start=(9, 34))        # a tape on which a fresh day would order
+    j = journal(gap)
+    assert b.placed == [] and not events(j, "entry_placed")
+    assert one(j, "session_end")["gap_done"] == "traded"
+
+
+def test_a_resting_order_gives_way_to_a_lower_trigger_after_a_confirmed_cancel(gap):
+    # e1 rests over a pre-market pattern's level from 09:32; 09:32 closes under the open, so e4 has an order under it.
+    # (A quiet bar follows the entry bar: the replay broker fills any stop placed in the minute after an entry
+    # against the entry bar's low, which is right for the first stop and wrong for a stop moved to breakeven then.)
+    from wt.signals.patterns import Pattern
+    level = {"pm_pattern": "bull_flag", "pm_pattern_trigger": 5.10, "pm_pattern_stop": 4.90}
+    ctx = {"pm_pattern": Pattern("bull_flag", 5.10, 4.90, -1, 5.10)}
+    write_pool(gap, pool_row("ABC", **level), pool_row("XYZ", rvol_pm=3.0))
+    rows = [OPEN, (5.02, 5.04, 5.00, 5.02, 50_000), (5.02, 5.03, 4.96, 4.98, 50_000), (4.98, 5.03, 4.97, 5.02, 50_000),
+            (5.02, 5.20, 5.01, 5.18, 400_000), (5.18, 5.20, 5.15, 5.18, 60_000)] + LEVEL_RUN
+    sig, sim = simulated("e4", rows, ctx)
+    assert (sig.trigger, sig.stop, sig.bar_index) == (5.04, 4.94, 3)
+    other, _ = simulated("e1", rows, ctx)
+    assert (other.trigger, other.stop) == (5.11, 4.91)                 # the same 09:34 bar would have filled e1 too
+    b = session(tape_of(rows))
+    same_trade(gap, b, sim, "e4")                                      # the lower trigger is the day's trade
+    j = journal(gap)
+    assert [(p["code"], p["trigger"]) for p in events(j, "entry_placed")] == \
+        [("e2", 5.06), ("e1", 5.11), ("e4", 5.04), ("e4", 5.04)]
+    assert [(c["code"], c["why"], c["state"]) for c in events(j, "entry_cancelled")] == \
+        [("e2", "expired", "aborted"), ("e1", "replaced", "aborted"), ("e4", "expired", "aborted")]
+    buys = [c for c in b.placed if b.orders[c].side == "buy"]
+    assert len(buys) == 4 and len(b.placed) == len(set(b.placed))
+    # one open buy at a time: each was cancelled before the next was accepted
+    assert [b.orders[c].status.name for c in buys] == ["CANCELED", "CANCELED", "CANCELED", "FILLED"]
