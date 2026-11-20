@@ -179,3 +179,112 @@ class NameState:
         if self.attempts >= MAX_ATTEMPTS:
             self.done = "attempts"
         self.start_t, self.inclusive = pd.Timestamp(exit_t).tz_convert("UTC").floor("min"), False
+
+
+# ---- the registered gap exit, one closed bar at a time ----------------------------------------------------------------
+# wt.backtest.management.WT ("SPEC-0001 EXT-01..06"), as the engine applies it bar by bar:
+#   stop first; a failed breakout bar exits at the next open; then, on bars after the entry bar, the first target
+#   sells half (the whole position when it is under two shares) and moves the stop to breakeven; before that target
+#   the stagnation stop applies; after it the stop trails the low of each completed five-minute bucket and a
+#   five-minute close under EMA9 exits at the next open.
+WT_TARGET_R = 2.0
+EMA_N = 9
+
+
+@dataclass
+class WTState:
+    """What the gap exit remembers between bars. `stop` is where the protective stop should rest now."""
+    entry: float
+    stop0: float                 # the stop at entry: R is measured against it
+    qty0: int
+    t1: float                    # the first target
+    entry_bar: pd.Timestamp      # start of the bar the entry filled on
+    stop: float
+    partial_done: bool = False
+    last_bucket: int = -1        # the last completed five-minute bucket already applied
+    stop_reason: str = "stop"    # what a stop-out is called: the engine renames it once the stop has trailed
+    bv_fail: bool = False        # the breakout bar failed its volume check: out at the next open
+
+    @property
+    def risk(self) -> float:
+        return self.entry - self.stop0
+
+    @property
+    def t1_price(self) -> float:
+        """The first target as an order price: on the cent grid, never under the target itself."""
+        return math.ceil(round(self.t1 * 100, 6)) / 100
+
+    @property
+    def partial_qty(self) -> int:
+        """Shares the first target sells: half, or everything when the position is under two shares."""
+        return self.qty0 if self.qty0 < 2 else self.qty0 // 2
+
+
+def wt_start(entry: float, stop0: float, qty0: int, entry_bar: Any, signal_target: float | None,
+             bv_fail: bool = False) -> WTState:
+    risk = entry - stop0
+    t1 = signal_target if signal_target and signal_target > entry else entry + WT_TARGET_R * risk
+    # t1 is kept exactly as the engine computes it (entry + 2 x (entry - stop), unrounded): the engine compares a
+    # bar's high with that number, and a rounded copy would call a touch one bar sooner or later than it does
+    return WTState(entry=entry, stop0=stop0, qty0=int(qty0), t1=float(t1),
+                   entry_bar=pd.Timestamp(entry_bar).tz_convert("UTC").floor("min"), stop=stop0, bv_fail=bv_fail)
+
+
+@dataclass(frozen=True)
+class WTAction:
+    """One thing the gap exit asks for at the close of the newest bar.
+    kind: "exit" (the whole position, at the market, at the next open), "partial" (sell `qty` at `price` or
+    better: the first target), or "stop" (raise the resting stop to `price`)."""
+    kind: str
+    reason: str
+    qty: int = 0
+    price: float = 0.0
+
+
+def _ema(values: np.ndarray, n: int) -> np.ndarray:
+    out = np.empty(len(values), float)
+    k, acc = 2.0 / (n + 1), float(values[0])
+    for i, v in enumerate(values):
+        acc = float(v) if i == 0 else acc + k * (float(v) - acc)
+        out[i] = acc
+    return out
+
+
+def wt_on_partial(s: WTState) -> WTAction:
+    """The first target has sold: the stop goes to breakeven."""
+    s.partial_done = True
+    s.stop = max(s.stop, s.entry)
+    return WTAction("stop", "breakeven", price=round(s.stop, 4))
+
+
+def wt_step(bars: pd.DataFrame, s: WTState, warm_c5: list[float] | None = None) -> list[WTAction]:
+    """What the exit asks for at the close of the newest closed bar, in the engine's order. `bars`: the session's
+    closed bars. The stop itself rests at the broker and the first target is a price to sell at, so neither is
+    decided here; this is everything else. The state is advanced as the engine advances its own."""
+    if not len(bars):
+        return []
+    last_t = pd.Timestamp(bars.t.iloc[-1]).tz_convert("UTC")
+    if last_t < s.entry_bar:
+        return []
+    if s.bv_fail and last_t == s.entry_bar:
+        return [WTAction("exit", "breakout_volume_fail")]
+    if last_t == s.entry_bar:
+        return []                                             # targets and rule exits start on the bar after entry
+    if not s.partial_done:
+        return [WTAction("exit", f"time_stop_{STAGNATION_MIN}m")] if stagnant(bars, s.entry_bar, s.entry, s.stop0) else []
+    b5, done = resample_clock(bars, 5)
+    k = int(done[-1])
+    if k < 0 or k == s.last_bucket:
+        return []
+    s.last_bucket = k
+    s.stop_reason = "runner_prior_5m_low"
+    out: list[WTAction] = []
+    low = float(b5.l.iloc[k])
+    if low > s.stop + 1e-9:
+        s.stop = low
+        out.append(WTAction("stop", "runner_prior_5m_low", price=round(low, 4)))
+    warm = np.asarray(warm_c5 or [], float)
+    e5 = _ema(np.r_[warm, b5.c.to_numpy(float)], EMA_N)[len(warm):]
+    if float(b5.c.iloc[k]) < float(e5[k]):
+        out.append(WTAction("exit", "runner_5m_close_below_ema9"))
+    return out
