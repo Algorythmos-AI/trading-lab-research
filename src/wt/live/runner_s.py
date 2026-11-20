@@ -1401,6 +1401,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         # the newest closed bar, once
         if b is not None and len(b) and str(b.t.iloc[-1]) != p.wt.get("bar"):
             last = pd.Timestamp(b.t.iloc[-1])
+            wt_tries.clear()                                   # a stop the broker would not take is asked again each bar
             late = False
             if p.bv and not p.wt.get("bv_known"):
                 at = np.nonzero((pd.to_datetime(b.t, utc=True) == wt.entry_bar).to_numpy())[0]

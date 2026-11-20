@@ -455,8 +455,11 @@ def test_the_journal_names_rules_by_code_and_never_carries_a_setup_or_a_headline
                              catalyst_score=0.8, headlines_n=2, catalyst_headline="Example Corp beats"),
                pm=PM.assign(symbol="ABC"))
     session(tape_of(setup + after("fill", trigger, stop)))
-    text = (gap / "live" / "smallcap_journal.jsonl").read_text()
-    assert '"code": "e3"' in text and '"trial": "HYP-0071"' in text
+    raw = (gap / "live" / "smallcap_journal.jsonl").read_text()
+    assert '"code": "e3"' in raw and '"trial": "HYP-0071"' in raw
+    # every word a row carries, without the hash chain (a hash is hex: it can spell "abcd" by chance)
+    text = "\n".join(json.dumps({k: v for k, v in json.loads(line).items() if k != "prev_sha256"})
+                     for line in raw.splitlines())
     for word in ("headline", "catalyst", "earnings", "Example Corp", "GG-", "bull_flag", "flat_top", "abcd", "orb",
                  "red_to_green", "continuation", "level_break", "pm_pattern", "pm_high"):
         assert word not in text, word
@@ -541,3 +544,38 @@ def test_a_resting_order_gives_way_to_a_lower_trigger_after_a_confirmed_cancel(g
     assert len(buys) == 4 and len(b.placed) == len(set(b.placed))
     # one open buy at a time: each was cancelled before the next was accepted
     assert [b.orders[c].status.name for c in buys] == ["CANCELED", "CANCELED", "CANCELED", "FILLED"]
+
+
+def test_nothing_new_rests_while_the_old_orders_cancel_is_not_confirmed(gap):
+    # the day on which e1 gives way to e4, with a broker that loses the first cancel of e1's order
+    from wt.signals.patterns import Pattern
+    level = {"pm_pattern": "bull_flag", "pm_pattern_trigger": 5.10, "pm_pattern_stop": 4.90}
+    write_pool(gap, pool_row("ABC", **level), pool_row("XYZ", rvol_pm=3.0))
+    rows = [OPEN, (5.02, 5.04, 5.00, 5.02, 50_000), (5.02, 5.03, 4.96, 4.98, 50_000), (4.98, 5.03, 4.97, 5.02, 50_000),
+            (5.02, 5.20, 5.01, 5.18, 400_000), (5.18, 5.20, 5.15, 5.18, 60_000)] + LEVEL_RUN
+    _, sim = simulated("e4", rows, {"pm_pattern": Pattern("bull_flag", 5.10, 4.90, -1, 5.10)})
+    lost, most = [], [0]
+
+    def hook(now, b):
+        if not hasattr(b, "real_cancel"):
+            b.real_cancel = b.cancel
+
+            def cancel(cid):
+                o = b.orders.get(cid)
+                if o is not None and o.side == "buy" and o.stop_price == 5.11 and not lost:
+                    lost.append(cid)                                   # the cancel never reaches the broker
+                    return
+                b.real_cancel(cid)
+            b.cancel = cancel
+        most[0] = max(most[0], sum(1 for o in b.open_orders() if o.side == "buy"))
+
+    b = session(tape_of(rows), hook=hook)
+    assert len(lost) == 1 and most[0] == 1                             # never two open buys, at any tick of the clock
+    same_trade(gap, b, sim, "e4")
+    j = journal(gap)
+    cancelled = [(c["code"], c["why"], c["state"]) for c in events(j, "entry_cancelled")]
+    assert cancelled[:3] == [("e2", "expired", "aborted"), ("e1", "replaced", "entry_working"),
+                             ("e1", "replaced", "aborted")]
+    placed = events(j, "entry_placed")
+    assert [p["code"] for p in placed] == ["e2", "e1", "e4", "e4"] and not events(j, "entry_not_placed")
+    assert j.index(placed[2]) > j.index(events(j, "entry_cancelled")[2])    # placed only after the confirmed cancel
