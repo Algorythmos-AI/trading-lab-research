@@ -4317,6 +4317,116 @@
           "maxItems": 2000
         }
       }
+    },
+    "gap_hunter": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "kill": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "latched": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "sessions": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "last_session": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "trades": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "total_r": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "mean_r": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "open": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "funnel": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "session": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "kept": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "passed": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "tier1": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "tier2": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "primary": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        }
+      }
     }
   },
   "required": [

@@ -192,19 +192,23 @@ describe("the morning funnel", () => {
 });
 
 describe("the Gap Hunter page", () => {
-  it("says plainly what is not sent, from the served fixture, with no number of its own and nothing of the retired rule", () => {
+  it("reads the host's own block from the served fixture, with nothing of the retired rule", () => {
     const body = page(fixtureV3());
     expect(body).toContain("Paper money only");
-    expect(body).toContain("No session reported yet");
     expect(body).toContain("Rule DEC-0068 · not in the registry yet");
-    expect(body).toContain("Trades and results are not sent yet");
     expect(body).toContain("No session run in this snapshot");
     expect(body).toContain("No Gap Hunter alert is firing");
-    expect(body).toMatch(/A rule is switched on\s+Not sent yet/);
-    expect(body).toMatch(/Its kill switch\s+Not sent yet/);
-    // The scan's counts are there, labelled as the scan's and not as Gap Hunter's rule.
+    // the fixture's gap_hunter block (scripts/gen_fixture.py GAP_HUNTER): armed three times, nothing switched on
+    expect(body).toMatch(/A rule is switched on\s+No/);
+    expect(body).toMatch(/Its kill switch\s+Off/);
+    expect(body).toMatch(/Sessions armed\s+3/);
+    expect(body).toMatch(/Closed trades\s+0/);
+    expect(body).toMatch(/Average R per trade\s+Not sent yet/);       // no trade, so no average
+    // Gap Hunter's own selection, in counts
     expect(body).toContain("Morning funnel");
-    expect(body).toContain("The scan's own counts. Gap Hunter's selection from it (DEC-0068) is not sent yet.");
+    expect(body).toMatch(/In the morning pool\s+38/);
+    expect(body).toMatch(/Tier 2\s+4/);
+    expect(body).toContain("First pick: Yes");
     expect(body).not.toMatch(/QQQ|Robot B|sleeve|G1|[Hh]oldout|proven|Virtual|paper-[bs]|US\$/);
     // No candidate's symbol: counts only (the fixture's candidate is LABT, its near misses ZZZA to ZZZC).
     expect(body).not.toMatch(/LABT|ZZZ[ABC]/);
