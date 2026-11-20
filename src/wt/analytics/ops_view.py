@@ -13,8 +13,8 @@ from typing import Any
 
 from wt.core.clock import ET
 
-SLA_JOBS = ("routine", "paper-b", "forward", "weekly", "dashboard")
-SESSION_JOBS = ("routine", "paper-b", "forward")
+SLA_JOBS = ("routine", "paper-s", "paper-b", "forward", "weekly", "dashboard")
+SESSION_JOBS = ("routine", "paper-s", "paper-b", "forward")
 # The QQQ rule's job left the schedule (DEC-0069). Its row stays, with the runs it had; a day after its last run is
 # "none" (not expected), never "missed".
 UNSCHEDULED_JOBS = frozenset({"paper-b"})

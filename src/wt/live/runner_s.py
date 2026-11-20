@@ -451,7 +451,7 @@ def gap_selection(day: dt.date, open_dt: dt.datetime,
             sel = gap_hunter.select(pool, load_spec("SPEC-0001"))
         except Exception as e:  # noqa: BLE001 — a spec or a pool the rule cannot read selects nothing
             return None, None, {"why": "selection_failed", "error": e.__class__.__name__}
-        info = {"kept": sel["kept"], "passed": sel["passed"], "tier2": len(sel["tier2"])}
+        info = {"kept": sel["kept"], "passed": sel["passed"], "tier1": len(sel["tier1"]), "tier2": len(sel["tier2"])}
         symbol = sel["primary"]
         if symbol is None:
             return None, None, {"why": "no_name_passed", **info}

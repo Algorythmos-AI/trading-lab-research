@@ -43,8 +43,8 @@ def synthetic(n_trades: int = 24, days: int = 14, n_alerts: int = 6, seed: int =
     for i in range(days):
         d = today - dt.timedelta(days=days - 1 - i)
         if d.weekday() < 5:
-            for job in ("routine", "paper-b", "forward"):
-                st = "refused" if (job == "paper-b" and i % 5 == 0) else "ok"
+            for job in ("routine", "paper-s", "forward"):
+                st = "refused" if (job == "paper-s" and i % 5 == 0) else "ok"
                 runs.append({"job": job, "status": st, "started": f"{d}T13:30:00+00:00"})
         for h in range(0, 24, 6):
             runs.append({"job": "dashboard", "status": "failed" if (i, h) == (4, 6) else "ok",
@@ -126,9 +126,14 @@ def build_v3(v2: dict[str, Any], views: dict[str, Any]) -> dict[str, Any]:
     routine = ops["routine"] = {**ops["routine"], "near": san.apply(publish.ALLOW["ops"]["routine"]["near"], NEAR)}
     routine["stages"] = [{**st, **({"scan_failed": False} if st.get("stats") else {})} for st in routine["stages"]]
     ops["forward"]["funnel"] = san.apply(publish.ALLOW["ops"]["forward"]["funnel"], FUNNEL)
+    out["gap_hunter"] = san.apply(publish.ALLOW["gap_hunter"], GAP_HUNTER)
     return out
 
 
+# Gap Hunter (synthetic): armed with no rule switched on, so no trades; the newest morning picked a first name
+GAP_HUNTER = {"enabled": False, "kill": False, "latched": False, "sessions": 3, "last_session": "2026-10-08",
+              "trades": 0, "total_r": 0.0, "mean_r": None, "open": 0,
+              "funnel": {"session": "2026-10-08", "kept": 38, "passed": 6, "tier1": 6, "tier2": 4, "primary": True}}
 _BOOK = {"strategy": "r3:F:GG-1", "hyp": "HYP-0010", "sessions": 9, "errors": 0, "first": "2026-09-28", "last": "2026-10-08",
          "trades": 3, "total_r": -0.8, "max_dd_r": 1.8, "last_trade": "2026-10-07", "risk_usd": 6, "nominal_usd": -4.8,
          "signals": 4, "refused": 1, "shadow_resolved": 1}

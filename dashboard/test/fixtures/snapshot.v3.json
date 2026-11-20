@@ -72,7 +72,7 @@
    },
    {
     "at": "2026-09-24T13:30:00+00:00",
-    "detail": "paper-b",
+    "detail": "paper-s",
     "kind": "job_refused",
     "source": "runs"
    },
@@ -90,7 +90,7 @@
    },
    {
     "at": "2026-09-29T13:30:00+00:00",
-    "detail": "paper-b",
+    "detail": "paper-s",
     "kind": "job_refused",
     "source": "runs"
    },
@@ -639,6 +639,25 @@
    "start": "2026-09-30T11:30:00+00:00"
   }
  ],
+ "gap_hunter": {
+  "enabled": false,
+  "funnel": {
+   "kept": 38,
+   "passed": 6,
+   "primary": true,
+   "session": "2026-10-08",
+   "tier1": 6,
+   "tier2": 4
+  },
+  "kill": false,
+  "last_session": "2026-10-08",
+  "latched": false,
+  "mean_r": null,
+  "open": 0,
+  "sessions": 3,
+  "total_r": 0.0,
+  "trades": 0
+ },
  "history": {
   "legacy": {
    "by_outcome": {
@@ -3209,6 +3228,90 @@
    },
    {
     "date": "2026-09-19",
+    "job": "paper-s",
+    "runs": 0,
+    "status": "n/a"
+   },
+   {
+    "date": "2026-09-20",
+    "job": "paper-s",
+    "runs": 0,
+    "status": "n/a"
+   },
+   {
+    "date": "2026-09-21",
+    "job": "paper-s",
+    "runs": 1,
+    "status": "ok"
+   },
+   {
+    "date": "2026-09-22",
+    "job": "paper-s",
+    "runs": 1,
+    "status": "ok"
+   },
+   {
+    "date": "2026-09-23",
+    "job": "paper-s",
+    "runs": 1,
+    "status": "ok"
+   },
+   {
+    "date": "2026-09-24",
+    "job": "paper-s",
+    "runs": 1,
+    "status": "refused"
+   },
+   {
+    "date": "2026-09-25",
+    "job": "paper-s",
+    "runs": 1,
+    "status": "ok"
+   },
+   {
+    "date": "2026-09-26",
+    "job": "paper-s",
+    "runs": 0,
+    "status": "none"
+   },
+   {
+    "date": "2026-09-27",
+    "job": "paper-s",
+    "runs": 0,
+    "status": "none"
+   },
+   {
+    "date": "2026-09-28",
+    "job": "paper-s",
+    "runs": 1,
+    "status": "ok"
+   },
+   {
+    "date": "2026-09-29",
+    "job": "paper-s",
+    "runs": 1,
+    "status": "refused"
+   },
+   {
+    "date": "2026-09-30",
+    "job": "paper-s",
+    "runs": 1,
+    "status": "ok"
+   },
+   {
+    "date": "2026-10-01",
+    "job": "paper-s",
+    "runs": 1,
+    "status": "ok"
+   },
+   {
+    "date": "2026-10-02",
+    "job": "paper-s",
+    "runs": 1,
+    "status": "ok"
+   },
+   {
+    "date": "2026-09-19",
     "job": "paper-b",
     "runs": 0,
     "status": "n/a"
@@ -3222,74 +3325,74 @@
    {
     "date": "2026-09-21",
     "job": "paper-b",
-    "runs": 1,
-    "status": "ok"
+    "runs": 0,
+    "status": "n/a"
    },
    {
     "date": "2026-09-22",
     "job": "paper-b",
-    "runs": 1,
-    "status": "ok"
+    "runs": 0,
+    "status": "n/a"
    },
    {
     "date": "2026-09-23",
     "job": "paper-b",
-    "runs": 1,
-    "status": "ok"
+    "runs": 0,
+    "status": "n/a"
    },
    {
     "date": "2026-09-24",
     "job": "paper-b",
-    "runs": 1,
-    "status": "refused"
+    "runs": 0,
+    "status": "n/a"
    },
    {
     "date": "2026-09-25",
     "job": "paper-b",
-    "runs": 1,
-    "status": "ok"
+    "runs": 0,
+    "status": "n/a"
    },
    {
     "date": "2026-09-26",
     "job": "paper-b",
     "runs": 0,
-    "status": "none"
+    "status": "n/a"
    },
    {
     "date": "2026-09-27",
     "job": "paper-b",
     "runs": 0,
-    "status": "none"
+    "status": "n/a"
    },
    {
     "date": "2026-09-28",
     "job": "paper-b",
-    "runs": 1,
-    "status": "ok"
+    "runs": 0,
+    "status": "n/a"
    },
    {
     "date": "2026-09-29",
     "job": "paper-b",
-    "runs": 1,
-    "status": "refused"
+    "runs": 0,
+    "status": "n/a"
    },
    {
     "date": "2026-09-30",
     "job": "paper-b",
-    "runs": 1,
-    "status": "ok"
+    "runs": 0,
+    "status": "n/a"
    },
    {
     "date": "2026-10-01",
     "job": "paper-b",
-    "runs": 1,
-    "status": "ok"
+    "runs": 0,
+    "status": "n/a"
    },
    {
     "date": "2026-10-02",
     "job": "paper-b",
-    "runs": 1,
-    "status": "ok"
+    "runs": 0,
+    "status": "n/a"
    },
    {
     "date": "2026-09-19",
@@ -3573,11 +3676,20 @@
    {
     "expected": 10,
     "failed": 0,
-    "job": "paper-b",
+    "job": "paper-s",
     "missed": 0,
     "ok": 8,
     "ok_pct": 80.0,
     "refused": 2
+   },
+   {
+    "expected": 0,
+    "failed": 0,
+    "job": "paper-b",
+    "missed": 0,
+    "ok": 0,
+    "ok_pct": null,
+    "refused": 0
    },
    {
     "expected": 10,
