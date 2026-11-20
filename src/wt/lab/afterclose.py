@@ -96,8 +96,9 @@ def open_interest(get: Get, headers: Mapping[str, str], roots: Sequence[str], fi
                   pause: Callable[[float], None] = time.sleep) -> dict[str, Any]:
     """The listed open interest of the recorded contracts (`keep`), by root and expiry span. Recorded contracts the
     listing did not return are counted (and written as one gap row), and the open-interest dates are counted, so a
-    stale or partial pull is visible: Alpaca's figure is as of its `open_interest_date`, often a session or two old."""
-    counts: dict[str, Any] = {"contracts": 0, "requests": 0, "failed": 0}
+    stale or partial pull is visible: Alpaca's figure is as of its `open_interest_date` (on 2026-11-19 it was dated
+    2026-11-17, morning and evening alike) and is null for about a quarter of contracts; nulls are counted too."""
+    counts: dict[str, Any] = {"contracts": 0, "requests": 0, "failed": 0, "null_open_interest": 0}
     seen: set[str] = set()
     dates: dict[str, int] = {}
     for root in sorted(set(roots)):
@@ -108,7 +109,7 @@ def open_interest(get: Get, headers: Mapping[str, str], roots: Sequence[str], fi
                          "reason": f"deadline at {root} page {page}"})
                 token = None
                 break
-            params = {"underlying_symbols": root, "limit": PAGE,
+            params = {"underlying_symbols": root, "status": "active", "limit": PAGE,
                       "expiration_date_gte": first.isoformat(), "expiration_date_lte": last.isoformat(),
                       **({"page_token": token} if token else {})}
             a = _ask(get, f"{PAPER_HOST}/v2/options/contracts", params, headers, timeout, deadline, pause)
@@ -127,9 +128,11 @@ def open_interest(get: Get, headers: Mapping[str, str], roots: Sequence[str], fi
                     seen.add(sym)
                     d = _str(r.get("open_interest_date"))
                     dates[d or "none"] = dates.get(d or "none", 0) + 1
-                    out.add({"recv_ns": recv, "symbol": sym, "open_interest": _cnt(_as_num(r.get("open_interest"))),
+                    oi = _cnt(_as_num(r.get("open_interest")))
+                    out.add({"recv_ns": recv, "symbol": sym, "open_interest": oi,
                              "open_interest_date": d, "close_price": _num(_as_num(r.get("close_price")))})
                     counts["contracts"] += 1
+                    counts["null_open_interest"] += oi is None
             nxt = body.get("next_page_token") if body else None
             token = nxt if isinstance(nxt, str) and nxt else None
             if token is None:

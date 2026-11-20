@@ -67,8 +67,8 @@ def test_open_interest_keeps_only_recorded_contracts_and_reads_string_numbers(tm
     c = afterclose.open_interest(Api(), {}, ["AAA", "BBB"], dt.date(2026, 11, 19), dt.date(2026, 11, 27), keep, ow, gw,
                                  time.monotonic() + 60, session=dt.date(2026, 11, 19))
     ow.flush()
-    assert c == {"contracts": 2, "requests": 2, "failed": 0, "missing": 0, "dates": {"2026-11-18": 2},
-                 "dated_session_or_later": 0}
+    assert c == {"contracts": 2, "requests": 2, "failed": 0, "null_open_interest": 0, "missing": 0,
+                 "dates": {"2026-11-18": 2}, "dated_session_or_later": 0}
     assert {(x["symbol"], x["open_interest"], x["close_price"]) for x in rows(tmp_path, "open_interest")} == {
         ("AAA261119C00100000", 1520, 1.02), ("BBB261119C00100000", 1520, 1.02)}
 
@@ -104,3 +104,12 @@ def test_recorded_contracts_missing_from_the_listing_are_counted(tmp_path: Path)
                                  time.monotonic() + 60, session=dt.date(2026, 11, 19))
     assert c["contracts"] == 1 and c["missing"] == 2 and c["dated_session_or_later"] == 0
     assert gw.rows[-1]["reason"] == "2 recorded contracts not in the listing"
+
+
+def test_a_listed_contract_without_open_interest_is_counted_as_null(tmp_path: Path) -> None:
+    def api(url: str, params: Any, headers: Any, timeout: float) -> Answer:
+        return Answer(200, {}, {"option_contracts": [{"symbol": "AAA261127C00100000", "open_interest": None}]}, 0.0)
+    ow, gw = PartWriter(tmp_path, "open_interest"), PartWriter(tmp_path, "gap")
+    c = afterclose.open_interest(api, {}, ["AAA"], dt.date(2026, 11, 19), dt.date(2026, 11, 27),
+                                 {"AAA261127C00100000"}, ow, gw, time.monotonic() + 60)
+    assert c["contracts"] == 1 and c["null_open_interest"] == 1 and c["missing"] == 0 and c["dates"] == {"none": 1}

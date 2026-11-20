@@ -59,9 +59,11 @@ sudo -u wt cat /home/wt/lab-tape/$(TZ=America/New_York date +%F)/manifest.json |
 
 Look at:
 - `recorded`;
-- `coverage` and `coverage_fresh`: a sample counts as fresh only on a tick whose newest tier-1 quote is at most 15 s
-  old, so the two differ when Alpaca's option feed froze;
-- `stale_ticks` and `longest_stale_s`;
+- `coverage` and `coverage_fresh`: a sample counts as fresh only while its name's newest tier-1 quote is at most 30 s
+  old, so the two differ when Alpaca served old option quotes (on 2026-11-19, the previous day's for three names
+  until about 10:30);
+- `stale_ticks`, `stale_ticks_by_name`, `first_fresh_tick_by_name` (tick 0 is 09:30, one tick is 5 s) and
+  `longest_stale_s`;
 - `ticks_down`: ticks nobody ran, from a late start, a crash or a stop;
 - `opening_complete`;
 - `stopped`: empty on a normal day;
@@ -84,7 +86,7 @@ never hands back a quote the recorder did not sample at that time.
 | `stopped: "free disk under 17 GB"` | Free disk: see `disk-full.md`. The paper runners refuse only under 3 GB, so they were never at risk |
 | `stopped: "memory limit"` or `"N errors in a row"` | Read the day's log; the session is kept and the next one starts fresh |
 | A folder with `state.json` and no manifest after the close | The job was stopped and did not restart. `sudo systemctl start wt-lab-tape` the same day writes the manifest with what it has. If you leave it, the next weekday's run closes it as `never finished` and archives it |
-| `stopped` empty but `stale_ticks` high, or a `feed` gap row "stale: ..." | Alpaca's option snapshots stopped moving while the recorder ran. Nothing to fix on the host; the session may not count |
+| `stopped` empty but `stale_ticks` high, or a `feed` gap row "<name> stale: ..." | Alpaca's option snapshots for that name were old or stopped moving while the recorder ran. Nothing to fix on the host; the session may not count |
 | `after_close.error` set | The pull failed (the manifest is still written). A restart the same day redoes it whole; otherwise the day keeps its stock and option tape without prints |
 | `upload.json` missing a day later | The next session's run uploads it. If it keeps failing, check the bucket token: `python -m wt.lab.archive upload` prints why |
 | The weekly check reports a bad object | An archived part differs from its receipt: keep the local copy if it is still there and investigate before anything is deleted |

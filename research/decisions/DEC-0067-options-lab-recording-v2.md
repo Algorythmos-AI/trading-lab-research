@@ -16,10 +16,17 @@
 The audit (2026-11-20) checked the recorder against the first real session. Four findings change what a session
 measures or when it counts, so they need a record:
 
-1. **A frozen feed counted as full coverage.** From 10:27:05 to 10:29:40 New York on 2026-11-19 no tier-1 option quote
-   changed on any contract while stock quotes kept arriving every tick: Alpaca's option snapshots answered the same old
-   quotes for 155 seconds. Coverage read 99.99%, because a sample counted when it was answered, not when it was new.
-   A table built on those ticks would price entries and stops from quotes two minutes old.
+1. **Stale option quotes counted as full coverage.** Coverage on 2026-11-19 read 99.99%, because a sample counted
+   when it was answered, not when it was new. Replaying the tape name by name showed:
+   - for three of the four focus names, Alpaca's OPRA snapshots answered with the **previous day's quotes from 09:30
+     until 10:29:40, 10:32:40 and 10:32:40** (the first quote under a minute old, by name);
+   - only one name was fresh from 09:30. Its quotes then stopped changing from 10:27:05 to 10:29:40 while stock quotes
+     kept arriving every tick: this is the 155-second "freeze" first seen;
+   - 39% of tier-2 rows in the 09:00 hour were also over an hour old.
+
+   A test over the whole sweep calls every one of those ticks fresh, because one name was moving. A table built on
+   them would price the 10:00 entries of three names from yesterday's close. Freshness has to be judged name by
+   name.
 2. **The tier-1 cap biases the sample.** The cap of 120 contracts per name applied to new candidates only. On
    2026-11-19 one focus name hit 120 at the open and another during the day, so no strike that came near the money
    later was ever sampled every 5 seconds. A move of the stock is exactly when that matters: the 5-second tables
@@ -32,9 +39,15 @@ measures or when it counts, so they need a record:
 
 ## Decision
 
-1. **Freshness.** A tier-1 tick is *fresh* when the newest quote answered in its sweep is at most 15 seconds old at the
-   tick. Every tier-1 sample on a stale tick is a missed sample. The recorder writes, per session, `coverage_fresh`,
-   `stale_ticks` and `longest_stale_s`, and two gap rows for each stale run.
+1. **Freshness, name by name.**
+   - A name is *fresh* at a tick when the newest tier-1 quote ever answered for it is at most 30 seconds old.
+   - The 30 seconds come from 2026-11-19: outside the stale spans, the live name's longest gap between new quotes was
+     24.7 seconds and every name's 99th percentile was about 5 seconds.
+   - A quote stamped before the open is never fresh.
+   - A tier-1 sample of a stale name is a missed sample.
+   - The recorder writes, per session, `coverage_fresh`, `stale_ticks` (ticks with any name stale),
+     `stale_ticks_by_name`, `first_fresh_tick_by_name` and `longest_stale_s` (the longest run of any one name), and
+     two gap rows for each name's stale run.
 2. **Expected samples** are counted from the freeze or from 09:35 (five minutes in, when the freeze is due), whichever is
    earlier (`samples_expected_strict`). A late start, a crash or a stop is missed coverage, never a smaller
    denominator.
@@ -42,24 +55,33 @@ measures or when it counts, so they need a record:
    - it is a regular New York session with a focus list for it;
    - the opening tier-1 set is complete;
    - `coverage_fresh_strict` >= 0.99;
-   - `longest_stale_s` <= 300;
+   - `longest_stale_s` <= 300 (so 2026-11-19 would not count);
    - the clock offset at the start and at the end is within 250 ms;
    - `tier1_crossed_share` <= 0.005;
    - `ticks_down` == 0, or the session is marked partial and its missing span is listed in every report.
-4. **The tier-1 cap** becomes 300 contracts per name, nearest strikes first.
+4. **The tier-1 cap** becomes 300 contracts per name, nearest strikes first. This takes effect only with this
+   record's acceptance, in the acceptance pull request (`tiers.Rules.t1_max_per_name`); the code here still uses 120.
    - **Budget check.** At six names that is 18 tier-1 requests every 5 seconds (216 a minute). Add tier 2 (about 50),
      stocks (12) and chains (about 12): under 300 of the recorder's 400.
    - **Candidates the cap still keeps out** are written to the tape (`member` rows, event `cap`) and counted in the
      manifest. A table may not use a contract's 5-second samples from before it joined tier 1.
-5. **Open interest is also read at 09:26 New York** for each focus name's contracts to 14 days, before the open.
-   - It is kept as the figure a trader could know that morning; the after-close pull stays as well.
-   - A table may use open interest only with an `open_interest_date` earlier than the session.
+5. **Open interest is used only with an `open_interest_date` earlier than the session.**
+   - No morning read is added. On 2026-11-19 Alpaca's listing was dated 2026-11-17 in the evening, and still the same
+     afterwards, so a morning read would give the same figure.
+   - About 27% of listed contracts had no open interest at all (1,267 of 4,716, spread across expiries). They are
+     counted (`null_open_interest`) and left blank.
 6. **Tables read the tape only through `wt.lab.read`.**
    - A quote at an instant is the last row received by that instant, and only if the contract was asked for and
      answered at the last sweep before it. Otherwise it is missing.
    - Entries are placed only on fresh ticks; entries skipped as stale are counted per table.
-7. **The shadow period starts again.** The first five sessions recorded by the v2 recorder are shadow sessions. The
-   v1 session (2026-11-19) is kept in the archive and counts for nothing.
+7. **The shadow period starts again.**
+   - A *v2 session* is one whose manifest says `"recorder": 2` and was recorded after this record's acceptance reached
+     the host. The first five are shadow sessions.
+   - The v1 session (2026-11-19) is kept in the archive and counts for nothing.
+   - **Open question for the shadow period.** If at least two of the five shadow sessions show the same stale first
+     hour, no session can pass point 3, and the owner chooses in a dated line, before the sixth session, between:
+     - (a) counting each name from its first fresh tick, with that span left out of every table and reported;
+     - (b) the websocket stage (DEC-0060's S6), which streams quotes instead of polling snapshots.
 8. **EXP-0052** is EXP-0041 with these changes. Its tables, buckets, read points, intervals and cell minimums are
    EXP-0041's, unchanged.
 
@@ -88,7 +110,11 @@ The archive:
 - uploads the whole folder;
 - does not let one bad session stop the others.
 
-Prints are pulled to 16:15, with retries; missing open interest is counted.
+After the close:
+- open interest is pulled first;
+- the prints wait for 16:15 on a full day, so the index and ETF contracts' last fifteen minutes are in them;
+- failed pages are retried;
+- missing and null open interest are counted.
 
 The guards:
 - every lab request is checked against a list of allowed URLs before it is sent;

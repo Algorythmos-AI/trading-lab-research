@@ -60,6 +60,7 @@ MAX_NAMES = 6                                       # config/options_clone.yaml 
 CHANGE_KEY = ("tier", "bid", "ask", "bid_size", "ask_size", "quote_ts", "last", "last_size", "last_ts", "volume")
 # greeks and IV are not in the key: on a row they are as of its quote or trade change, never forward-filled as current
 STATE = "state.json"
+RECORDER_VERSION = 2                                # 2: sample and member streams, freshness by name (DEC-0067)
 
 
 @dataclass(frozen=True)
@@ -77,7 +78,7 @@ class Settings:
     freeze_by_ticks: int = 60                       # five minutes: freeze the opening set even if a name is missing
     max_errors_in_a_row: int = 20
     max_mid_age_s: float = 30.0
-    stale_after_s: float = 15.0                     # a tier-1 tick whose newest quote is older than this is stale
+    stale_after_s: float = 30.0                     # a name whose newest tier-1 quote is older than this is stale
 
 
 class Clock(Protocol):
@@ -143,7 +144,10 @@ class Recorder:
         self.refused: set[str] = set()                            # tier-1 candidates the cap kept out (noted once)
         self.start: dt.datetime | None = None                     # 09:30: tick 0
         self.last_tick: int | None = None                         # the newest tick run, across restarts
-        self.stale_from: int | None = None                        # the first tick of the current stale run
+        self.stale_from: dict[str, int] = {}                     # name: the first tick of its current stale run
+        self.name_newest: dict[str, int] = {}                     # name: the newest tier-1 quote time answered
+        self.first_fresh: dict[str, int] = {}                     # name: the first tick its quotes were fresh
+        self.stale_by_name: dict[str, int] = {}                   # name: stale ticks after the freeze
         self.batch_syms: dict[tuple[int, int], tuple[str, ...]] = {}   # (tier, batch): the symbols last written
         self.tier1: dict[str, list[str]] = {n: [] for n in self.names}
         self.tier2: set[str] = set()
@@ -372,9 +376,11 @@ class Recorder:
             self.freeze_tick = tick
         self.save()
 
-    def sweep(self, symbols: Iterable[str], tier: int, tick: int, reserve: int = 0) -> tuple[int, int | None]:
+    def sweep(self, symbols: Iterable[str], tier: int, tick: int,
+              reserve: int = 0) -> tuple[dict[str, int], dict[str, int]]:
         """One sweep in batches of 100, each budgeted on its own; `reserve` requests are left for tier 1. Every batch
-        leaves a sample row, sent or not. Returns (opening-set samples answered, the newest quote time answered)."""
+        leaves a sample row, sent or not. Returns, by name (the contract's root): opening-set samples answered, and
+        the newest quote time answered."""
         syms = sorted(symbols)
         batches = [syms[i:i + BATCH] for i in range(0, len(syms), BATCH)]
         go: list[tuple[int, list[str]]] = []
@@ -394,7 +400,9 @@ class Recorder:
 
         with cf.ThreadPoolExecutor(max_workers=self.settings.workers) as pool:
             answers = list(pool.map(one, go))
-        missing, taken, newest = 0, 0, None
+        missing = 0
+        taken: dict[str, int] = {}
+        newest: dict[str, int] = {}
         for i, b, a, recv in answers:
             snaps = a.body.get("snapshots") if a.status == 200 and isinstance(a.body, dict) else None
             if not isinstance(snaps, Mapping):
@@ -407,11 +415,14 @@ class Recorder:
                 if not isinstance(snap, Mapping):
                     lost.append(sym)
                     continue
+                root = sym[:-15]                       # an OCC symbol: root, then 15 characters
                 if tier == 1 and self.opening is not None and sym in self.opening:
-                    taken += 1
+                    taken[root] = taken.get(root, 0) + 1
                 row = {"recv_ns": recv, "tick": tick, "tier": tier, "symbol": sym, **option_fields(snap)}
                 q = ts_ns(row["quote_ts"])
                 bnew = q if bnew is None or (q is not None and q > bnew) else bnew
+                if q is not None and q > newest.get(root, 0):
+                    newest[root] = q
                 wrote = self._write(self.option, sym, row)
                 changed += wrote
                 if wrote and tier == 1:
@@ -421,7 +432,6 @@ class Recorder:
                         self.counts["tier1_crossed_rows"] += int(isinstance(b_, float) and isinstance(a_, float)
                                                                  and a_ > 0 and b_ > a_)
             missing += len(lost)
-            newest = bnew if newest is None or (bnew is not None and bnew > newest) else newest
             self._sample(tick, tier, i, b, len(b) - len(lost), changed, a.status, bnew, "ok", lost)
         if missing:
             self._gap(tick, f"tier{tier}", f"missing {missing}")
@@ -466,7 +476,7 @@ class Recorder:
 
     def one_tick(self, tick: int, pool: cf.ThreadPoolExecutor) -> None:
         ok = True
-        got: tuple[int, int | None] = (0, None)
+        got: tuple[dict[str, int], dict[str, int]] = ({}, {})
         try:
             got = self.sweep(self.tier1_now(), 1, tick)
         except Exception as e:  # noqa: BLE001 (one bad answer costs one tick, not the session)
@@ -494,25 +504,44 @@ class Recorder:
                     self.minute = pool.submit(self.minute_work, tick)
         self.freeze(tick)
 
-    def freshness(self, tick: int, taken: int, newest: int | None) -> None:
-        """A tier-1 tick is fresh when the newest quote answered is at most `stale_after_s` old at the tick: a frozen
-        feed answers every request with the same old quotes, and change-only rows alone cannot tell that from a
-        quiet market. Opening-set samples count as fresh only on fresh ticks; a stale run is written as two gap rows."""
-        age = None if newest is None else (self._ns() - newest) / 1e9
-        stale = self.opening is not None and (age is None or age > self.settings.stale_after_s)
+    def freshness(self, tick: int, taken: Mapping[str, int], newest: Mapping[str, int]) -> None:
+        """Freshness is judged name by name: a name is fresh at a tick when the newest tier-1 quote ever answered for
+        it is at most `stale_after_s` old. On 2026-11-19 three of four names were answered with the previous day's
+        quotes for the first hour while one name moved, so a test over the whole sweep would have called every one
+        of those ticks fresh. A quote stamped before the open is old by construction. Opening-set samples count as
+        fresh only for a name fresh at that tick; each name's stale run is written as two gap rows."""
+        now = self._ns()
         with self.lock:
-            self.counts["taken"] += taken
-            if not stale:
-                self.counts["taken_fresh"] += taken
-                if self.stale_from is not None:
-                    self._gap(tick, "feed", f"fresh again after {tick - self.stale_from} stale ticks")
-                    self.stale_from = None
-                return
-            self.counts["stale_ticks"] += 1
-            if self.stale_from is None:
-                self.stale_from = tick
-                self._gap(tick, "feed", "stale: newest tier-1 quote " + ("missing" if age is None else f"{age:.0f} s old"))
-            self.counts["longest_stale_ticks"] = max(self.counts["longest_stale_ticks"], tick - self.stale_from + 1)
+            for n, q in newest.items():
+                if q > self.name_newest.get(n, 0):
+                    self.name_newest[n] = q
+            names = sorted({s[:-15] for s in self.opening} if self.opening is not None else
+                           {s[:-15] for s in self.tier1_now()})
+            stale_names = []
+            for n in names:
+                seen = self.name_newest.get(n)
+                age = None if seen is None else (now - seen) / 1e9
+                fresh = age is not None and age <= self.settings.stale_after_s
+                if fresh and n not in self.first_fresh:
+                    self.first_fresh[n] = tick
+                if self.opening is None:
+                    continue
+                if fresh:
+                    if n in self.stale_from:
+                        self._gap(tick, "feed", f"{n} fresh again after {tick - self.stale_from.pop(n)} stale ticks")
+                    continue
+                stale_names.append(n)
+                self.stale_by_name[n] = self.stale_by_name.get(n, 0) + 1
+                if n not in self.stale_from:
+                    self.stale_from[n] = tick
+                    self._gap(tick, "feed", f"{n} stale: newest tier-1 quote "
+                              + ("missing" if age is None else f"{age:.0f} s old"))
+                self.counts["longest_stale_ticks"] = max(self.counts["longest_stale_ticks"],
+                                                         tick - self.stale_from[n] + 1)
+            self.counts["taken"] += sum(taken.values())
+            self.counts["taken_fresh"] += sum(v for n, v in taken.items() if n not in stale_names)
+            if stale_names:
+                self.counts["stale_ticks"] += 1
 
     def run(self, start: dt.datetime, end: dt.datetime) -> None:
         tick_s = self.settings.tick_s
@@ -585,6 +614,8 @@ class Recorder:
             "ticks_down": c["ticks_down"], "ticks_scheduled": self.scheduled,
             "rules": dataclasses.asdict(self.rules), "settings": dataclasses.asdict(self.settings),
             "tier1_refused_by_cap": len(self.refused),
+            "stale_ticks_by_name": dict(sorted(self.stale_by_name.items())),
+            "first_fresh_tick_by_name": dict(sorted(self.first_fresh.items())),
             "tier1_crossed_share": round(c["tier1_crossed_rows"] / c["tier1_rows"], 6) if c["tier1_rows"] else 0.0,
             "requests": c["requests"], "restarts": c["restarts"], "tick_errors": c["errors"],
             "stopped": self.stopped,
@@ -624,17 +655,21 @@ def after_close(rec: Recorder, get: Get, headers: Mapping[str, str], start: dt.d
     if redone:
         out["redone_parts_removed"] = redone
         rec._gap(-1, "after_close", f"an interrupted pull redone: {redone} parts removed")
-    end = min(close + dt.timedelta(minutes=PRINTS_AFTER_CLOSE_MIN), clock.now())
     paced = rec.paced(deadline)
     try:
-        out["prints"] = afterclose.prints(paced, headers, t1, start, end, pw, rec.gap, deadline)
         expiries = [o.expiry for s in every if (o := parse_occ(s)) is not None]
-        if expiries:
+        if expiries:                                 # open interest first: it does not wait for late prints
             out["open_interest"] = afterclose.open_interest(paced, headers, list(rec.names), min(expiries),
                                                             max(expiries), every, ow, rec.gap, deadline,
                                                             session=rec.day)
-        pw.flush()
         ow.flush()
+        late = close + dt.timedelta(minutes=PRINTS_AFTER_CLOSE_MIN + 1)
+        if rec.stopped is None and clock.now() < late:   # a full day: wait for the prints of the last fifteen minutes
+            clock.sleep((late - clock.now()).total_seconds())
+        end = min(close + dt.timedelta(minutes=PRINTS_AFTER_CLOSE_MIN), clock.now())
+        out["prints_end"] = end.isoformat()
+        out["prints"] = afterclose.prints(paced, headers, t1, start, end, pw, rec.gap, deadline)
+        pw.flush()
     except Exception as e:  # noqa: BLE001 (the session's manifest is written whatever happens here)
         out["error"] = e.__class__.__name__
         rec._gap(-1, "after_close", f"error {e.__class__.__name__}")
@@ -730,7 +765,7 @@ def main(argv: Sequence[str] | None = None, clock: Clock | None = None, get: Get
         return 0
     root = tape_root(e)
     rc = _record(e, ck, today, root, get, inline_minute)
-    if rc in (0, 143):                       # whatever the day was, finished sessions go to the bucket
+    if rc == 0:                              # whatever the day was, finished sessions go to the bucket; a stop exits
         until = None
         if today.isoformat() in tiers.sessions():
             until = dt.datetime.combine(today, tiers.close_time(today), NY).astimezone(dt.UTC) \
@@ -789,7 +824,8 @@ def _record(e: Mapping[str, str], ck: Clock, today: dt.date, root: Path, get: Ge
             return 2
         limit = int(e.get("WT_LAB_RATE_LIMIT", "1000"))                      # the probe's measured limit
         budget = min(int(e.get("WT_LAB_BUDGET_PER_MIN", str(int(limit * 0.4)))), int(limit * 0.4))
-        info = {**meta, "clock_offset_ms": clock_offset_ms(), "budget_per_min": budget, "code": code_version()}
+        info = {**meta, "recorder": RECORDER_VERSION, "clock_offset_ms": clock_offset_ms(), "budget_per_min": budget,
+                "code": code_version()}
         main_thread = threading.current_thread() is threading.main_thread()
         old = signal.signal(signal.SIGTERM, _sigterm) if main_thread else None
         try:

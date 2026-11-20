@@ -8,9 +8,9 @@
   - the two counting conditions EXP-0041's YAML lost are restored and checked;
   - a stale-run limit is added;
   - the tier-1 cap is 300 per name;
-  - open interest is also read before the open;
+  - open interest is used only when dated before the session, and a null is blank;
   - tables read only through `wt.lab.read`;
-  - entries are placed on fresh ticks only.
+  - entries are placed only for names fresh at the instant (judged name by name, 30 s).
 
   Tables, buckets, read points, intervals and cell minimums are EXP-0041's.
 - Data: the lab's tape (DEC-0060 section 2), PRIVATE, outside the repository; focus names only.

@@ -16,8 +16,8 @@ recording:
   after_close: {trade_prints: tier1, open_interest: recorded_contracts, stop_min_after_close: 90, upload_done_min_after_close: 110}
   request_budget: {share_of_measured_limit: 0.40, back_off_when_remaining_share_under: 0.30}
   stop_when_free_disk_gb_under: 17
-  open_interest_before_open: {at_et: "09:26", contracts: focus names to 14 days, use_only_dated_before_the_session: true}
-  fresh_tick: {newest_tier1_quote_age_s_at_most: 15}
+  open_interest: {use_only_dated_before_the_session: true, null_is_blank: true}
+  fresh_name: {newest_tier1_quote_age_s_at_most: 30, quote_before_the_open_is_never_fresh: true}   # judged per name
   reader: "wt.lab.read: a quote at an instant is the last row received by it, only if sampled and answered at the last sweep"
 
 probe:                              # run once by the owner before the recorder is built; result as a dated README line
@@ -28,7 +28,7 @@ probe:                              # run once by the owner before the recorder 
   narrowing_order_on_a_miss: [max_ask 2.00, strike_within_pct 2.0, max_sessions_to_expiry 3]
 
 counting:
-  shadow_sessions: 5                           # the first five v2 sessions; the v1 session of 2026-11-19 counts for nothing
+  shadow_sessions: 5                           # the first five v2 sessions (manifest recorder: 2); 2026-11-19 counts for nothing
   session_counts_when:
     - a regular New York session with a focus list for it
     - the opening tier-1 set is complete (every focus name selected)
@@ -42,8 +42,8 @@ counting:
     if a name is still missing five minutes after the run starts, frozen without it and the session does not count
   expected_samples: >-
     the opening set at every 5-second tick from the freeze or 09:35, whichever is earlier, to the close, run or not
-    (a late start, a stop, an outage or a restart is missed coverage); a sample on a stale tick is missed
-  entries_on_fresh_ticks_only: true            # entries skipped as stale are counted per table
+    (a late start, a stop, an outage or a restart is missed coverage); a sample of a stale name is missed
+  entries_on_fresh_names_only: true            # entries skipped as stale are counted per table
   excluded_sessions: listed with their reason in every report
   read_points_counted_sessions: [20, 40, then every 40]
   entry_instants_et: ["10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00"]

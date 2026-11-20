@@ -57,6 +57,7 @@ class Alpaca:
         self.frozen: tuple[dt.datetime, dt.datetime] | None = None    # OPRA answers the old quotes in this window
         self.served: dict[str, list[tuple[dt.datetime, float | None, float | None, str | None]]] = {}
         self.answers: list[tuple[dt.datetime, list[str], str | None]] = []     # (when, symbols, newest quote time)
+        self.prior_day: dict[str, dt.datetime] = {}     # root: answered with the previous day's quotes until then
 
     def stamp(self, step: int) -> str:
         if step not in self.quote_at:
@@ -110,11 +111,17 @@ class Alpaca:
             else:
                 self.frozen_step = step
             v = 1.0 + step * 0.01
+            old = {s for s in syms if self.clock.t < self.prior_day.get(s[:-15], START - dt.timedelta(days=1))}
+
+            def q(s: str) -> dict[str, Any]:
+                if s in old:                            # yesterday's last quote, as Alpaca served it on 2026-11-19
+                    return {"bp": 0.4, "ap": 0.5, "bs": 1, "as": 1, "t": "2026-11-18T20:59:58.000000Z"}
+                return {"bp": 0.0 if s[9] == "P" else v - 0.1, "ap": v, "bs": 1, "as": 2, "t": self.stamp(step)}
             for s in syms:
-                self.served.setdefault(s, []).append((self.clock.t, 0.0 if s[9] == "P" else v - 0.1, v, self.stamp(step)))
-            self.answers.append((self.clock.t, syms, self.stamp(step)))
-            return Answer(200, h, {"snapshots": {s: {"latestQuote": {"bp": 0.0 if s[9] == "P" else v - 0.1, "ap": v,
-                                                                     "bs": 1, "as": 2, "t": self.stamp(step)},
+                self.served.setdefault(s, []).append((self.clock.t, q(s)["bp"], q(s)["ap"], q(s)["t"]))
+            fresh = [q(s)["t"] for s in syms if s not in old]
+            self.answers.append((self.clock.t, syms, max(fresh) if fresh else None))
+            return Answer(200, h, {"snapshots": {s: {"latestQuote": q(s),
                                                      "greeks": {"delta": 0.5, "gamma": 0.1}, "dailyBar": {"v": 10}}
                                                  for s in syms}}, self.step)
         return Answer(404, {}, None, 0.0)
@@ -489,6 +496,19 @@ def test_the_after_close_pull_runs_once_and_an_interrupted_one_is_redone_whole(t
     (rec.folder / recorder.AFTER_CLOSE).unlink()                                   # as if stopped mid-pull
     again = recorder.after_close(rec, api, {}, START, close, clock)
     assert len(rows(rec.folder, "print")) == n and again["redone_parts_removed"] >= 1
+
+
+def test_prints_are_pulled_after_the_last_fifteen_minutes_trade(tmp_path: Path) -> None:
+    clock = Clock(START - dt.timedelta(seconds=30))
+    api = Trades(clock)
+    rec = make(tmp_path, clock, api)
+    close = START + dt.timedelta(minutes=2)
+    rec.run(START, close)
+    assert clock.t < close + dt.timedelta(seconds=10)                           # the run ends at the close
+    out = recorder.after_close(rec, api, {}, START, close, clock)
+    asked = [p for u, p in api.calls if u.endswith("/v1beta1/options/trades")]
+    assert asked and {p["end"] for p in asked} == {(close + dt.timedelta(minutes=15)).strftime("%Y-%m-%dT%H:%M:%SZ")}
+    assert out["prints_end"] == (close + dt.timedelta(minutes=15)).isoformat()
 
 
 def test_a_failing_after_close_pull_still_gives_the_session_its_manifest(tmp_path: Path,

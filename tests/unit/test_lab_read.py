@@ -90,8 +90,38 @@ def test_a_frozen_feed_is_stale_and_counted_the_same_from_the_exchanges_own_log(
     assert doc["coverage"] > 0.99 and doc["coverage_fresh"] < doc["coverage"] - 0.15
     s = read.open_session(rec.folder)
     assert all(not s.fresh(k) for k in stale) and s.fresh(stale[0] - 4) and s.fresh(stale[-1] + 2)
-    reasons = [g["reason"] for g in s.gaps if g["stream"] == "feed"]
-    assert reasons[0].startswith("stale: newest tier-1 quote") and reasons[1] == f"fresh again after {len(stale)} stale ticks"
+    reasons = sorted(g["reason"] for g in s.gaps if g["stream"] == "feed")
+    assert reasons == [f"AAA fresh again after {len(stale)} stale ticks", "AAA stale: newest tier-1 quote 15 s old",
+                       f"BBB fresh again after {len(stale)} stale ticks", "BBB stale: newest tier-1 quote 15 s old"]
+    assert doc["stale_ticks_by_name"] == {"AAA": len(stale), "BBB": len(stale)}
+
+
+def test_one_name_on_yesterdays_quotes_is_stale_while_another_moves(tmp_path: Path) -> None:
+    """2026-11-19 as it happened: one name's options answered with the previous day's quotes for the first hour while
+    another's moved. The whole-sweep test calls every one of those ticks fresh; the name-by-name test does not."""
+    clock = Clock(START - dt.timedelta(seconds=30))
+    api = Alpaca(clock)
+    api.prior_day = {"AAA": START + dt.timedelta(minutes=3)}
+    rec = make(tmp_path, clock, api)
+    rec.run(START, START + dt.timedelta(minutes=8))
+    doc = rec.finish({"focus_session": DAY.isoformat(), "names": ["AAA", "BBB"]})
+    after = [k for k in range(doc["freeze_tick"] + 1, 36)]              # AAA's quotes are yesterday's until tick 36
+    assert doc["stale_ticks_by_name"] == {"AAA": len(after)} and "BBB" not in doc["stale_ticks_by_name"]
+    assert doc["first_fresh_tick_by_name"]["AAA"] == 36 and doc["first_fresh_tick_by_name"]["BBB"] <= 1
+    share = len(after) / (doc["ticks_scheduled"] - doc["freeze_tick"] - 1)
+    aaa = sum(1 for x in doc["opening_tier1"] if x.startswith("AAA")) / len(doc["opening_tier1"])
+    assert doc["coverage"] > 0.99 and abs(doc["coverage_fresh"] - (doc["coverage"] - share * aaa)) < 0.01
+    s = read.open_session(rec.folder)
+    a1 = next(x for x in sorted(doc["opening_tier1"]) if x.startswith("AAA"))
+    b1 = next(x for x in sorted(doc["opening_tier1"]) if x.startswith("BBB"))
+    at = ns_of(START + dt.timedelta(minutes=2, seconds=4))
+    assert all(s.fresh(k) for k in after)                               # the whole-sweep test is fooled
+    early = s.quote_at(a1, at)
+    assert isinstance(early, read.Missing) and early.reason == "quote from before the open"
+    live = s.quote_at(b1, at)
+    assert isinstance(live, read.Quote) and live.fresh_name
+    late = s.quote_at(a1, ns_of(START + dt.timedelta(minutes=5, seconds=4)))
+    assert isinstance(late, read.Quote) and late.fresh_name and not s.name_fresh("AAA", at)
 
 
 def test_ticks_nobody_ran_are_missing_and_said(tmp_path: Path) -> None:
