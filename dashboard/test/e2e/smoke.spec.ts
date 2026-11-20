@@ -188,7 +188,7 @@ test("with no stored documents the radar page still shows the pipeline's schedul
   await expect(page.getByRole("list", { name: /^The Radar pipeline for / }).getByRole("listitem")).toHaveCount(7);
 });
 
-test("the stock robot's old address lands on the Gap Hunter page, which says plainly what the host does not send", async ({ page }) => {
+test("the stock robot's old address lands on the Gap Hunter page, which shows the host's own block in counts", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/robot-b");
@@ -202,7 +202,7 @@ test("the stock robot's old address lands on the Gap Hunter page, which says pla
   for (const name of ["Where it stands", "Morning funnel", "Trades and results", "Session runs", "Alerts"]) {
     await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
   }
-  await expect(page.getByText("Trades and results are not sent yet")).toBeVisible();
+  await expect(page.getByText("First pick: Yes")).toBeVisible();                   // the fixture's gap_hunter block
   // Nothing of the retired rule, no host name for the robot, and no candidate's symbol: counts only.
   const body = (await page.locator("main").textContent()) ?? "";
   expect(body).not.toMatch(/QQQ|Robot B|sleeve|paper-s|[Hh]oldout|\bG1\b|LABT/);
