@@ -2,7 +2,7 @@
 # any v2 session exists; a changed value is a new experiment.
 experiment: EXP-0052
 replaces: EXP-0041                  # closed unread before its first counted session
-status: proposed                    # registered when DEC-0067 is accepted; no results file until the first read
+status: registered                  # DEC-0067 accepted 2026-11-20; no results file until the first read
 decision: DEC-0067
 family: none                        # selects nothing; a rule taken from it counts its cells in its own record
 

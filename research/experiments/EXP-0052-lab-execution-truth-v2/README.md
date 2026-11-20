@@ -1,6 +1,6 @@
 # EXP-0052: execution measured on the lab's option tape, recorder v2
 
-- Decision: DEC-0067 (PROPOSED). Replaces EXP-0041, which closes unread before its first counted session.
+- Decision: DEC-0067 (ACCEPTED 2026-11-20). Replaces EXP-0041, which closes unread before its first counted session.
   Descriptive: no hypothesis, no trial, no family.
 - Frozen: `config.yaml`, before any v2 session was recorded. A changed value is a new experiment.
 - Changes against EXP-0041:
@@ -25,5 +25,7 @@ day, and calm or fast tape; a cell with fewer than 8 sessions or 30 entries is b
 ## Dates
 
 - OPRA condition codes left out: EXP-0041's list of 2026-11-19, unchanged.
-- First v2 session: (none yet)
+- Accepted: 2026-11-20 (owner, in chat), before the session of 2026-11-20.
+- First v2 session: the first session whose manifest says `"recorder": 2` and that was recorded after the
+  acceptance pull request reached the host (its `code` names a commit that contains it); dated here once it exists.
 - Counting starts: (none yet)

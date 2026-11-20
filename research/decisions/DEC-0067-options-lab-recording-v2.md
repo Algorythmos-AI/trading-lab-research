@@ -1,9 +1,11 @@
 # DEC-0067: The options lab's recording v2: freshness counted, the tier-1 cap widened, EXP-0041 replaced by EXP-0052
 
-- **Status: PROPOSED (2026-11-20).** The owner asked on 2026-11-20 for an independent audit of the lab to make its data
-  research-grade. This record carries the audit's changes that alter a frozen rule of EXP-0041; the code changes that
-  alter no rule (detection, integrity, recovery, the archive, the reader) ship in the same pull request and are
-  listed under "Not a rule change". A later pull request that changes this line to ACCEPTED accepts it.
+- **Status: ACCEPTED (2026-11-20).** Proposed 2026-11-20 (#559). The owner asked on 2026-11-20 for an independent
+  audit of the lab to make its data research-grade, and accepted this record in chat on 2026-11-20, before the
+  session of 2026-11-20 and before any v2 statistic existed. This record carries the audit's changes that alter a
+  frozen rule of EXP-0041; the code changes that alter no rule (detection, integrity, recovery, the archive, the
+  reader) shipped in #559 and are listed under "Not a rule change". The acceptance pull request sets the tier-1 cap
+  to 300 (point 4).
 - **Written before any counted session.** EXP-0041 has counted nothing: one shadow session exists (2026-11-19) and
   no table, statistic or entry of any kind has been worked out from it. What the author has seen of it is listed in
   "Disclosure".
@@ -60,7 +62,7 @@ measures or when it counts, so they need a record:
    - `tier1_crossed_share` <= 0.005;
    - `ticks_down` == 0, or the session is marked partial and its missing span is listed in every report.
 4. **The tier-1 cap** becomes 300 contracts per name, nearest strikes first. This takes effect only with this
-   record's acceptance, in the acceptance pull request (`tiers.Rules.t1_max_per_name`); the code here still uses 120.
+   record's acceptance, in the acceptance pull request (`tiers.Rules.t1_max_per_name`, set to 300 there).
    - **Budget check.** At six names that is 18 tier-1 requests every 5 seconds (216 a minute). Add tier 2 (about 50),
      stocks (12) and chains (about 12): under 300 of the recorder's 400.
    - **Candidates the cap still keeps out** are written to the tape (`member` rows, event `cap`) and counted in the
