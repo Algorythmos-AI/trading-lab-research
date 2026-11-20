@@ -21,11 +21,12 @@ CALENDAR = ROOT / "dashboard" / "src" / "lib" / "market-calendar.json"
 
 @dataclass(frozen=True)
 class Rules:
-    """EXP-0041's frozen tier rules. The probe's narrowing order changes these only by a dated README line."""
+    """EXP-0052's frozen tier rules (DEC-0067; EXP-0041's with the tier-1 cap at 300). The probe's narrowing order
+    changes these only by a dated README line."""
     t1_max_sessions: int = 5
     t1_strike_pct: float = 3.0
     t1_max_ask: float = 3.00
-    t1_max_per_name: int = 120
+    t1_max_per_name: int = 300                      # DEC-0067 point 4 (EXP-0041 had 120)
     t2_max_days: int = 14
     t2_strike_pct: float = 8.0
 

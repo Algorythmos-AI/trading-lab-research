@@ -31,5 +31,7 @@ blank.
   `F` `H`; multi-leg `f` `g` `h` `i` `j` `l` `m` `t` `u`; tied to stock `k` `n` `o` `p` `q` `r` `s`; extended hours
   `v`; single-leg crosses `c` `d` (pre-arranged, they never meet a resting order, so they say nothing about a limit
   filling). Kept: `I` `J` `S` `a` `b` `e` and prints with no code. A print carrying any left-out code is left out.
-- First recorded session: (none yet)
+- First recorded session: 2026-11-19 (v1 recorder; a shadow session; counts for nothing).
+- Closed: 2026-11-20, unread, by DEC-0067 (accepted 2026-11-20): replaced by EXP-0052 before any session was
+  counted. No table, statistic or entry of EXP-0041 was ever worked out.
 - Counting starts: (none yet)
