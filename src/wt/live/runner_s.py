@@ -1,6 +1,10 @@
 """Paper runner for Gap Hunter, the stock desk (DEC-0066, where it is "sleeve S"). MODE must be 'paper'.
 
-First slice: the reversal rule on a universe known at scan time (HYP-0070), in one US$600 virtual book (HYP-0069).
+One US$600 virtual book (HYP-0069) and two rules, of which a session runs one: the one listed in `S.switched_on`
+of config/risk.yaml (`session_trial`). Nothing is listed, so nothing trades.
+
+  HYP-0070  the reversal rule on a universe known at scan time (the first slice; paused by the owner).
+  HYP-0071  Gap Hunter (DEC-0068): one trade a day in the primary name of the 09:25 pool. See "Gap Hunter" below.
 
 What it shares with the retired QQQ rule's runner (wt.live.runner_b; DEC-0069): four pure helpers it imports, and
 nothing at run time. Its own paper account and key pair (APCA_S_KEY_ID, APCA_S_SECRET_KEY), journal
@@ -35,7 +39,30 @@ adopted, a position over the hard caps, a short, a clock-skew block, and not fla
 close. A page is fixed words and guarded counts: never a symbol, a price, an amount or an error's text; the journal
 row written just before it holds those. The `armed` row says whether this session pages.
 
-Not in this slice: the gap entries (which need the order manager's partial exit).
+Gap Hunter (HYP-0071). The two rules share everything above: arming, the gates, the book, the day stop, the stop
+rule, reconciliation, the end of the day, the pages. What differs:
+
+  the name     At the first poll at or after the open the day's pool (data/candidates/<day>.parquet, with
+               data/pm_bars/<day>.parquet) goes through `wt.scanner.gap_hunter.select`; its primary is the only
+               name traded. No pool, a pool not dated today, or no name through the filters: no entry this
+               session, journaled (`gap_primary`), and exits are still managed. There is no rotation to rank 2.
+  the entry    Each minute, once its bars are read, `wt.live.setups_live` says which order each registered gap
+               entry (e1..e4) wants resting. Only the lowest trigger rests. It is replaced, after a confirmed
+               cancel, when that changes; an order valid for one bar is cancelled when its minute ends. Every
+               order sent has passed the spread must and the collar check at that moment, and is its own plan
+               with its own block of order ids. Re-pricing stops at GAP_ENTRY_ORDERS_MAX orders.
+  one attempt  The first closed bar that reaches the trigger of the order that should be resting spends the day,
+               whether or not anything rested or filled (`gap_day_done`: traded, no_fill, missed, no_signal,
+               order_budget). A fill is the day's one trade.
+  the exit     The registered gap exit through wt.oms.multi: half off when the bid is at or over the first target
+               (a limit at the target's price), the stop to breakeven, the stagnation stop before that target,
+               then the stop trailed under each completed five-minute low, out on a five-minute close under EMA9,
+               and out after a breakout bar without volume. R is booked against the stop the trade entered with.
+  a restart    The primary, the spent attempt and the refused signals are read back from the journal; the plan,
+               its rule code and the exit's state from the plan file. Nothing is chosen or attempted twice.
+
+The journal names a gap rule by its code and never by a setup's name; no headline or catalyst category is read into
+it. DEC-0068's note of 2026-11-20 lists the readings this mode had to choose, for the owner to confirm.
 """
 from __future__ import annotations
 
@@ -47,7 +74,7 @@ import shutil
 import sys
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
 from typing import Any
 
@@ -62,7 +89,8 @@ from wt.data.alpaca import DATA
 from wt.live import scan_s
 from wt.live import setups_live as sl
 from wt.live.runner_b import measure_skew, target_exit_limit, times_from_clock, with_deadline
-from wt.oms.manager import ACTIVE_POSITION, OMS, PlanStore, TradePlan
+from wt.oms.manager import ACTIVE_POSITION, PlanStore, TradePlan
+from wt.oms.multi import MultiOMS, MultiPlan
 from wt.ops import alerts as page
 from wt.ops import locks
 from wt.ops.alerts import Alerts, Pager
@@ -70,6 +98,7 @@ from wt.risk import stop_rule
 from wt.risk.pretrade import Context, PreTradeGuard, load_limits
 from wt.risk.virtual_account import StateError, VirtualAccount
 
+OMS = MultiOMS                  # the order manager of both rules: the base manager, plus selling in parts
 STRATEGY = "S"
 DIR = STATE_DIR / "smallcap"
 PLANS = DIR / "plans"
@@ -95,6 +124,13 @@ SEQ_BLOCK = 1000                # each plan's order ids come from its own block 
 BAR_PAGES = 20
 CONNECT_TRIES, CONNECT_WAIT_S = 5, 15.0
 RUNNER_LOCK_WAIT_S = 10.0       # how long a starting runner waits for its own process lock
+
+# ---- Gap Hunter (HYP-0071, DEC-0068) ----
+POOL_DIR = DATA_DIR / "candidates"          # the 09:25 pool, written before the open by the pre-market routine
+PM_BARS_DIR = DATA_DIR / "pm_bars"          # (wt.scanner.pool keeps the same two paths)
+PM_FROM = "04:00"
+GAP_ENTRY_ORDERS_MAX = 40       # entry orders a day; the rest of S.max_orders_per_day (60) is left to the exit
+STOP_MOVE_TRIES = 3             # a stop the broker will not take at one price is not asked for a fourth time
 
 
 # ---- journal ------------------------------------------------------------------------------------------------------
@@ -161,6 +197,19 @@ def switched_on(path: Path | None = None) -> frozenset[str]:
         return frozenset(str(x) for x in (cfg.get(STRATEGY, {}).get("switched_on") or []))
     except Exception:  # noqa: BLE001 — unknown is "nothing switched on"
         return frozenset()
+
+
+def session_trial(on: frozenset[str]) -> tuple[str, str | None]:
+    """(the trial this session runs, why it may place no entry or None). The desk trades one rule a session: the
+    one that is switched on. With none switched on it runs the reversal rule with entries off, as it did before
+    Gap Hunter existed; with both, Gap Hunter with entries off, because nothing says which of the two the day's
+    one position belongs to."""
+    known = [t for t in (sl.GAP_TRIAL, sl.TRIAL) if t in on]
+    if len(known) == 1:
+        return known[0], None
+    if known:
+        return sl.GAP_TRIAL, f"{sl.GAP_TRIAL} and {sl.TRIAL} are both switched on: the desk trades one rule a session"
+    return sl.TRIAL, f"{sl.TRIAL} is not switched on (config/risk.yaml S.switched_on; DEC-0066 section 2)"
 
 
 def key_refusal(environ: Mapping[str, str]) -> str | None:
@@ -285,6 +334,27 @@ class Data:
 
 
 # ---- plans ----------------------------------------------------------------------------------------------------------
+@dataclass
+class GapPlan(MultiPlan):
+    """A Gap Hunter plan: one resting entry of one registered gap rule, and, once it fills, the day's trade. It
+    sells in parts and moves its stop (wt.oms.multi), and carries what a restart needs to go on."""
+    kind: str = "gap"
+    code: str = ""                  # which registered entry the order belongs to: e1..e4, never a setup's name
+    signal_t: str = ""              # start of the bar the order was decided on
+    expires: str = ""               # when the resting entry is cancelled if it has not filled
+    spread: float = 0.0             # the spread at the decision
+    bv: str = ""                    # the breakout-volume check the fill carries ("1m", "5m" or none)
+    wt: dict[str, Any] = field(default_factory=dict)      # the exit's memory between bars (wt.live.setups_live.WTState)
+
+
+def load_plan(f: Path) -> TradePlan:
+    """A plan file as the class that wrote it: a Gap Hunter plan keeps its own fields across a restart."""
+    raw: dict[str, Any] = json.loads(f.read_text())
+    cls: type[TradePlan] = GapPlan if raw.get("kind") == "gap" else TradePlan
+    known = {x.name for x in fields(cls)}
+    return cls(**{k: v for k, v in raw.items() if k in known})
+
+
 class Store:
     """One plan file per trade under var/smallcap/plans/. A failed save never stops an order: the plan lives on in
     memory and entries turn off, because a restart could no longer resume it."""
@@ -308,13 +378,12 @@ class Store:
         out = []
         for f in sorted(PLANS.glob("*.json")) if PLANS.exists() else []:
             try:
-                p = PlanStore(f).load()
+                p = load_plan(f)
             except (OSError, ValueError, TypeError) as e:
                 log("plan_unreadable", file=f.name, error=e.__class__.__name__)
                 self.broken = True
                 continue
-            if p is not None:
-                out.append(p)
+            out.append(p)
         return out
 
 
@@ -337,6 +406,15 @@ def staged_note(s: sl.Staged) -> list[Any]:
 
 def staged_of(p: TradePlan) -> sl.Staged | None:
     """The staged entry a plan was made from, read back from the plan's own log (so a restart can still judge it)."""
+    if isinstance(p, GapPlan):
+        try:
+            signal_t = pd.Timestamp(p.signal_t)
+            if not p.signal_t or pd.isna(signal_t):
+                return None
+            return sl.Staged(p.symbol, p.attempt, signal_t, p.trigger, p.limit, p.initial_stop, 0.0,
+                             dt.datetime.fromisoformat(p.expires), float(p.spread))
+        except (TypeError, ValueError):
+            return None
     for row in p.log:
         if isinstance(row, list) and len(row) == 6 and row[0] == "staged":
             try:
@@ -345,6 +423,55 @@ def staged_of(p: TradePlan) -> sl.Staged | None:
             except (TypeError, ValueError):
                 return None
     return None
+
+
+# ---- Gap Hunter: the day's primary -------------------------------------------------------------------------------------
+def gap_selection(day: dt.date, open_dt: dt.datetime,
+                  symbol: str | None = None) -> tuple[str | None, dict[str, Any] | None, dict[str, Any]]:
+    """(the primary, what the gap entries read about it, counts for the journal). The 09:25 pool of `day` through
+    `wt.scanner.gap_hunter.select`. No primary, with the reason under "why", when the pool is missing, unreadable,
+    not of this session, or leaves no name. `symbol`: the primary already journaled today (a restart): it is not
+    chosen again, only looked up. Nothing here reads a price after 09:30, and no headline or category leaves it."""
+    from wt.scanner import gap_hunter
+    from wt.specs.loader import load_spec
+    f = POOL_DIR / f"{day}.parquet"
+    if not f.exists():
+        return None, None, {"why": "pool_missing"}
+    try:
+        pool = pd.read_parquet(f)
+    except Exception as e:  # noqa: BLE001 — unreadable is "no pool"
+        return None, None, {"why": "pool_unreadable", "error": e.__class__.__name__}
+    if not len(pool) or "symbol" not in pool:
+        return None, None, {"why": "pool_empty"}
+    if "date" not in pool or any(str(d)[:10] != day.isoformat() for d in pool["date"]):
+        return None, None, {"why": "pool_stale"}                # a pool that does not say it is today's is not today's
+    info: dict[str, Any] = {}
+    if symbol is None:
+        try:
+            sel = gap_hunter.select(pool, load_spec("SPEC-0001"))
+        except Exception as e:  # noqa: BLE001 — a spec or a pool the rule cannot read selects nothing
+            return None, None, {"why": "selection_failed", "error": e.__class__.__name__}
+        info = {"kept": sel["kept"], "passed": sel["passed"], "tier2": len(sel["tier2"])}
+        symbol = sel["primary"]
+        if symbol is None:
+            return None, None, {"why": "no_name_passed", **info}
+    rows = pool[pool["symbol"] == symbol]
+    if len(rows) != 1:
+        return None, None, {"why": "pool_changed", **info}
+    pm = pd.DataFrame(columns=["t", "o", "h", "l", "c", "v"])
+    pmf = PM_BARS_DIR / f"{day}.parquet"
+    if pmf.exists():                                           # a missing file is no pre-market bars, as in the batch run
+        try:
+            allpm = pd.read_parquet(pmf)
+            mine = allpm[allpm["symbol"] == symbol].copy()
+            mine["t"] = pd.to_datetime(mine["t"], utc=True)
+        except Exception as e:  # noqa: BLE001
+            return None, None, {"why": "pm_bars_unreadable", "error": e.__class__.__name__, **info}
+        lo, hi = pd.Timestamp(et(day, PM_FROM)), pd.Timestamp(open_dt)
+        if len(mine) and ((mine["t"] < lo) | (mine["t"] >= hi)).any():
+            return None, None, {"why": "pm_bars_stale", **info}   # a bar of another day, or of the session itself
+        pm = mine.sort_values("t")[["t", "o", "h", "l", "c", "v"]].reset_index(drop=True)
+    return symbol, sl.gap_context(rows.iloc[0].to_dict(), pm), {"rank": 1, "pm_bars": len(pm), **info}
 
 
 # ---- the session ---------------------------------------------------------------------------------------------------
@@ -418,8 +545,10 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
 
     if not accepted():
         refuse("DEC-0066 does not read ACCEPTED")
-    if sl.TRIAL not in switched_on():
-        refuse(f"{sl.TRIAL} is not switched on (config/risk.yaml S.switched_on; DEC-0066 section 2)")
+    trial, why_not = session_trial(switched_on())
+    gap = trial == sl.GAP_TRIAL          # Gap Hunter's day (HYP-0071); otherwise the reversal rule's (HYP-0070)
+    if why_not:
+        refuse(why_not)
     role = env("WT_ROLE", "primary")
     lease_state = "none"                # a console checkout takes no lease
     if role == "shadow":
@@ -559,7 +688,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             except OSError:
                 account_unsaved = True
         log("entry_filled", trade_id=p.trade_id, symbol=p.symbol, qty=p.filled_qty, price=p.avg_entry,
-            nbbo=nbbo(p.symbol))
+            nbbo=nbbo(p.symbol), **({"code": p.code} if isinstance(p, GapPlan) else {}))
 
     made: list[TradePlan] = []                                # plans created by this process today
     oms = OMS(broker, guard=guard, context=context, persist=store.save, on_entry=on_entry, strategy=STRATEGY,
@@ -584,8 +713,16 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             except Exception:  # noqa: BLE001 — retried on the next poll
                 px = None
         estimated = px is None
+        # R is measured against the stop the trade entered with, wherever the exit has moved it since
+        stop0 = p.initial_stop if isinstance(p, MultiPlan) else p.stop
         px = px if px is not None else p.stop
         entry = p.avg_entry or 0.0
+        own = (sl.GAP_TRIAL if isinstance(p, GapPlan) else sl.TRIAL) if p.origin == "entry" else None
+        more: dict[str, Any] = {}
+        if isinstance(p, GapPlan):
+            if p.exit_reason == "stop" and p.wt.get("stop_reason") == "runner_prior_5m_low":
+                p.exit_reason = "runner_prior_5m_low"           # the engine's name for a stop-out once the stop has trailed
+            more = {"code": p.code, "partial_qty": p.partial_qty, "final_stop": p.stop}
         attributed = p.origin == "entry"
         priced = entry > 0                                     # no entry price: journaled, never booked as a gain
         if attributed and priced and va_ok and va.record_round_trip(trade_day, nxt, cost=p.filled_qty * entry,
@@ -598,12 +735,12 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             except OSError as e:
                 log("account_save_failed", error=e.__class__.__name__)
         if p.trade_id not in journaled:
-            r_mult = (px - entry) / (entry - p.stop) if attributed and entry > p.stop else None
-            if log("trade_closed", day=trade_day, trial=sl.TRIAL if attributed else None, symbol=p.symbol,
-                   entry=entry, exit=px, exit_price_estimated=estimated, stop=p.stop, qty=p.filled_qty, R=r_mult,
+            r_mult = (px - entry) / (entry - stop0) if attributed and entry > stop0 else None
+            if log("trade_closed", day=trade_day, trial=own, symbol=p.symbol,
+                   entry=entry, exit=px, exit_price_estimated=estimated, stop=stop0, qty=p.filled_qty, R=r_mult,
                    reason=p.exit_reason, trade_id=p.trade_id, origin=p.origin,
                    booked=attributed and priced and va_ok,
-                   virtual=asdict(va) if va_ok else None):
+                   virtual=asdict(va) if va_ok else None, **more):
                 journaled.add(p.trade_id)
                 if attributed and trade_day == day:
                     x = -1.0 if r_mult is None or estimated else float(r_mult)
@@ -671,11 +808,18 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                                    "automatically. The session's journal (short_position) names it. Follow the "
                                    "not-flat runbook.", 5)
 
+    def reconciled(p: TradePlan) -> list[str]:
+        """Orders and position against one plan. A plan that sells in parts settles a part sale a crash left
+        resting before its stop is sized."""
+        if isinstance(p, MultiPlan):
+            return oms.reconcile_all([p])
+        return oms.reconcile({p.symbol}, {}, plan=p)
+
     try:
         sweep_positions()
         for p in [plan, *held]:
             if p is not None:
-                acts = oms.reconcile({p.symbol}, {}, plan=p)
+                acts = reconciled(p)
                 if acts:
                     log("reconcile_startup", actions=acts)
     except Exception as e:  # noqa: BLE001
@@ -685,14 +829,15 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
     curve: np.ndarray | None = None
     rule_curve: np.ndarray | None = None
     symbols: list[str] = []
-    try:
-        rule_curve = detector_curve()
-        curve = scan_s.load_curve()
-        symbols = with_deadline(data.symbols, deadline_s=120.0)
-        if not symbols:
-            refuse("the asset list is empty")
-    except Exception as e:  # noqa: BLE001
-        refuse(f"scan inputs unavailable ({e.__class__.__name__})")
+    if not gap:                                               # the reversal rule's inputs; Gap Hunter reads the pool
+        try:
+            rule_curve = detector_curve()
+            curve = scan_s.load_curve()
+            symbols = with_deadline(data.symbols, deadline_s=120.0)
+            if not symbols:
+                refuse("the asset list is empty")
+        except Exception as e:  # noqa: BLE001
+            refuse(f"scan inputs unavailable ({e.__class__.__name__})")
     universe = scan_s.Universe(day, open_dt, curve if curve is not None else np.ones(scan_s.SESSION_MIN))
     names: dict[str, sl.NameState] = {}
     ctxs: dict[str, dict[str, Any]] = {}
@@ -718,8 +863,44 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                 and str(r.get("day")) == day.isoformat():
             ended[str(r.get("symbol"))] = str(r["name_done"])
 
+    # ---- Gap Hunter's day: the primary, and what is already settled about it. All of it is rebuilt from the plan
+    # files and the journal, so a restart neither chooses again nor takes a second attempt. ----
+    primary: str | None = None
+    gctx: dict[str, Any] | None = None
+    gap_selected = False            # the primary was chosen (or found missing) today
+    gap_done = ""                   # why the day's one attempt is settled ("" while it is open)
+    gap_dead: set[str] = set()      # signals refused for good (spread, collar, an order the broker refused)
+    gap_said: set[str] = set()      # blocked signals already journaled, with their blockers
+    gap_walked = 0                  # bars already read for a trigger that was reached
+    gap_minute: list[pd.Timestamp | None] = [None]            # the minute the entries were last decided for
+    gap_rested = [""]               # the signal whose order the desk last had resting
+    gap_n = max((p.attempt for p in today if p.origin == "entry"), default=0)
+    wt: sl.WTState | None = None    # the exit's state for the plan in play
+    wt_tries: dict[float, int] = {}
+    if gap:
+        if any(p.filled_qty for p in today if p.origin == "entry"):
+            gap_done = "traded"                                # one trade a day: a fill is the day's trade, open or closed
+        for r in rows:
+            if str(r.get("day")) != day.isoformat():
+                continue
+            if r.get("event") == "gap_primary" and not gap_selected:
+                gap_selected = True
+                if r.get("symbol"):
+                    try:
+                        primary, gctx, _ = gap_selection(day, open_dt, symbol=str(r["symbol"]))
+                    except Exception as e:  # noqa: BLE001 — no context: no entry; a position is still managed
+                        log("gap_context_unreadable", day=day, error=e.__class__.__name__)
+            elif r.get("event") == "gap_day_done" and not gap_done:
+                gap_done = str(r.get("reason") or "done")
+            elif r.get("event") in ("signal_blocked", "entry_not_placed") and r.get("dead"):
+                gap_dead.add(str(r["dead"]))
+        if primary is not None:
+            allow({primary})
+        if isinstance(plan, GapPlan):                          # the order (or position) this restart found in play
+            gap_rested[0] = f"{plan.code}|{plan.signal_t}|{plan.trigger:.2f}|{plan.initial_stop:.2f}"
+
     kill_on = KILL.exists()
-    log("armed", day=day, trial=sl.TRIAL, entries_off=off, kill=kill_on, flatten=flatten_dt, symbols=len(symbols),
+    log("armed", day=day, trial=trial, entries_off=off, kill=kill_on, flatten=flatten_dt, symbols=len(symbols),
         resumed_plan=plan.trade_id if plan else None, held=[p.trade_id for p in held],
         day_stop=day_stopped(losers, realised), skew_s=measure_skew(broker, clock),
         virtual=asdict(va) if va_ok else None, stock_feed="sip", pages=pager.alerts is not None, role=role,
@@ -730,9 +911,15 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
 
     def finish(p: TradePlan, when: dt.datetime) -> None:
         """The day's plan reached a terminal state: book it and move its name on."""
-        nonlocal plan, staged
+        nonlocal plan, staged, wt
         close_out(p)
         traded = p.state == "closed" and bool(p.filled_qty)
+        if isinstance(p, GapPlan):
+            if traded:
+                gap_end("traded", code=p.code)
+            plan, staged, wt = None, None, None
+            wt_tries.clear()
+            return
         if traded:
             used[p.symbol] = used.get(p.symbol, 0) + 1         # read by join() if the name is not back yet
         else:
@@ -904,14 +1091,16 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             b = bars.get(p.symbol)
             if staged is None:
                 verdict: str | None = "staged_unreadable"      # its life and its stop cannot be judged: it may not rest
-            else:
-                verdict = sl.entry_verdict(b, staged, p.filled_qty, now) if b is not None else None
+            elif b is not None:
+                verdict = sl.entry_verdict(b, staged, p.filled_qty, now)
+            else:                                              # no bars read: a gap order still ends with its minute
+                verdict = "expired" if isinstance(p, GapPlan) and now >= staged.expires_at else None
             if verdict is None and (now >= entry_end or kill_on):
                 verdict = "kill_file" if kill_on else "entry_window_closed"
             if verdict is not None:
                 oms.cancel_entry_remainder(p)
                 log("entry_cancelled", trade_id=p.trade_id, symbol=p.symbol, why=verdict, filled=p.filled_qty,
-                    state=p.state)
+                    state=p.state, **({"code": p.code} if isinstance(p, GapPlan) else {}))
                 if p.state == "aborted":
                     bump(verdict)
         if p.state in ACTIVE_POSITION:
@@ -922,8 +1111,10 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                 log("data_timeout", what="quote", symbol=p.symbol)
             b = bars.get(p.symbol)
             # the end-of-day steps below need nothing but the position; the target and the stagnation stop need the fill
-            target = sl.target_price(p.target, p.avg_entry, p.stop) if p.avg_entry else None
-            entry_t = sl.entry_bar_time(b, staged) if b is not None and staged is not None else None
+            target = entry_t = None
+            if not isinstance(p, GapPlan):
+                target = sl.target_price(p.target, p.avg_entry, p.stop) if p.avg_entry else None
+                entry_t = sl.entry_bar_time(b, staged) if b is not None and staged is not None else None
             if now >= verify_dt:
                 oms.exit_now(p, None, reason="eod_verify", market=True)
             elif now >= market_dt:
@@ -933,11 +1124,274 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                     oms.exit_now(p, round(q[0] - 0.02, 2), reason="eod_flatten")
                 else:
                     oms.exit_now(p, None, reason="eod_flatten", market=True)
+            elif isinstance(p, GapPlan):
+                gap_exit(p, q, b, now)
             elif target is not None and (px := target_exit_limit(q, target)) is not None:
                 oms.exit_now(p, px, reason="target")
             elif p.avg_entry and b is not None and entry_t is not None and \
                     sl.stagnant(b, entry_t, p.avg_entry, p.stop):
                 oms.exit_now(p, None, reason="time_stop_5m", market=True)
+
+    # ---- Gap Hunter (HYP-0071): one trade a day in the primary, the first registered gap entry to trigger ----
+    def gap_end(reason: str, **kw: Any) -> None:
+        """The day's one attempt is settled. Journaled once; a restart reads the row back."""
+        nonlocal gap_done
+        if not gap_done:
+            gap_done = reason
+            log("gap_day_done", day=day, symbol=primary, reason=reason, **kw)
+
+    def gap_select() -> None:
+        """Choose the day's primary from the 09:25 pool, once. No pool, or none of today: no entry this session."""
+        nonlocal primary, gctx, gap_selected
+        gap_selected = True
+        try:
+            primary, gctx, info = gap_selection(day, open_dt)
+        except Exception as e:  # noqa: BLE001 — unknown is "no primary"
+            primary, gctx, info = None, None, {"why": "selection_failed", "error": e.__class__.__name__}
+        log("gap_primary", day=day, symbol=primary, **info)
+        if primary is not None:
+            allow({primary})
+
+    def gap_key(o: sl.GapOrder, b: pd.DataFrame) -> str:
+        trig, stop0 = sl.gap_cents(o)
+        return f"{o.code}|{pd.Timestamp(b.t.iloc[o.signal_i]).isoformat()}|{trig:.2f}|{stop0:.2f}"
+
+    def gap_place(want: sl.GapOrder, b: pd.DataFrame, now: dt.datetime, minute: pd.Timestamp, now_min: int) -> None:
+        """The lowest valid order becomes a resting stop-limit, or a journaled reason why not."""
+        nonlocal plan, staged, gap_n
+        assert primary is not None
+        key = gap_key(want, b)
+        if key in gap_dead:
+            return
+        sent = orders_before + sum(orders_sent(x) for x in made)
+        if sent >= GAP_ENTRY_ORDERS_MAX:
+            gap_end("order_budget", orders=sent)               # re-pricing stops here; the cap itself is never reached
+            return
+        blockers = gates(now)
+        if pd.Timestamp(b.t.iloc[-1]) != minute - pd.Timedelta(minutes=1):
+            blockers.append("stale_bar")                       # no print in the minute just ended: treated as halted
+        q = None
+        try:
+            q = with_deadline(data.quote, primary)
+        except Exception:  # noqa: BLE001 — unknown fails the spread must below
+            q = None
+        quote_age = (pd.Timestamp(now) - q[2]).total_seconds() if q else None
+        if q is None:
+            blockers.append("no_quote")
+        elif quote_age is not None and quote_age > guard.limits.max_quote_age_s:
+            blockers.append("quote_age")
+        s, why = sl.gap_stage(primary, gap_n + 1, want, b, day, (q[1] - q[0]) if q else None, now_min)
+        trig, stop0 = sl.gap_cents(want)
+        row: dict[str, Any] = {"day": day, "symbol": primary, "trial": trial, "code": want.code,
+                               "signal_t": pd.Timestamp(b.t.iloc[want.signal_i]), "nbbo": [q[0], q[1]] if q else None,
+                               "quote_age_s": quote_age, "trigger": trig, "stop": stop0}
+        if s is None:
+            gap_dead.add(key)                                  # spread, collar, risk: this signal is never sent
+            bump(why)
+            log("signal_blocked", blockers=[why, *blockers], dead=key, **row)
+            return
+        skew: float | None = None
+        if not blockers:
+            skew = measure_skew(broker, clock)
+            if skew is None or abs(skew) > SKEW_MAX_S:
+                blockers.append("clock_skew")
+            else:
+                pager.resolve("paper-s:clock-skew", "Sleeve S clock check: ok", "Clock skew is back in range.")
+        qty = 0
+        if not blockers:
+            # sized at the fill the simulation expects (the trigger plus its slippage), as the engine sizes at the fill
+            risk = va.equity * RISK_PCT / 100
+            fill = s.trigger + max(sl.MIN_SLIP, s.spread / 2)
+            qty = min(size_position(fill, s.stop, risk, va.settled_cash, min(va.equity, guard.limits.max_notional)),
+                      guard.limits.max_qty)
+            if qty < 1:
+                blockers.append("cash_not_settled" if va.settled_cash < s.trigger else "size_zero")
+        if blockers:
+            said = f"{key}|{','.join(blockers)}"
+            if said not in gap_said:                           # a re-priced order is asked every minute: one row a reason
+                gap_said.add(said)
+                for k in blockers:
+                    bump(k.split(":")[0])
+                log("signal_blocked", blockers=blockers, **row)
+                if "clock_skew" in blockers:
+                    log("clock_skew", skew_s=skew, max_s=SKEW_MAX_S, action="entry skipped")
+                    pager.fire("paper-s:clock-skew", "Sleeve S skipped an entry: clock check failed",
+                               "The broker clock could not be read, so the local clock could not be checked."
+                               if skew is None else
+                               f"The local clock is {page.ratio(skew, '+.1f')} s off the broker's (limit 2 s).", 4)
+            return
+        gap_n += 1                                             # each order is its own plan, with its own block of ids
+        p = GapPlan(date=day.isoformat(), strategy=STRATEGY, symbol=primary, qty=qty, trigger=s.trigger, limit=s.limit,
+                    stop=s.stop, target=0.0, attempt=gap_n, seq=plan_seq(gap_n), code=want.code,
+                    signal_t=s.signal_t.isoformat(), expires=s.expires_at.isoformat(), spread=s.spread, bv=want.bv)
+        made.append(p)
+        store.save(p)
+        oms.place_entry(p)
+        placed = p.state == "entry_working"
+        if not p.active:
+            gap_dead.add(key)                                  # refused by the guard or the broker: not asked again
+            bump("not_placed")
+        log("entry_placed" if placed else "entry_not_placed", trade_id=p.trade_id, qty=qty, limit=s.limit,
+            expires=s.expires_at, state=p.state, detail=p.log[-1:] if p.log else None, attempt=gap_n,
+            **({} if p.active else {"dead": key}), **row)
+        if p.active:
+            plan, staged = p, s
+            gap_rested[0] = key
+
+    def gap_entries(now: dt.datetime) -> None:
+        """Once for each minute, after its bars are read: has a valid order's trigger been reached (then the day's
+        attempt is spent, filled or not); otherwise, which one order should rest now."""
+        nonlocal gap_walked
+        if primary is None or gctx is None or gap_done:
+            return
+        if plan is not None and plan.filled_qty:
+            gap_end("traded", code=plan.code if isinstance(plan, GapPlan) else None)
+            return
+        minute = (pd.Timestamp(now) - pd.Timedelta(seconds=SETTLE_S)).floor("min")
+        b = bars.get(primary)
+        if minute == gap_minute[0] or b is None or not len(b):
+            return
+        if pd.Timestamp(now).floor("min") != minute:
+            return      # the first seconds of a minute, whose predecessor's bar is not read yet: nothing is decided
+        gap_minute[0] = minute
+        local = minute.tz_convert(ET)
+        now_min = local.hour * 60 + local.minute
+        resting = plan if isinstance(plan, GapPlan) and plan.state == "entry_working" else None
+
+        def withdraw(why: str) -> bool:
+            """Cancel the resting entry and confirm it. True when nothing rests and nothing filled."""
+            assert resting is not None
+            oms.cancel_entry_remainder(resting)
+            log("entry_cancelled", trade_id=resting.trade_id, symbol=resting.symbol, why=why, filled=resting.filled_qty,
+                state=resting.state, code=resting.code)
+            if resting.filled_qty:
+                gap_end("traded", code=resting.code)           # it filled before the cancel: that is the day's trade
+                return False
+            if resting.active:
+                gap_minute[0] = None                           # the cancel is not confirmed: decide again next poll
+                return False
+            finish(resting, now)
+            return True
+
+        hit = sl.gap_walk(b, gctx, start=gap_walked)
+        if hit is not None:
+            # a closed bar reached the order that should have been resting: the attempt is spent, whatever rested
+            if resting is not None and not withdraw("reached"):
+                return
+            gap_walked = max(len(b) - 1, 0)
+            # "no_fill": the desk's own order was the one reached (the collar refused it); "missed": nothing rested
+            why = "no_fill" if gap_rested[0] == gap_key(hit.order, b) else "missed"
+            bump(why)
+            gap_end(why, code=hit.order.code, bar=pd.Timestamp(b.t.iloc[hit.bar_i]))
+            return
+        gap_walked = max(len(b) - 1, 0)
+        if now_min >= sl.GAP_LAST_MINUTE:
+            if resting is None or withdraw("windows_closed"):
+                gap_end("no_signal")                           # no rotation to another name: no trade today
+            return
+        want = sl.gap_choose(sl.gap_orders(b, gctx, now_min))
+        if resting is not None:
+            if want is not None and sl.gap_cents(want) == (resting.trigger, resting.initial_stop):
+                return                                         # the same order: it keeps resting
+            if not withdraw("replaced" if want is not None else "withdrawn"):
+                return
+        if plan is None and want is not None and now < entry_end:
+            gap_place(want, b, now, minute, now_min)
+
+    def gap_save(p: GapPlan, s: sl.WTState) -> None:
+        p.wt.update(entry_bar=s.entry_bar.isoformat(), partial_done=s.partial_done, last_bucket=s.last_bucket,
+                    stop_reason=s.stop_reason, stop=s.stop, bv_fail=s.bv_fail,
+                    bv_bar=s.bv_bar.isoformat() if s.bv_bar is not None else "")
+        store.save(p)
+
+    def gap_wt(p: GapPlan, b: pd.DataFrame | None, now: dt.datetime) -> sl.WTState | None:
+        """The exit's state for a filled plan: started once its entry bar has closed, or put back after a restart
+        from what the plan file kept. The entry bar is the first closed bar after the signal that reached the
+        trigger, as the simulation enters; until it has closed, the stop at the broker is the whole exit."""
+        if not p.avg_entry or p.avg_entry <= p.initial_stop:
+            return None
+        entry_bar = p.wt.get("entry_bar")
+        if not entry_bar:
+            if not p.wt.get("fill_seen"):
+                p.wt["fill_seen"] = pd.Timestamp(now).isoformat()
+                store.save(p)
+            t = sl.entry_bar_time(b, staged) if b is not None and staged is not None else None
+            if t is None:
+                seen_at = pd.Timestamp(p.wt["fill_seen"])
+                if (pd.Timestamp(now) - seen_at).total_seconds() < 120 + SETTLE_S:
+                    return None
+                t = seen_at.floor("min")                       # no bar shows the trigger: the minute the fill was seen in
+            entry_bar = pd.Timestamp(t).isoformat()
+        s = sl.wt_start(p.avg_entry, p.initial_stop, p.filled_qty, pd.Timestamp(entry_bar), None,
+                        bv_fail=bool(p.wt.get("bv_fail")),
+                        bv_bar=pd.Timestamp(p.wt["bv_bar"]) if p.wt.get("bv_bar") else None)
+        s.partial_done = bool(p.wt.get("partial_done")) or p.partial_qty > 0
+        s.last_bucket = int(p.wt.get("last_bucket", -1))
+        s.stop_reason = str(p.wt.get("stop_reason", "stop"))
+        s.stop = max(float(p.stop), float(p.wt.get("stop", 0.0)), s.entry if s.partial_done else s.stop0)
+        gap_save(p, s)
+        return s
+
+    def gap_exit(p: GapPlan, q: tuple[float, float, pd.Timestamp] | None, b: pd.DataFrame | None,
+                 now: dt.datetime) -> None:
+        """The registered gap exit for the plan in play (wt.live.setups_live, wt_step): half off at the first target
+        on the bid, the stop to breakeven, the stagnation stop before that target, then the stop trailed under each
+        completed five-minute low and out on a five-minute close under EMA9; and out after a breakout bar without
+        volume. The protective stop itself rests at the broker."""
+        nonlocal wt
+        if p.wt.get("exit"):                                   # an exit already asked for, and not done yet
+            oms.exit_now(p, None, reason=str(p.wt["exit"]), market=True)
+            return
+        if p.state != "in_position":
+            return
+        if wt is None:
+            wt = gap_wt(p, b, now)
+            if wt is None:
+                return
+        # the first target is a quote decision: the bid at or over it, sold with a limit at it, never on the mid
+        if not wt.partial_done and pd.Timestamp(now) >= wt.entry_bar + pd.Timedelta(minutes=1) \
+                and (px := target_exit_limit(q, wt.t1_price)) is not None:
+            reason = "target_all" if wt.qty0 < 2 else "partial_t1"
+            sold = oms.partial_exit(p, wt.partial_qty, px, reason)
+            if sold:
+                log("partial_filled", trade_id=p.trade_id, symbol=p.symbol, code=p.code, qty=sold, limit=px,
+                    reason=reason, state=p.state)
+                if p.state == "in_position":
+                    sl.wt_on_partial(wt)                       # the stop goes to breakeven (moved below)
+                    gap_save(p, wt)
+            if p.state != "in_position":
+                return
+        # the newest closed bar, once
+        if b is not None and len(b) and str(b.t.iloc[-1]) != p.wt.get("bar"):
+            last = pd.Timestamp(b.t.iloc[-1])
+            wt_tries.clear()                                   # a stop the broker would not take is asked again each bar
+            late = False
+            if p.bv and not p.wt.get("bv_known"):
+                at = np.nonzero((pd.to_datetime(b.t, utc=True) == wt.entry_bar).to_numpy())[0]
+                got = sl.gap_bv(p.bv, b, gctx.get("pm_bars") if gctx else None, int(at[0])) if len(at) else None
+                if got is not None:
+                    wt.bv_bar, wt.bv_fail = pd.Timestamp(b.t.iloc[got[0]]).tz_convert("UTC"), got[1]
+                    p.wt["bv_known"] = True
+                    late = got[1] and last > wt.bv_bar         # its bar was not read when it closed: out now
+            acts = sl.wt_step(b, wt)
+            if late:
+                acts = [sl.WTAction("exit", "breakout_volume_fail")]
+            p.wt["bar"] = str(b.t.iloc[-1])
+            gap_save(p, wt)
+            for act in acts:
+                if act.kind == "exit":
+                    p.wt["exit"] = act.reason
+                    store.save(p)
+                    log("exit_signal", trade_id=p.trade_id, symbol=p.symbol, code=p.code, reason=act.reason)
+                    oms.exit_now(p, None, reason=act.reason, market=True)
+                    return
+        # the stop where the exit wants it: breakeven after the target, then each completed five-minute low
+        want = round(wt.stop, 2)
+        if want > p.stop + 1e-9 and wt_tries.get(want, 0) < STOP_MOVE_TRIES:
+            wt_tries[want] = wt_tries.get(want, 0) + 1
+            moved = oms.move_stop(p, want)
+            log("stop_moved" if moved else "stop_move_failed", trade_id=p.trade_id, symbol=p.symbol, code=p.code,
+                stop=want, why="breakeven" if wt.stop_reason == "stop" else wt.stop_reason)
 
     held_try: dict[str, dt.datetime] = {}
     while True:
@@ -956,7 +1410,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                 if p is None or not p.active:
                     continue
                 oms.sync(p)
-                acts = oms.reconcile({p.symbol}, {}, plan=p)
+                acts = reconciled(p)
                 if acts:
                     log("reconcile", actions=acts)
             # ---- positions no plan of today opened: out at once (retried every 5 minutes). Its own block: a
@@ -974,7 +1428,11 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             except Exception as e:  # noqa: BLE001
                 log("held_error", error=repr(e)[:300])
             # ---- bars ----
+            if gap and not gap_selected:
+                gap_select()                                   # at the first poll of the session: the pool is 09:25's
             live = sorted(s for s, st in names.items() if not st.done)
+            if gap:
+                live = [primary] if primary is not None and not gap_done else []
             watch = sorted(set(live) | ({plan.symbol} if plan is not None else set()))
             seen = {s: (bars[s].t.iloc[-1] if s in bars and len(bars[s]) else None) for s in watch}
             try:
@@ -982,6 +1440,12 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             except Exception as e:  # noqa: BLE001 — no new bars: nothing is decided on old ones
                 log("data_timeout", what="bars", error=e.__class__.__name__)
                 watch = []
+                if isinstance(plan, GapPlan) and plan.state == "entry_working":
+                    # a gap order rests only while the newest bars say it should: unread bars, no order
+                    oms.cancel_entry_remainder(plan)
+                    gap_rested[0] = ""
+                    log("entry_cancelled", trade_id=plan.trade_id, symbol=plan.symbol, why="bars_unread",
+                        filled=plan.filled_qty, state=plan.state, code=plan.code)
             # ---- the plan in play ----
             if plan is not None:
                 manage(plan, now)
@@ -1000,7 +1464,10 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                     universe.last_scan = now
                     log("scan_failed", error=e.__class__.__name__)
             # ---- entries ----
-            if now < entry_end:
+            if gap:
+                if watch:
+                    gap_entries(now)
+            elif now < entry_end:
                 for sym in live:
                     b = bars.get(sym)
                     if plan is not None and sym == plan.symbol:
@@ -1055,7 +1522,8 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         pager.fire("paper-s:not-flat", "Sleeve S could not verify flat after the close",
                    "The broker could not be read after the close, or the end-of-day checks failed part way. Check "
                    "the account; the session's journal (END_OF_DAY_NOT_FLAT) has the error.", 5)
-    log("session_end", trial=sl.TRIAL, entries_off=off, universe=len(universe.joined), scans=universe.scans,
+    log("session_end", trial=trial, entries_off=off, **({"primary": primary is not None, "gap_done": gap_done}
+                                                         if gap else {}), universe=len(universe.joined), scans=universe.scans,
         entries=va.trades_by_day.get(day.isoformat(), 0), closed=closed_n, realised_R=round(realised, 4),
         day_stop=day_stopped(losers, realised), blocked=dict(sorted(counts.items())),
         virtual=asdict(va) if va_ok else None)

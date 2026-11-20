@@ -92,3 +92,57 @@ show how often the collar refuses a fill.
 3. The gap entries run live through `wt.live.runner_s` with the order manager's partial exit, and match the batch
    simulation on fixture days.
 4. A dated note in DEC-0066 switches HYP-0071 on, with its id in `S.switched_on`, in one pull request.
+
+## Notes
+
+### 2026-11-20: how the live desk reads "the first of the registered entries to give a valid signal"
+
+Written with the pull request that adds the gap entries to `wt.live.runner_s`. Nothing is switched on by it:
+`S.switched_on` stays empty. Each point below is a reading the code had to choose; each is **for the owner to
+confirm or change before the rule is switched on**. Where the record was silent, the reading that trades less was
+taken.
+
+1. **One resting order: the lowest valid trigger.** The batch run tests each entry rule on its own. A live desk
+   has one order manager, and its guard forbids a second open buy in a name. Several rules can have a valid order
+   at the same moment (the level order rests from 09:31 to 10:00 while the opening-range and red-to-green orders
+   are re-priced). The desk rests only the valid order with the lowest trigger, the first a rising price reaches,
+   and replaces it (cancel, confirm, then place) when that changes. Equal triggers go to the lower rule number.
+   The journal names the rule by a code, `e1` to `e4`, for ENT-GG-1 to ENT-GG-4.
+2. **The day's one attempt.** The first closed bar that reaches the trigger of the order that should be resting
+   is the day's attempt. If it fills, that is the day's trade. If it does not (the bar opened over the collar, the
+   order had been refused for its spread or a gate, the desk was not running), the desk does not trade that day:
+   it does not go on to another rule's order. This follows DEC-0066's note of 2026-11-19, item 4 ("an order that
+   does not fill ends the name for the day"). A rule whose order is invalidated without being reached (its stop
+   trades first, or its window ends) ends only that rule; the others go on.
+3. **Spread at the decision.** The spread must is asked each time an order is about to be sent. A signal refused
+   for its spread, or for a collar narrower than the slippage the simulation charges, is never sent later.
+4. **Orders that live for one bar.** The one-minute opening-range order and each red-to-green order are valid for
+   the next bar only. The desk cancels them when the minute they were decided for ends, by the clock, and places
+   the next one once that minute's bar has been read. An entry order is placed only when the bar of the minute
+   just ended printed (DEC-0066 section 3: no print is treated as halted).
+5. **Size.** Sized at the fill the simulation expects (the trigger plus its slippage), as the engine sizes at the
+   fill; with the small risks of these entries a cent changes the share count.
+6. **Order count.** Re-pricing stops for the day once 40 orders have been sent (`S.max_orders_per_day` is 60; the
+   rest is left to the exit's stop moves). The journal says so.
+7. **The pool.** Read once, at the first poll of the session at or after the open, from
+   `data/candidates/<day>.parquet`. A file that is missing, unreadable, or whose rows are not dated that day
+   gives no primary: entries are off for the session and exits are still managed. A restart reads the primary
+   back from the journal and does not choose again.
+8. **Which trial a session runs.** One: the one in `S.switched_on`. With HYP-0070 and HYP-0071 both listed the
+   session places no entry. With neither it runs as before (the reversal rule with entries off).
+
+**Where the live desk cannot be the batch simulation.**
+
+- The simulation fills the first target on a bar's high; the desk sells when the bid is at or over it, with a
+  limit at the target's price (DEC-0063's rule, as the reversal mode does).
+- The five-minute entry's breakout-volume check is known only when its five-minute bar completes, up to four
+  minutes after the fill. On that last minute the simulation asks the check before the target; the desk may
+  already have sold half on the quote. Either way the position is closed at the next open.
+- The batch run skips a name with fewer than 30 minute bars in the whole session. That is not knowable in the
+  morning; the desk does not apply it.
+
+**What the parity tests hold** (`tests/unit/test_gap_live.py`, `tests/unit/test_runner_s_gap.py`, constructed
+days only, no market data): for each of the four rules, the live reading and the batch detector with
+`wt.backtest.engine.simulate` agree on whether there is a trade, the entry bar, the entry price, the stop, the
+breakout-volume flag and every exit; and the runner, replayed, takes the simulation's trade on fixture days of
+each rule.
