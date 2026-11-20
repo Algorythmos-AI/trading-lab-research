@@ -17,3 +17,28 @@
 - **What closes this record:** a run of the two scripts on the registered span, writing `result.json` and
   `report.md` here, counts-first (`--counts-only`) as DEC-0010 asks, with the trial-count guard (60 dev trades
   for Set P) applied as written. Anything else is a new decision record.
+
+## 2026-11-20: the count guard's counts for Set P (counts only; the registered run is still not done)
+
+`counts_setP_guard.json` holds the trade counts at US$600 for the four Set P trials at each relaxation level of
+DEC-0010's count guard, from `scripts/r3_run.py --set P --counts-only`. No R was written or printed.
+
+| Level | Relaxed | First entry | Second | Third | Fourth |
+|---|---|---|---|---|---|
+| 0 | nothing | 3 | 15 | 4 | 23 |
+| 1 | window | 4 | 22 | 7 | 27 |
+| 2 | window, pre-market consolidation | 23 | 170 | 42 | 224 |
+| 3 | window, pre-market consolidation, EMAs | 44 | 375 | 113 | 507 |
+
+Counts from 2020-01-01 to 2025-09-25; the four columns are the trials in their registered order (HYP ids in
+DEC-0010). The guard's threshold is 60: the second and fourth trials reach it at level 2, the third at level 3,
+and the first never does (44 with every check relaxed).
+
+**These are upper bounds.** The pools for this span were built on 2026-11-19, when the news source returned
+nothing dated before 2026-04-28, so no name carries a headline and Set P's two headline exclusions removed
+nothing. For the same reason Set F cannot be counted on this span, and was not run.
+
+**Not done here:** `R3_P_RELAX` in `scripts/forward_test.py` is unchanged. The guard is written per trial and the
+constant is one set for all four, so applying it needs a decision; and since 2026-11-20 the stock desk selects by
+DEC-0068's rule, not by Set P. This file records the counts the guard asked for; it settles nothing about a result.
+
