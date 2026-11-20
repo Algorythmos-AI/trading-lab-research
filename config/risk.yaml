@@ -29,6 +29,10 @@ S:
   # Blocking for sleeve S (DEC-0066 section 3 says quote age blocks; the number is proposed by the note of
   # 2026-11-19 in that record and takes effect with it).
   max_quote_age_s: 10
+  # The trials this desk may trade, by id (DEC-0066 section 2: each is switched on by a dated note in that record).
+  # Empty since 2026-11-20: the owner paused HYP-0070, and the desk trades nothing until the funnel's rule is
+  # registered and switched on here.
+  switched_on: []
   # The stop rule (DEC-0066 section 4), on sleeve S's own journal.
   stop_rule:
     decision: DEC-0066

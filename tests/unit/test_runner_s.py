@@ -94,6 +94,7 @@ def env(tmp_path, monkeypatch):
                         ("MIN_FREE_GB", 0.0)):
         monkeypatch.setattr(runner_s, name, value)
     monkeypatch.setattr(runner_s, "detector_curve", lambda: np.linspace(1 / 390, 1.0, 390))
+    monkeypatch.setattr(runner_s, "switched_on", lambda: frozenset({"HYP-0070"}))   # these tests replay that rule
     monkeypatch.setattr(runner_b, "LIVE", tmp_path / "live")          # sleeve Q's folder, to prove it is not touched
     return tmp_path
 
@@ -949,3 +950,29 @@ def test_each_plan_takes_its_order_ids_from_its_own_block():
     p = TradePlan(date="2026-11-20", strategy="S", symbol="ABC", qty=1, trigger=1.0, limit=1.1, stop=0.9, target=1.2,
                   attempt=2, seq=runner_s.plan_seq(2) + 7)
     assert runner_s.orders_sent(p) == 7                                # the day's order count ignores the block
+
+
+
+# ---- which trials may trade ----------------------------------------------------------------------------------------------
+def test_a_rule_that_is_not_switched_on_orders_nothing(env, monkeypatch):
+    monkeypatch.setattr(runner_s, "switched_on", lambda: frozenset())
+    b = session(tape_of({"ABC": day_rows(TO_TARGET)}))
+    j = journal(env)
+    assert any("is not switched on" in r for r in one(j, "armed")["entries_off"])
+    assert one(j, "signal_blocked")["blockers"][0].startswith("entries_off:HYP-0070 is not switched on")
+    assert b.placed == []
+
+
+def test_the_committed_config_switches_nothing_on_and_an_unreadable_one_is_empty(tmp_path):
+    import importlib
+    real = importlib.import_module("wt.live.runner_s")
+    assert real.switched_on.__module__ == "wt.live.runner_s"
+    from wt.core.config import CONFIG_DIR
+    assert runner_s.switched_on(CONFIG_DIR / "risk.yaml") == frozenset()      # paused by the owner on 2026-11-20
+    good = tmp_path / "risk.yaml"
+    good.write_text("S:\n  switched_on: [HYP-0070, HYP-0099]\n")
+    assert runner_s.switched_on(good) == frozenset({"HYP-0070", "HYP-0099"})
+    assert runner_s.switched_on(tmp_path / "missing.yaml") == frozenset()
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("S: [not, a, mapping\n")
+    assert runner_s.switched_on(bad) == frozenset()
