@@ -76,7 +76,7 @@ def session(tape: Tape, start=(9, 25), crash_at=None, broker=None, hook=None, **
         clock.hooks.insert(0, broker.advance)
     if hook is not None:
         clock.hooks.append(lambda now: hook(now, broker))
-    args = {"account_number": "PA3SLEEVES", "q_account": lambda: "PA3SLEEVEQ", "environ": KEYS, **kw}
+    args = {"environ": KEYS, **kw}
     runner_s.run(DAY, poll_s=10.0, broker=broker, rest=ReplayREST(clock, tape, HALF), now_fn=clock.now,
                  sleep_fn=clock.sleep, **args)
     return broker
@@ -87,7 +87,7 @@ def crashed(tape: Tape, when: dt.datetime) -> BarFillBroker:
     b = BarFillBroker(clock, tape, HALF)
     with pytest.raises(ReplayCrash):
         runner_s.run(DAY, poll_s=10.0, broker=b, rest=ReplayREST(clock, tape, HALF), now_fn=clock.now,
-                     sleep_fn=clock.sleep, account_number="PA3SLEEVES", q_account=lambda: "PA3SLEEVEQ", environ=KEYS)
+                     sleep_fn=clock.sleep, environ=KEYS)
     return b
 
 
