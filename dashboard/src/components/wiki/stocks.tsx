@@ -341,7 +341,7 @@ export function ArchitectureSection({ s, feeds, now }: { s: Snapshot | null; fee
             signed ingest · every feed checked against its schema
           </text>
           <Node x={754} y={150} w={136} h={54} title="Overview · Today" sub={["Operations,", "Research, Risk"]} dot={dot("snapshot")} />
-          <Node x={754} y={290} w={136} h={150} title="Options" sub={["paper positions,", "levels and focus"]} dot={dot("levels")} />
+          <Node x={754} y={290} w={136} h={150} title="Options" sub={["levels and focus,", "open interest"]} dot={dot("levels")} />
           <Node x={754} y={472} w={136} h={40} title="Radar" sub="pre-market edition" dot={dot("radar")} />
           <Node x={754} y={532} w={136} h={86} title="Trades" sub="your Webull journal" dot={dot("journal")} />
           <Node x={904} y={150} w={80} h={54} title="watchdog" sub="every 10 min" />
