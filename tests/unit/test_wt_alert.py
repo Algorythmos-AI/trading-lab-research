@@ -72,8 +72,8 @@ def test_the_paging_file_is_overridden_only_in_a_test_and_says_so(tmp_path):
         assert not (tmp_path / "curl-args").exists() and "no ntfy topic configured" in r.stderr
 
 
-def test_paper_b_pages_at_priority_five(tmp_path):
-    argv, _ = run(tmp_path, "wt-paper-b.service")
+def test_paper_s_pages_at_priority_five(tmp_path):
+    argv, _ = run(tmp_path, "wt-paper-s.service")
     assert "Priority: 5" in argv
     argv, _ = run(tmp_path, "wt-backup.service")
     assert "Priority: 4" in argv

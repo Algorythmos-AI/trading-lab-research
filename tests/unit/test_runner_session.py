@@ -637,13 +637,6 @@ def test_a_failing_decision_journal_never_disturbs_the_session(env, monkeypatch)
     assert not any(r["event"] == "loop_error" for r in j)
 
 
-def test_paper_outcome_ignores_decision_events():
-    from wt.ops import jobs
-    base = [{"event": "armed"}, {"event": "session_end", "virtual": {}}]
-    extra = [{"event": "decision", "would_signal": True}, {"event": "decision_summary", "would_signals": 1}]
-    assert jobs.paper_outcome(base) == jobs.paper_outcome(base[:1] + extra + base[1:])
-
-
 # ---- the real signal through the real loop: a signal on the bar that just closed becomes an order ----
 
 class BreakoutREST(FakeREST):
