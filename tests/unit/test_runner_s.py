@@ -459,6 +459,7 @@ def clean(rec: Rec, *symbols: str) -> None:
             assert PAGE_CHARS.fullmatch(text), text
             assert not any(re.search(rf"\b{s}\b", text) for s in symbols), text
             assert not re.search(r"\d+\.\d\d", text) and "$" not in text, text
+            assert "/" not in text and ".md" not in text, text          # no path, a runbook's included
 
 
 def lease_answers(monkeypatch, ok: bool, reason: str) -> list[dict]:

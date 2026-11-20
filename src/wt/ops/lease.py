@@ -94,10 +94,21 @@ def break_lease(client: R2 | None = None, by: str = "owner", key: str = KEY) -> 
     return Result(w.status in (200, 201), f"HTTP {w.status}")
 
 
+def main(args: list[str]) -> Result:
+    """`[break] [paper-b|paper-s]`: acquire (or, with `break`, expire) the named lease; strategy B's by default.
+    Anything else is a usage error and touches no lease: a mistyped name must never act on the default one."""
+    rest = list(args)
+    brk = bool(rest) and rest[0] == "break"
+    if brk:
+        rest.pop(0)
+    if len(rest) > 1 or (rest and rest[0] not in KEYS):
+        return Result(False, f"usage: python -m wt.ops.lease [break] [{'|'.join(KEYS)}]")
+    which = rest[0] if rest else KEY
+    return break_lease(key=which) if brk else acquire(key=which)
+
+
 if __name__ == "__main__":
     import sys
-    args = sys.argv[1:]
-    which = args.pop() if args and args[-1] in KEYS else KEY        # `break paper-s`: sleeve S's lease
-    r = break_lease(key=which) if args == ["break"] else acquire(key=which)
+    r = main(sys.argv[1:])
     print(("OK: " if r.ok else "REFUSED: ") + r.reason)
     sys.exit(0 if r.ok else 1)

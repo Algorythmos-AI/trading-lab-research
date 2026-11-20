@@ -376,8 +376,8 @@ def _start(day: dt.date | None, poll_s: float, broker: Any, rest: Any, now_fn: C
         log("refuse_to_start", reason=why)
         pager.once_per_day("paper-s:refused-keys", "Sleeve S refused to start: key pair",
                            "Its own key pair is missing or is not its own; the session's journal (refuse_to_start) "
-                           "says which. No order was sent and nothing is managed. See "
-                           "docs/runbooks/position-alerts.md.", 4)
+                           "says which. No order was sent and nothing is managed. See the position alerts "
+                           "runbook.", 4)
         raise SystemExit(f"runner_s refuses to start: {why}")
     clock = now_fn or (lambda: dt.datetime.now(ET))
     sleep = sleep_fn or time.sleep
@@ -428,7 +428,7 @@ def _guarded(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         pager.once_per_day("paper-s:refused-account", "Sleeve S refused to start: account",
                            "Its account could not be told apart from sleeve Q's, or is sleeve Q's; the session's "
                            "journal (refuse_to_start) says which. No order was sent and nothing is managed. See "
-                           "docs/runbooks/position-alerts.md.", 4)
+                           "the position alerts runbook.", 4)
         raise SystemExit(f"runner_s refuses to start: {why}")
     _session(day, poll_s, broker, rest, clock, sleep, pager)
 
@@ -463,7 +463,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             refuse(f"primary lease not held: {got.reason}")
             pager.fire("paper-s:lease", "Sleeve S: no primary lease, entries off",
                        "The lease was not held; the session's journal (refuse_to_arm) says why. Exits are still "
-                       "managed. See docs/runbooks/backups-and-lease.md.", 4)
+                       "managed. See the backups and lease runbook.", 4)
     free_gb = shutil.disk_usage(ROOT).free / 1e9
     if free_gb < MIN_FREE_GB:
         refuse(f"free disk {free_gb:.1f} GB under the {MIN_FREE_GB:.0f} GB floor")

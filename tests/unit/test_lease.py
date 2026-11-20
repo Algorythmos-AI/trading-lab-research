@@ -151,3 +151,20 @@ def test_a_lease_this_code_does_not_name_is_refused_before_the_store_is_asked(ke
     s = Bucket()
     assert not lease.acquire(s, "h", key=key).ok and not lease.break_lease(s, key=key).ok
     assert s.seen == [] and s.objs == {}
+
+
+def test_the_command_line_names_a_lease_or_refuses_and_a_mistyped_name_never_acts_on_the_default(monkeypatch):
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(lease, "acquire", lambda client=None, holder=None, key=lease.KEY: (
+        calls.append(("acquire", key)) or lease.Result(True, "ok")))
+    monkeypatch.setattr(lease, "break_lease", lambda client=None, by="owner", key=lease.KEY: (
+        calls.append(("break", key)) or lease.Result(True, "ok")))
+    for args in ([], ["break"], ["paper-s"], ["break", "paper-s"], ["break", "paper-b"]):
+        assert lease.main(args).ok
+    assert calls == [("acquire", "paper-b"), ("break", "paper-b"), ("acquire", "paper-s"), ("break", "paper-s"),
+                     ("break", "paper-b")]
+    calls.clear()
+    for args in (["break", "paper-x"], ["paper-x"], ["break", "paper-s", "extra"], ["paper-s", "break"], ["brake"]):
+        r = lease.main(args)
+        assert not r.ok and r.reason.startswith("usage:"), args
+    assert calls == []
