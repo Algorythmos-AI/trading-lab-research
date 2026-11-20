@@ -32,7 +32,45 @@ PRINT = pa.schema([("recv_ns", pa.int64()), ("symbol", pa.string()), ("ts", pa.s
                    ("size", pa.int64()), ("exchange", pa.string()), ("conditions", pa.string())])
 OPEN_INTEREST = pa.schema([("recv_ns", pa.int64()), ("symbol", pa.string()), ("open_interest", pa.int64()),
                            ("open_interest_date", pa.string()), ("close_price", pa.float64())])
-SCHEMAS = {"option": OPTION, "stock": STOCK, "gap": GAP, "print": PRINT, "open_interest": OPEN_INTEREST}
+# One row per request of a sweep (tier 1, tier 2, or stocks as tier 0): what was asked, what came back, how many rows
+# changed, and the newest quote time in the answer. Rows of the option and stock streams are written only on a change,
+# so this stream is what says a contract WAS sampled at a tick (and with what), and what was not: `missing` lists the
+# symbols asked for and not answered, every one of them when the request failed or was never sent.
+SAMPLE = pa.schema([("recv_ns", pa.int64()), ("tick", pa.int32()), ("tier", pa.int8()), ("batch", pa.int16()),
+                    ("asked", pa.int32()), ("answered", pa.int32()), ("changed", pa.int32()), ("status", pa.int32()),
+                    ("newest_quote_ns", pa.int64()), ("result", pa.string()), ("missing", pa.string()),
+                    ("first", pa.string()), ("last", pa.string()), ("symbols", pa.string())])
+# `symbols`: the batch's symbols, comma-joined, written when they differ from that tier and batch's previous row (null:
+# the same as before), so the exact set each request asked for is known without repeating it every five seconds.
+# Tier membership as it happened: a contract joining tier 1 or tier 2 (tier 2 to 1 is a promotion), or refused by the
+# tier-1 cap (`event` "cap", tier 0), each once, with the tick and the stock mid the decision used.
+MEMBER = pa.schema([("recv_ns", pa.int64()), ("tick", pa.int32()), ("symbol", pa.string()), ("tier", pa.int8()),
+                    ("event", pa.string()), ("stock_mid", pa.float64())])
+SCHEMAS = {"option": OPTION, "stock": STOCK, "gap": GAP, "print": PRINT, "open_interest": OPEN_INTEREST,
+           "sample": SAMPLE, "member": MEMBER}
+STREAMS = tuple(SCHEMAS)
+
+
+def ts_ns(v: object) -> int | None:
+    """Nanoseconds since the epoch of an RFC 3339 time as Alpaca sends it (up to nine fractional digits, `Z` or an
+    offset); None when it is not one. `datetime` keeps microseconds only, so the fraction is read by hand."""
+    if not isinstance(v, str) or len(v) < 20 or v[10] != "T":
+        return None
+    import datetime as dt
+    body, frac, tz = v, "", "+00:00"
+    if body.endswith("Z"):
+        body = body[:-1]
+    elif len(body) > 6 and body[-6] in "+-" and body[-3] == ":":
+        body, tz = body[:-6], body[-6:]
+    if "." in body:
+        body, frac = body.split(".", 1)
+    if not frac.isdigit() and frac != "":
+        return None
+    try:
+        base = dt.datetime.fromisoformat(body + tz)
+    except ValueError:
+        return None
+    return int(base.timestamp()) * 1_000_000_000 + int((frac + "000000000")[:9] or 0)
 
 
 def _num(v: object) -> float | None:
@@ -81,6 +119,14 @@ class PartWriter:
         folder.mkdir(parents=True, exist_ok=True)
         for t in folder.glob(f"{stream}-*.parquet.tmp"):        # a write a stop interrupted: never listed, removed
             t.unlink()
+
+    def discard(self) -> int:
+        """Remove this stream's parts (a pull that a stop interrupted and that is redone whole); how many."""
+        gone = sorted(self.folder.glob(f"{self.stream}-*.parquet"))
+        for p in gone:
+            p.unlink()
+        self.rows = []
+        return len(gone)
 
     def next_part(self) -> Path:
         n = len(list(self.folder.glob(f"{self.stream}-*.parquet")))

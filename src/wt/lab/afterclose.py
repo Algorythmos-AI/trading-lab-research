@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import datetime as dt
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from wt.lab.probe import DATA_HOST, Answer, Get
@@ -20,34 +20,54 @@ PAPER_HOST = "https://paper-api.alpaca.markets"
 BATCH = 100
 PAGE = "10000"
 MAX_PAGES = 400
+TRIES = 3                                   # a failed page is asked again twice before its batch is given up
 
 
 def _z(t: dt.datetime) -> str:
     return t.astimezone(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _ask(get: Get, url: str, params: Mapping[str, str], headers: Mapping[str, str], timeout: float,
+         deadline: float, pause: Callable[[float], None]) -> Answer:
+    a = Answer(0, {}, None, 0.0)
+    for n in range(TRIES):
+        if time.monotonic() > deadline:
+            break
+        a = get(url, params, headers, timeout)
+        if a.status == 200 and isinstance(a.body, dict):
+            return a
+        if n + 1 < TRIES:
+            pause(2.0 * (n + 1))
+    return a
+
+
 def prints(get: Get, headers: Mapping[str, str], symbols: Sequence[str], start: dt.datetime, end: dt.datetime,
-           out: PartWriter, gap: PartWriter, deadline: float, timeout: float = 10.0) -> dict[str, int]:
-    """Every print of `symbols` between `start` and `end`, paged; counts of prints, requests and failed batches."""
+           out: PartWriter, gap: PartWriter, deadline: float, timeout: float = 10.0,
+           pause: Callable[[float], None] = time.sleep) -> dict[str, int]:
+    """Every print of `symbols` between `start` and `end`, paged; counts of prints, requests, failed batches and the
+    batches the deadline left unasked. A gap row names the batch (its first and last symbol) and the page."""
     syms = sorted(set(symbols))
-    counts = {"prints": 0, "requests": 0, "failed": 0, "not_reached": 0}
-    for i in range(0, len(syms), BATCH):
-        batch = syms[i:i + BATCH]
+    batches = [syms[i:i + BATCH] for i in range(0, len(syms), BATCH)]
+    counts = {"prints": 0, "requests": 0, "failed": 0, "not_reached": 0, "batches": len(batches)}
+    for bi, batch in enumerate(batches):
         token: str | None = None
-        for _ in range(MAX_PAGES):
+        where = f"batch {bi} {batch[0]}..{batch[-1]}"
+        for page in range(MAX_PAGES):
             if time.monotonic() > deadline:
-                counts["not_reached"] += 1
-                gap.add({"recv_ns": time.time_ns(), "tick": -1, "stream": "print", "reason": "deadline"})
+                counts["not_reached"] = len(batches) - bi
+                gap.add({"recv_ns": time.time_ns(), "tick": -1, "stream": "print",
+                         "reason": f"deadline: {len(batches) - bi} batches not pulled from {where} page {page}"})
                 return counts
             params = {"symbols": ",".join(batch), "start": _z(start), "end": _z(end), "limit": PAGE,
                       **({"page_token": token} if token else {})}
-            a: Answer = get(f"{DATA_HOST}/v1beta1/options/trades", params, headers, timeout)
+            a = _ask(get, f"{DATA_HOST}/v1beta1/options/trades", params, headers, timeout, deadline, pause)
             counts["requests"] += 1
             body = a.body if a.status == 200 and isinstance(a.body, dict) else None
             trades = body.get("trades") if body else None
             if not isinstance(trades, Mapping):
                 counts["failed"] += 1
-                gap.add({"recv_ns": time.time_ns(), "tick": -1, "stream": "print", "reason": f"status {a.status}"})
+                gap.add({"recv_ns": time.time_ns(), "tick": -1, "stream": "print",
+                         "reason": f"status {a.status}: {where} page {page} onward not pulled"})
                 break
             recv = time.time_ns()
             for sym, rows in trades.items():
@@ -65,44 +85,65 @@ def prints(get: Get, headers: Mapping[str, str], symbols: Sequence[str], start: 
             if token is None:
                 break
         else:
-            gap.add({"recv_ns": time.time_ns(), "tick": -1, "stream": "print", "reason": "page limit"})
+            counts["failed"] += 1
+            gap.add({"recv_ns": time.time_ns(), "tick": -1, "stream": "print", "reason": f"page limit: {where}"})
     return counts
 
 
 def open_interest(get: Get, headers: Mapping[str, str], roots: Sequence[str], first: dt.date, last: dt.date,
                   keep: set[str], out: PartWriter, gap: PartWriter, deadline: float,
-                  timeout: float = 10.0) -> dict[str, int]:
-    """The listed open interest of the recorded contracts (`keep`), by root and expiry span."""
-    counts = {"contracts": 0, "requests": 0, "failed": 0}
+                  timeout: float = 10.0, session: dt.date | None = None,
+                  pause: Callable[[float], None] = time.sleep) -> dict[str, Any]:
+    """The listed open interest of the recorded contracts (`keep`), by root and expiry span. Recorded contracts the
+    listing did not return are counted (and written as one gap row), and the open-interest dates are counted, so a
+    stale or partial pull is visible: Alpaca's figure is as of its `open_interest_date` (on 2026-11-19 it was dated
+    2026-11-17, morning and evening alike) and is null for about a quarter of contracts; nulls are counted too."""
+    counts: dict[str, Any] = {"contracts": 0, "requests": 0, "failed": 0, "null_open_interest": 0}
+    seen: set[str] = set()
+    dates: dict[str, int] = {}
     for root in sorted(set(roots)):
         token: str | None = None
-        for _ in range(20):
+        for page in range(20):
             if time.monotonic() > deadline:
-                gap.add({"recv_ns": time.time_ns(), "tick": -1, "stream": "open_interest", "reason": "deadline"})
-                return counts
+                gap.add({"recv_ns": time.time_ns(), "tick": -1, "stream": "open_interest",
+                         "reason": f"deadline at {root} page {page}"})
+                token = None
+                break
             params = {"underlying_symbols": root, "status": "active", "limit": PAGE,
                       "expiration_date_gte": first.isoformat(), "expiration_date_lte": last.isoformat(),
                       **({"page_token": token} if token else {})}
-            a = get(f"{PAPER_HOST}/v2/options/contracts", params, headers, timeout)
+            a = _ask(get, f"{PAPER_HOST}/v2/options/contracts", params, headers, timeout, deadline, pause)
             counts["requests"] += 1
             body = a.body if a.status == 200 and isinstance(a.body, dict) else None
             rows = body.get("option_contracts") if body else None
             if not isinstance(rows, list):
                 counts["failed"] += 1
                 gap.add({"recv_ns": time.time_ns(), "tick": -1, "stream": "open_interest",
-                         "reason": f"status {a.status} {root}"})
+                         "reason": f"status {a.status} {root} page {page}"})
                 break
             recv = time.time_ns()
             for r in rows:
-                if isinstance(r, Mapping) and r.get("symbol") in keep:
-                    out.add({"recv_ns": recv, "symbol": str(r["symbol"]), "open_interest": _cnt(_as_num(r.get("open_interest"))),
-                             "open_interest_date": _str(r.get("open_interest_date")),
-                             "close_price": _num(_as_num(r.get("close_price")))})
+                sym = r.get("symbol") if isinstance(r, Mapping) else None
+                if isinstance(sym, str) and sym in keep and sym not in seen:
+                    seen.add(sym)
+                    d = _str(r.get("open_interest_date"))
+                    dates[d or "none"] = dates.get(d or "none", 0) + 1
+                    oi = _cnt(_as_num(r.get("open_interest")))
+                    out.add({"recv_ns": recv, "symbol": sym, "open_interest": oi,
+                             "open_interest_date": d, "close_price": _num(_as_num(r.get("close_price")))})
                     counts["contracts"] += 1
+                    counts["null_open_interest"] += oi is None
             nxt = body.get("next_page_token") if body else None
             token = nxt if isinstance(nxt, str) and nxt else None
             if token is None:
                 break
+    counts["missing"] = len(keep - seen)
+    counts["dates"] = dict(sorted(dates.items()))
+    if session is not None:
+        counts["dated_session_or_later"] = sum(n for d, n in dates.items() if d != "none" and d >= session.isoformat())
+    if counts["missing"]:
+        gap.add({"recv_ns": time.time_ns(), "tick": -1, "stream": "open_interest",
+                 "reason": f"{counts['missing']} recorded contracts not in the listing"})
     return counts
 
 

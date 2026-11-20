@@ -15,7 +15,7 @@ The tape is PRIVATE: it never goes into the repository, the dashboard or a log. 
 | 09:30 to the close (13:00 on a half day) | Every 5 s: the contracts the owner could buy (tier 1) and the stocks. Every 60 s: the chains and the rest of the near-term chain (tier 2) |
 | The close to +90 min | The day's option prints for tier 1 and the open interest |
 | By +110 min | The manifest, then the upload to the lab's bucket and pruning of old local copies |
-| Saturday 11:00 | `lab-archive-check` re-downloads three random archived parts and compares their sha256 |
+| Saturday 11:00 | `lab-archive-check` reads back every archived session's manifest and twelve parts drawn with the date as seed, and fails if anything differs or if finished sessions exist with none archived |
 
 ## Where things are on the host
 
@@ -57,8 +57,26 @@ The tape is PRIVATE: it never goes into the repository, the dashboard or a log. 
 sudo -u wt cat /home/wt/lab-tape/$(TZ=America/New_York date +%F)/manifest.json | python3 -m json.tool | head -60
 ```
 
-Look at `recorded`, `coverage` (a session counts at 0.99 or more, with `opening_complete` true), `stopped` (empty on a
-normal day), `restarts`, `rows` and `after_close`. `upload.json` beside it means the bucket has the whole session.
+Look at:
+- `recorded`;
+- `coverage` and `coverage_fresh`: a sample counts as fresh only while its name's newest tier-1 quote is at most 30 s
+  old, so the two differ when Alpaca served old option quotes (on 2026-11-19, the previous day's for three names
+  until about 10:30);
+- `stale_ticks`, `stale_ticks_by_name`, `first_fresh_tick_by_name` (tick 0 is 09:30, one tick is 5 s) and
+  `longest_stale_s`;
+- `ticks_down`: ticks nobody ran, from a late start, a crash or a stop;
+- `opening_complete`;
+- `stopped`: empty on a normal day;
+- `restarts`, `rows` and `after_close` (with `open_interest.missing` and `.dates`);
+- `tier1_refused_by_cap`;
+- `code`: the commit that recorded it.
+
+DEC-0067, once accepted, says which of these make a session count. `receipts/<date>.json` in the tape root means the
+bucket holds the whole session; it is kept after the local copy is pruned.
+
+The `sample` stream says what every request asked for and got back, and the `member` stream says when each contract
+joined a tier. Research reads a session only through `wt.lab.read`, which refuses a changed or unfinished session and
+never hands back a quote the recorder did not sample at that time.
 
 ## What to do when
 
@@ -67,7 +85,9 @@ normal day), `restarts`, `rows` and `after_close`. `upload.json` beside it means
 | `stopped: "off switch"` | Someone created `var/lab/OFF`. Remove it to record the next session |
 | `stopped: "free disk under 17 GB"` | Free disk: see `disk-full.md`. The paper runners refuse only under 3 GB, so they were never at risk |
 | `stopped: "memory limit"` or `"N errors in a row"` | Read the day's log; the session is kept and the next one starts fresh |
-| A folder with `state.json` and no manifest after the close | The job was stopped and did not restart. `sudo systemctl start wt-lab-tape` writes the manifest with what it has (it resumes, finds the close past, finishes) |
+| A folder with `state.json` and no manifest after the close | The job was stopped and did not restart. `sudo systemctl start wt-lab-tape` the same day writes the manifest with what it has. If you leave it, the next weekday's run closes it as `never finished` and archives it |
+| `stopped` empty but `stale_ticks` high, or a `feed` gap row "<name> stale: ..." | Alpaca's option snapshots for that name were old or stopped moving while the recorder ran. Nothing to fix on the host; the session may not count |
+| `after_close.error` set | The pull failed (the manifest is still written, the error in it). The day keeps its stock and option tape without prints; nothing redoes it |
 | `upload.json` missing a day later | The next session's run uploads it. If it keeps failing, check the bucket token: `python -m wt.lab.archive upload` prints why |
 | The weekly check reports a bad object | An archived part differs from its receipt: keep the local copy if it is still there and investigate before anything is deleted |
 | A recording must stop now | Prefer `sudo -u wt touch /home/wt/trading/var/lab/OFF`: it stops within 5 s, writes the manifest and exits cleanly. `sudo systemctl stop wt-lab-tape` also works but pages "stopped by the system" and leaves the session to resume on the next start. Neither touches the paper runners |
