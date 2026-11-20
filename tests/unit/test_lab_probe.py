@@ -22,7 +22,7 @@ DESK = {"SPY", "QQQ", "NVDA", "AMD", "AAA", "BBB"}
 
 # ---------------------------------------------------------------- tiers
 def test_the_tier_rules_are_the_ones_exp_0041_froze() -> None:
-    cfg = yaml.safe_load((ROOT / "research/experiments/EXP-0041-lab-execution-truth/config.yaml").read_text())
+    cfg = yaml.safe_load((ROOT / "research/experiments/EXP-0052-lab-execution-truth-v2/config.yaml").read_text())   # DEC-0067 replaced EXP-0041
     t1, t2 = cfg["recording"]["tier1"], cfg["recording"]["tier2"]
     r = tiers.RULES
     assert (r.t1_max_sessions, r.t1_strike_pct, r.t1_max_ask, r.t1_max_per_name) == (
@@ -57,9 +57,10 @@ def test_a_contract_falls_in_one_tier_by_the_frozen_rules(symbol: str, ask: floa
 
 
 def test_tier_one_is_capped_at_the_nearest_strikes() -> None:
-    cands = [(f"SPY261118C00{k:03d}000", float(k)) for k in range(600, 760)]
+    cands = [(f"SPY261118C00{k:03d}000", float(k)) for k in range(400, 1000)]
     kept = tiers.cap_tier1(cands, 680.4)
-    assert len(kept) == 120 and kept[0] == "SPY261118C00680000" and "SPY261118C00600000" not in kept
+    assert len(kept) == 300 == tiers.RULES.t1_max_per_name                     # DEC-0067 point 4
+    assert kept[0] == "SPY261118C00680000" and "SPY261118C00400000" not in kept and "SPY261118C00999000" not in kept
 
 
 # ---------------------------------------------------------------- the focus reader
