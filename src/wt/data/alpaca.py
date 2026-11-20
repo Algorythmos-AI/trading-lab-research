@@ -71,12 +71,16 @@ class SharedRateLimiter:
 
 
 class AlpacaREST:
-    def __init__(self, per_minute: int = 180, shared: bool = False, global_per_minute: int = 180):
+    def __init__(self, per_minute: int = 180, shared: bool = False, global_per_minute: int = 180,
+                 key_id: str | None = None, secret: str | None = None):
         """shared=True joins the cross-process limiter (data/.alpaca_rate.json). Research and routine jobs opt in;
-        the default keeps the paper runner's existing per-process limiter unchanged."""
+        the default keeps the paper runner's existing per-process limiter unchanged. key_id and secret: another
+        account's key pair (sleeve S, DEC-0066), both or neither; the default is APCA_API_*, as before."""
+        if (key_id is None) != (secret is None):
+            raise ValueError("a key id and its secret go together")
         self.s = requests.Session()
-        self.s.headers.update({"APCA-API-KEY-ID": env("APCA_API_KEY_ID"),
-                               "APCA-API-SECRET-KEY": env("APCA_API_SECRET_KEY")})
+        self.s.headers.update({"APCA-API-KEY-ID": key_id or env("APCA_API_KEY_ID"),
+                               "APCA-API-SECRET-KEY": secret or env("APCA_API_SECRET_KEY")})
         if shared:
             from wt.core.config import DATA_DIR
             self.rl = SharedRateLimiter(DATA_DIR / ".alpaca_rate.json", global_per_minute, per_minute)

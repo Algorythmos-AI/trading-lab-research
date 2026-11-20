@@ -80,6 +80,40 @@ writes nothing.
 | `trig_01PW2UvCBejb4UxCEB58PEVp` (build) | `f3b07073c315d9b4e20c46b3b3d45daf531586dc6f40dedf170714ec391b3e3a` |
 | `trig_015qsK3nrRQgscNZh6strL4F` (catch-up) | `7f5212176a00dee795f23313d167cac7491f8b76dc15aff40eab87374a2f64e4` |
 
+**2026-11-19, 08:05 UTC, still before the build for session 2026-11-19 fired. A change to what the build reads.** At
+the owner's instruction the build and catch-up prompts gained an optional news read: a fixed read-only script,
+`radar_news.py` (sha256 `d4b62ed33e028d5d106a4cc2a8932fa1b6ae939dc91557a9f54eea89a8cc550b`, kept with the routines,
+outside the skill bundle), lists dated items from Alpaca's market-data news feed. Each item is a lead: the prompt
+requires the event to be confirmed at its linked source and that source to be cited. A failed or blocked read never
+stops a run. Headline and article text stay out of the edition sent to the dashboard. Until now the build's news came
+from web research and the Stocklake connector, which was not available to the new threads on this date.
+
+- This widens the routine's inputs from this session on. DEC-0055 already says the Radar's picks are not a fixed
+  procedure; this entry dates the change so the read can split sessions before and after it.
+- **For the owner to decide:** `AGENTS.md` describes the Radar as research from public sources. The feed is a licensed
+  one that points at public sources; whether that wording should change is the owner's call.
+
+| Routine | Prompt sha256 from this change |
+|---|---|
+| `trig_01PW2UvCBejb4UxCEB58PEVp` (build) | `705cebe0810b87cafa55e30811293773502d2f761c38f602d628606ca23e24b0` |
+| `trig_015qsK3nrRQgscNZh6strL4F` (catch-up) | `e968d0fa141ff8b7f4f0448fb8de073c527f364fcb3fdd79c648e9a5c5c304ac` |
+
+**2026-11-19, 11:45 UTC, after the build for session 2026-11-19 and before the one for 2026-11-20. The news rule
+is tightened (prompt v4).** The first build under the news read ran both reads (about 150 market items, 30 symbol
+items). Two feed leads reached the edition. Neither was confirmed at its source, and one of them was the reason a
+name left a list and went on the avoid list. Both were printed as NOT VERIFIED. At the owner's instruction:
+
+- A lead not confirmed at its source may no longer add, remove or move a name on a list or the avoid list, or change
+  a ranking. It may appear only in the research notes, marked NOT VERIFIED.
+- Each run prints the count line of both reads, and the report carries one line with the counts and which leads were
+  and were not confirmed.
+- Session 2026-11-19 is the only one built under the looser v3 wording.
+
+| Routine | Prompt sha256 from this change |
+|---|---|
+| `trig_01PW2UvCBejb4UxCEB58PEVp` (build) | `fd70b4358e7f7e792daa78a6072dc6cec166d1f7333ff82bcb47d083ea492171` |
+| `trig_015qsK3nrRQgscNZh6strL4F` (catch-up) | `4720e66409a8484ba9b8f66bb647cbb42d591d54e0115d69849a58756afee905` |
+
 ## Results
 
 None. Written once, by the read.

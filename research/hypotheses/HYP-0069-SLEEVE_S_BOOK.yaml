@@ -1,0 +1,14 @@
+id: HYP-0069
+trial: "S-BOOK"
+family: S                       # Robot B sleeve S (DEC-0066): forward-only paper trials, counted apart from the global 87; total 2
+spec: SPEC-0001 v1.0.1          # every entry and exit rule comes from spec.yaml; this record adds only the book around them
+status: pre-registered          # DEC-0066 (ACCEPTED 2026-11-20). NOT blind: see DEC-0066 "Disclosure"
+arm: paper                      # paper orders on sleeve S's own paper account; never sleeve Q's
+statement: "The round-3 rules of SPEC-0001 that DEC-0066 has switched on, traded as paper orders in one US$600 virtual account (T+1 settled cash, 1% of equity at risk per trade) with a day stop across all of them (entries stop after three consecutive losers or at -2R realised), have positive mean R per closed trade after the fills the paper broker actually gives."
+rule: sleeve_s_book             # the registered rules, one account, one day stop (DEC-0066 section 3)
+frozen: {unit: closed_trade, source: data/live/smallcap_journal.jsonl, rows: "trade_closed with origin entry and a real exit price", measure: mean_R, interval: [2.5, 97.5], resample_unit: session, resamples: 10000, seed: 20261169, too_few: {trades: 30, sessions: 20}}
+config: research/experiments/EXP-0051-sleeve-s-paper-book/config.yaml
+evidence: {spec: research/specs/SPEC-0001-warrior-methodology, decision: DEC-0066, experiments: [EXP-0051-sleeve-s-paper-book]}
+since: "the first session after DEC-0066 is accepted and the sleeve-S paper account exists"
+close_without_verdict: "2027-03-31 (the stop date of DEC-0066 section 4) with fewer than 30 closed trades or fewer than 20 sessions with a trade"
+falsified_if: "Read once, at the first of: 30 closed trades with at least 20 sessions holding a trade, or the stop rule of DEC-0066 section 4 firing. Falsified if the 95% bootstrap upper bound of mean R (sessions resampled with replacement, 10,000 resamples, seed 20261169) is below zero, or cumulative R is at or under -6.0R. Supported, as execution evidence only, if the lower bound is above zero. Anything else is no verdict. A paper result never passes G1: scripts/r3_eval.py on development data, at the trial count in force, is the only route to proven (DEC-0010, DEC-0066 section 6)."

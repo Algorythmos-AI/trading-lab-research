@@ -7,14 +7,16 @@
 - **The report is written once,** when a trial reaches 30 trades and 20 sessions, by:
 
   ```
-  scripts/options_clone_verdict.py --rules sip --trials retest,rejection,nearest \
+  scripts/options_clone_verdict.py --rules qqq --trials retest,rejection,nearest \
       --out research/experiments/EXP-0050-options-clone-sip
   ```
 
   The script refuses to write over an existing report. Until then the nightly review shows trade and session counts
   only.
-- **Start: the cutover session** (DEC-0064 point 6): the first session whose `armed` journal line names the stock
-  feed as `sip`. A dated note in DEC-0064 gives the date before that session's trades are viewed. Trades of earlier
+- **Start: 2026-11-19** (DEC-0064's dated note). The review's window `qqq` begins that day and is this
+  experiment's window, since EXP-0040 closed with no session.
+- **Start, as registered: the cutover session** (DEC-0064 point 6): the first session whose `armed` journal
+  line names the stock feed as `sip`. A dated note in DEC-0064 gives the date before that session's trades are viewed. Trades of earlier
   sessions stay in EXP-0040 and earlier.
 - **Run:** job `paper-o` on the host, with `config/options_clone.yaml` and `config/risk.yaml` key `O`, as frozen by
   DEC-0039, DEC-0040, DEC-0056, DEC-0058 and DEC-0064:

@@ -41,6 +41,8 @@ PAIRS = (
     Pair("APCA_OPTIONS_KEY_ID", "APCA_OPTIONS_SECRET_KEY",
          "second paper account: options-live (Paper positions), and the options clone when the clone pair is not set"),
     Pair("APCA_CLONE_KEY_ID", "APCA_CLONE_SECRET_KEY", "the options clone's own paper account (wins over APCA_OPTIONS_)"),
+    Pair("APCA_S_KEY_ID", "APCA_S_SECRET_KEY",
+         "Robot B sleeve S's own paper account (DEC-0066): runner_s, for orders and market data; never APCA_API_"),
     Pair("ALPACA_API_KEY_ID", "ALPACA_API_SECRET_KEY",
          "the site (Vercel) and make feed-agreement: read before APCA_API_; no Python tool reads it"),
 )
