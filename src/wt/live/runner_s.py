@@ -55,7 +55,7 @@ import pandas as pd
 from wt.backtest.engine import size_position
 from wt.core import ledger
 from wt.core.clock import ET, et, to_utc_iso
-from wt.core.config import DATA_DIR, ROOT, STATE_DIR, env
+from wt.core.config import CONFIG_DIR, DATA_DIR, ROOT, STATE_DIR, env
 from wt.data.alpaca import DATA
 from wt.live import scan_s
 from wt.live import setups_live as sl
@@ -148,6 +148,18 @@ def accepted(path: Path | None = None) -> bool:
         return "**Status: ACCEPTED" in (path or RECORD).read_text()
     except OSError:
         return False
+
+
+def switched_on(path: Path | None = None) -> frozenset[str]:
+    """The trials sleeve S may trade: `S.switched_on` in config/risk.yaml. DEC-0066 section 2: a registered rule
+    trades only once a dated note in that record switches it on, and the list is where the code reads it. A missing
+    or unreadable list is an empty one: nothing trades by default."""
+    import yaml
+    try:
+        cfg = yaml.safe_load((path or CONFIG_DIR / "risk.yaml").read_text())
+        return frozenset(str(x) for x in (cfg.get(STRATEGY, {}).get("switched_on") or []))
+    except Exception:  # noqa: BLE001 — unknown is "nothing switched on"
+        return frozenset()
 
 
 def key_refusal(environ: Mapping[str, str]) -> str | None:
@@ -443,6 +455,8 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
 
     if not accepted():
         refuse("DEC-0066 does not read ACCEPTED")
+    if sl.TRIAL not in switched_on():
+        refuse(f"{sl.TRIAL} is not switched on (config/risk.yaml S.switched_on; DEC-0066 section 2)")
     role = env("WT_ROLE", "primary")
     lease_state = "none"                # a console checkout takes no lease
     if role == "shadow":
