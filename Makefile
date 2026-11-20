@@ -16,7 +16,7 @@ TYPED_MODULES := src/wt/research/b_audit.py src/wt/research/b_exec_audit.py src/
                  src/wt/oms/manager.py src/wt/oms/multi.py src/wt/risk/virtual_account.py src/wt/ops/publish.py src/wt/brokers/alpaca_read.py src/wt/ops/evidence.py src/wt/ops/visibility.py \
                  src/wt/research/manifest.py src/wt/research/method.py src/wt/research/trials.py \
                  src/wt/research/signal_record.py src/wt/research/exp0034_outcome.py src/wt/research/exp0034_read.py \
-                 src/wt/ops/thresholds.py src/wt/analytics/g2.py src/wt/analytics/b_replay.py src/wt/risk/mandate.py src/wt/scanner/explain.py \
+                 src/wt/ops/thresholds.py src/wt/analytics/g2.py src/wt/analytics/b_replay.py src/wt/analytics/funnel_reasons.py src/wt/analytics/s_agreement.py src/wt/risk/mandate.py src/wt/scanner/explain.py \
                  src/wt/ops/dashguard.py src/wt/ops/drill.py src/wt/brokers/cancel_only.py src/wt/ops/host.py \
                  src/wt/ops/units.py src/wt/ops/hc.py src/wt/ops/econ_calendar.py src/wt/core/ledger.py src/wt/ops/r2.py src/wt/ops/lease.py \
                  src/wt/options/bs.py src/wt/options/longopt.py src/wt/options/live.py src/wt/options/levels.py src/wt/options/rules.py src/wt/options/edition.py src/wt/options/intraday.py \

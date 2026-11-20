@@ -10,6 +10,9 @@ Compares FORWARD evidence with what the frozen backtests predict, and checks pap
     biased (R-C1); its row says so until the re-run. Ledger rows repeated under the same `key` count once.
   * Paper B (data/live/journal.jsonl): trades, R, signal agreement with forward-test B (same sessions),
     incidents (loop errors, not-flat-at-close, reconcile fixes, latch), G2 progress (>=50 trades, >=30 sessions).
+  * Sleeve S (data/live/smallcap_journal.jsonl) against the forward test's record of the same rule (EXP-0051,
+    measures.agreement): trades on each side, the same name on the same session, and the difference in entry, exit
+    class and R for those pairs. Counts and differences only; the trials are named by id.
 Writes var/scorecards/scorecard_<date>.md (and prints it), dated by the US/Eastern session date: the job fires on
 Saturday morning in Sydney, which is still Friday's session in New York. Usage: python scripts/weekly_scorecard.py
 """
@@ -25,13 +28,14 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from wt.analytics import b_replay, funnel_agreement, g2  # noqa: E402
+from wt.analytics import b_replay, funnel_agreement, g2, s_agreement  # noqa: E402
 from wt.risk import stop_rule  # noqa: E402
 from wt.core.clock import ET  # noqa: E402
 from wt.core.config import DATA_DIR, FORWARD_LEDGER, ROOT, ROUTINE_DIR, SCORECARD_DIR  # noqa: E402
 
 FWD = FORWARD_LEDGER
 JOURNAL = DATA_DIR / "live/journal.jsonl"
+JOURNAL_S = DATA_DIR / "live/smallcap_journal.jsonl"        # sleeve S's own journal (wt.live.runner_s.JOURNAL)
 EXPECT = {  # frozen backtest distributions (development span; walk-forward where applicable)
     "B_qqq_qqqm": ("EXP-0005b-g1-etf-dev-realcost", "B|QQQ|noise|M3"),
     "watchlist_bull_flag_atr_M1": ("EXP-0013-r2-atr-stops", "s1_bull_flag_5m_atr|M1|W3"),
@@ -197,6 +201,54 @@ def agreement() -> list[str]:
     return L
 
 
+def sleeve_s(fwd: list[dict]) -> list[str]:
+    """Section 5: sleeve S against the forward test's record of the same rule (EXP-0051, measures.agreement).
+    A description in counts and differences: any failure here costs the scorecard this section and nothing else."""
+    head = ["", "## 5. Sleeve S against the forward test (EXP-0051)", ""]
+    try:
+        a = s_agreement.compare(s_agreement.read_rows(JOURNAL_S), fwd)
+    except Exception as e:  # noqa: BLE001
+        return [*head, f"- Not available this week ({e.__class__.__name__})."]
+    t = a["total"]
+    one_side = (f" Sessions only sleeve S ran: {t['s_only_sessions']} · only the forward test ran: "
+                f"{t['fwd_only_sessions']} (neither is compared).")
+    if not t["sessions"]:
+        return [*head, f"No sessions yet: none that sleeve S ({t['s_trial']}) armed and the forward test "
+                       f"({t['fwd_trial']}) completed.{one_side}"]
+    L = [*head,
+         f"Sessions both ran, sleeve S ({t['s_trial']}) and the forward test of the same rule ({t['fwd_trial']}): "
+         f"**{t['sessions']}** ({t['first']} → {t['last']}).{one_side} Counts and differences only; a difference is "
+         "sleeve S minus the forward test.", "",
+         "| | Sleeve S | Forward test | Same name, same session |", "|---|---|---|---|",
+         f"| Trades | {t['s_trades']} | {t['fwd_trades']} | {t['both']} |", ""]
+
+    def diff(d: dict, unit: str, places: int) -> str:
+        if not d["n"]:
+            return "—"
+        return (f"mean {d['mean']:+.{places}f}{unit} · mean absolute {d['mean_abs']:.{places}f}{unit} · "
+                f"largest {d['max_abs']:.{places}f}{unit} (n={d['n']})")
+
+    if t["both"]:
+        L += [f"- Pairs: entry {diff(t['entry_diff_cents'], '¢', 1)}",
+              f"- Pairs: exit class same {t['exit_same']} · different {t['exit_different']}"
+              + (f" · not classified {t['exit_unclassified']}" if t["exit_unclassified"] else ""),
+              f"- Pairs: R {diff(t['r_diff'], 'R', 2)}"]
+    else:
+        L += ["- No trade in the same name on the same session yet."]
+    L += [f"- Sessions with a pair: {t['sessions_with_a_pair']} · sessions sleeve S armed with entries off: "
+          f"{t['entries_off_sessions']}"]
+    traded = [d for d in a["sessions"] if d["s_trades"] or d["fwd_trades"]]
+    if traded:
+        L += ["", "| Session (a trade on either side) | Sleeve S | Forward test | Same name, same session |",
+              "|---|---|---|---|",
+              *(f"| {d['day']} | {d['s_trades']} | {d['fwd_trades']} | {d['both']} |" for d in traded), ""]
+    x = t["s_excluded"]
+    if any(x.values()):
+        L += [f"- Sleeve S closes left out of every count: exit price estimated {x['estimated_exit']} · not the "
+              f"rule's own entry {x['not_entry_origin']} · other {x['other_trial'] + x['no_entry_price'] + x['no_r']}"]
+    return L
+
+
 def main(now: dt.datetime | None = None) -> str:
     today = session_date(now or dt.datetime.now(ET))
     fwd = dedupe(read_jsonl(FWD))
@@ -264,6 +316,7 @@ def main(now: dt.datetime | None = None) -> str:
           f"incident-free streak {g['incident_free_streak']}/{g2.G2_MIN_INCIDENT_FREE} "
           "(a KILL-on, refused or incident session does not count)",
           *agreement(),
+          *sleeve_s(fwd),
           "", "_Rules are frozen; any change requires a new decision record (research/decisions)._"]
     md = "\n".join(L) + "\n"
     out = SCORECARD_DIR / f"scorecard_{today}.md"
