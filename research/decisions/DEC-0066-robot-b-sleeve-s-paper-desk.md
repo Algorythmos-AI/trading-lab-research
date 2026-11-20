@@ -223,3 +223,17 @@ a price or equity). Nothing of sleeve S is run on the development span or the ho
 - Sleeve S's paper account is its own (its number ends `HJU0…` on the owner's login). Its key pair is on the
   owner's console machine only. The host has neither the keys nor a job, and under systemd the runner manages exits
   only: a host session waits for the release that adds the job, its lease and its pages.
+
+### 2026-11-20: the host job
+
+The pull request that carries this note adds what the notes above said the first slice left out: the `paper-s` job
+and its unit, sleeve S's own primary lease (`paper-s`), and phone pages. So the sentence "under systemd the runner
+manages exits only" no longer describes the code. On the host the runner now trades when all of these hold: the
+unit is installed, sleeve S's key pair is in the host's secrets, and the session holds the `paper-s` lease. Without
+the key pair the job is refused before the runner starts; without the lease entries are off and exits are managed.
+
+Not changed by it: nothing in section 3 or 4, and the desk is still not an entry of its own in the desk table, so
+its journal is backed up with `data/live` but its hash chain is not yet verified or anchored by the nightly job.
+
+One rule follows for the owner: once the host timer is on, console sessions stop. A console checkout takes no lease,
+so a console session and the host job on the same account would each adopt and sell the other's position.

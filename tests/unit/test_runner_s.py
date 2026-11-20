@@ -84,6 +84,7 @@ def tape_of(days: dict[str, list[tuple]]) -> Tape:
 def env(tmp_path, monkeypatch):
     monkeypatch.setenv("MODE", "paper")
     monkeypatch.delenv("WT_HOST", raising=False)
+    monkeypatch.delenv("WT_ROLE", raising=False)
     record = tmp_path / "DEC-0066.md"
     record.write_text("# DEC-0066\n\n- **Status: ACCEPTED on 2026-12-01.**\n")
     state = tmp_path / "var" / "smallcap"
@@ -417,10 +418,292 @@ def test_it_refuses_outside_paper_mode(env, monkeypatch):
         session(tape_of({"ABC": QUIET_DAY}))
 
 
-def test_under_systemd_it_manages_exits_only(env, monkeypatch):
+# ---- the host: sleeve S's own primary lease and the shadow role (ADR 0004) ------------------------------------------
+class Rec:
+    """Stands in for wt.ops.alerts.Alerts behind the runner's pager: records every page as it would be sent."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, int, str, str]] = []
+
+    def _add(self, kind, key, title, message, priority):
+        from wt.ops.alerts import render
+        self.calls.append((kind, key, priority, *render(title, message)))
+
+    def fire(self, key, title, message, priority=4, tags=()):
+        self._add("fire", key, title, message, priority)
+
+    def resolve(self, key, title, message, priority=2):
+        self._add("resolve", key, title, message, priority)
+
+    def once_per_day(self, key, title, message, priority=3, day=None):
+        self._add("once_per_day", key, title, message, priority)
+
+    def keys(self, kind: str | None = None) -> list[str]:
+        return [c[1] for c in self.calls if kind is None or c[0] == kind]
+
+    def page(self, key: str, kind: str | None = None) -> tuple[str, str, int, str, str]:
+        hits = [c for c in self.calls if c[1] == key and (kind is None or c[0] == kind)]
+        assert len(hits) == 1, f"{key}: {len(hits)} pages"
+        return hits[0]
+
+
+def clean(rec: Rec, *symbols: str) -> None:
+    """No page names a symbol, a price or an amount, and every one keeps to the page alphabet."""
+    import re
+
+    from wt.ops.alerts import PAGE_CHARS
+    assert rec.calls
+    for _kind, key, _prio, title, message in rec.calls:
+        assert key.startswith("paper-s:")
+        for text in (key, title, message):
+            assert PAGE_CHARS.fullmatch(text), text
+            assert not any(re.search(rf"\b{s}\b", text) for s in symbols), text
+            assert not re.search(r"\d+\.\d\d", text) and "$" not in text, text
+            assert "/" not in text and ".md" not in text, text          # no path, a runbook's included
+
+
+def lease_answers(monkeypatch, ok: bool, reason: str) -> list[dict]:
+    from wt.ops import lease
+    asked: list[dict] = []
+
+    def acquire(client=None, holder=None, key=lease.KEY):
+        asked.append({"key": key})
+        return lease.Result(ok, reason)
+    monkeypatch.setattr(lease, "acquire", acquire)
+    return asked
+
+
+def test_on_the_host_with_its_lease_it_trades_as_usual(env, monkeypatch):
     monkeypatch.setenv("WT_HOST", "systemd")
+    asked = lease_answers(monkeypatch, True, "held by gcp-use1 until 2024-03-02T04:00:00+00:00")
+    rec = Rec()
+    b = session(tape_of({"ABC": day_rows(TO_TARGET)}), alerts=rec)
+    j = journal(env)
+    armed = one(j, "armed")
+    assert asked == [{"key": "paper-s"}]                               # its own lease, never sleeve Q's
+    assert armed["entries_off"] == [] and armed["lease"] == "held" and armed["role"] == "primary"
+    assert armed["pages"] is True and one(j, "lease")["held"].startswith("held by gcp-use1")
+    assert one(j, "trade_closed")["reason"] == "target"
+    assert "paper-s:lease" not in rec.keys("fire")
+    flat_and_clean(b)
+
+
+def test_on_the_host_without_its_lease_it_takes_no_entry_and_still_manages_exits(env, monkeypatch):
+    from wt.core.types import Position
+    monkeypatch.setenv("WT_HOST", "systemd")
+    lease_answers(monkeypatch, False, "held by another-host until 2024-03-02T04:00:00+00:00")
+    tape = tape_of({"ABC": day_rows(TO_TARGET), "XYZ": QUIET_DAY})
+    clock = ReplayClock(at(9, 25))
+    b = BarFillBroker(clock, tape, SESSIONS)
+    b.pos["XYZ"] = Position("XYZ", 5, 50.0)                            # a position to manage
+    rec = Rec()
+    session(tape, broker=b, alerts=rec)
+    j = journal(env)
+    armed = one(j, "armed")
+    assert armed["lease"] == "refused" and any("primary lease not held" in r for r in armed["entries_off"])
+    assert not events(j, "entry_placed") and not events(j, "entry_filled")
+    assert any(x.startswith("entries_off:primary lease not held") for x in one(j, "signal_blocked")["blockers"])
+    assert one(j, "adopted_orphan")["symbol"] == "XYZ" and one(j, "trade_closed")["origin"] == "orphan"
+    assert rec.page("paper-s:lease", "fire")[2] == 4
+    clean(rec, "ABC", "XYZ")
+    flat_and_clean(b)
+
+
+def test_a_shadow_host_never_sends_an_order_and_asks_for_no_lease(env, monkeypatch):
+    from wt.ops import lease
+    monkeypatch.setenv("WT_HOST", "systemd")
+    monkeypatch.setenv("WT_ROLE", "shadow")
+    monkeypatch.setattr(lease, "acquire", lambda *a, **k: pytest.fail("a shadow host takes no lease"))
     b = session(tape_of({"ABC": day_rows(TO_TARGET)}))
-    assert any("no host job" in r for r in one(journal(env), "armed")["entries_off"]) and b.placed == []
+    j = journal(env)
+    armed = one(j, "armed")
+    assert armed["role"] == "shadow" and armed["lease"] == "shadow" and armed["pages"] is False
+    assert any("shadow host" in r for r in armed["entries_off"]) and b.placed == []
+    assert any(x.startswith("entries_off:shadow host") for x in one(j, "signal_blocked")["blockers"])
+
+
+def test_the_shadow_brokers_order_calls_raise(env, monkeypatch):
+    """The second guarantee: the broker the session holds on a shadow host cannot send, cancel or replace."""
+    from wt.brokers.shadow import ShadowBroker, ShadowRole
+    from wt.core.types import Order
+    monkeypatch.setenv("WT_ROLE", "shadow")
+    seen = {}
+    real = runner_s.OMS
+
+    def spy(broker, **kw):
+        seen["broker"] = broker
+        return real(broker, **kw)
+    monkeypatch.setattr(runner_s, "OMS", spy)
+    session(tape_of({"ABC": QUIET_DAY}))
+    assert isinstance(seen["broker"], ShadowBroker)
+    with pytest.raises(ShadowRole):
+        seen["broker"].place(Order("x", "ABC", "buy", 1, "market"))
+    with pytest.raises(ShadowRole):
+        seen["broker"].cancel("x")
+
+
+def test_a_console_checkout_takes_no_lease(env, monkeypatch):
+    from wt.ops import lease
+    monkeypatch.setenv("WT_HOST", "launchd")
+    monkeypatch.setattr(lease, "acquire", lambda *a, **k: pytest.fail("no lease off the host"))
+    session(tape_of({"ABC": day_rows(TO_TARGET)}))
+    j = journal(env)
+    assert one(j, "armed")["lease"] == "none" and one(j, "trade_closed")["reason"] == "target"
+
+
+# ---- phone pages: each one fires, and carries no symbol, price or amount ---------------------------------------------
+def test_a_run_without_a_sender_pages_nothing_and_says_so(env):
+    session(tape_of({"ABC": QUIET_DAY}))
+    assert one(journal(env), "armed")["pages"] is False
+
+
+def test_a_refusal_for_its_keys_pages(env):
+    rec = Rec()
+    with pytest.raises(SystemExit, match="not both set"):
+        session(tape_of({"ABC": QUIET_DAY}), environ={"APCA_S_KEY_ID": "PKS"}, alerts=rec)
+    assert rec.page("paper-s:refused-keys", "once_per_day")[2] == 4      # delivered although the run raised
+    clean(rec, "ABC", "PKS")
+
+
+def test_a_refusal_for_its_account_pages(env):
+    rec = Rec()
+    with pytest.raises(SystemExit, match="this is sleeve Q's account"):
+        session(tape_of({"ABC": QUIET_DAY}), account_number="PA3SAME", q_account=lambda: "PA3SAME", alerts=rec)
+    assert rec.keys() == ["paper-s:refused-account"]
+    clean(rec, "ABC", "PA3SAME")
+
+
+def test_a_second_runner_pages_and_exits(env, monkeypatch):
+    from wt.ops import locks
+    monkeypatch.setattr(locks, "LOCK_DIR", env / "locks")
+    monkeypatch.setattr(runner_s, "RUNNER_LOCK_WAIT_S", 0.2)
+    monkeypatch.setattr(runner_s, "_connect", lambda *a: pytest.fail("a second runner must not reach the broker"))
+    rec = Rec()
+    with locks.job_lock(locks.RUNNER_LOCK_S) as got:
+        assert got and runner_s.RUNNER_LOCK == locks.RUNNER_LOCK_S == "paper-s-runner"
+        runner_s.run(DAY, environ=KEYS, now_fn=lambda: at(9, 0), sleep_fn=lambda s: None, alerts=rec)
+    assert rec.keys() == ["paper-s:second-runner"]
+    assert "runner lock held" in one(journal(env), "refuse_to_start")["reason"]
+    clean(rec)
+
+
+def test_an_account_that_is_not_paper_ends_the_session_and_pages(env):
+    tape = tape_of({"ABC": day_rows(TO_TARGET)})
+    clock = ReplayClock(at(9, 25))
+    b = BarFillBroker(clock, tape, SESSIONS)
+    acct = b.account()
+    b.account = lambda: type(acct)(**{**acct.__dict__, "is_paper": False})
+    rec = Rec()
+    session(tape, broker=b, alerts=rec)
+    assert rec.page("paper-s:not-paper")[2] == 5 and b.placed == [] and not events(journal(env), "armed")
+    clean(rec, "ABC")
+
+
+def test_a_session_whose_close_cannot_be_read_pages(env):
+    tape = tape_of({"ABC": QUIET_DAY})
+    clock = ReplayClock(at(9, 25))
+    b = BarFillBroker(clock, tape, SESSIONS)
+    b.clock = lambda: (_ for _ in ()).throw(RuntimeError("clock down"))
+    rest = ReplayREST(clock, tape, SESSIONS)
+    rest.calendar = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("calendar down"))
+    rec = Rec()
+    runner_s.run(DAY, poll_s=10.0, broker=b, rest=rest, now_fn=clock.now, sleep_fn=clock.sleep,
+                 account_number="PA3SLEEVES", q_account=lambda: "PA3SLEEVEQ", environ=KEYS, alerts=rec)
+    assert rec.page("paper-s:close-unknown", "once_per_day")[2] == 5 and events(journal(env), "close_unknown")
+    clean(rec, "ABC")
+
+
+def test_the_stop_rule_firing_pages_once_with_its_record(env):
+    f = env / "live" / "smallcap_journal.jsonl"
+    f.parent.mkdir(parents=True)
+    f.write_text(json.dumps({"event": "trade_closed", "day": str(PREV), "trade_id": "old", "R": -7.0,
+                             "origin": "entry"}) + "\n")
+    rec = Rec()
+    b = session(tape_of({"ABC": day_rows(TO_TARGET)}), alerts=rec)
+    j = journal(env)
+    kind, _key, prio, title, _msg = rec.page("paper-s:stop-rule")
+    assert (kind, prio) == ("once_per_day", 4) and "DEC-0066" in title and one(j, "stop_rule") and b.placed == []
+    clean(rec, "ABC")
+
+
+def test_an_adopted_position_pages_with_a_share_count_only(env):
+    from wt.core.types import Position
+    tape = tape_of({"ABC": QUIET_DAY})
+    b = BarFillBroker(ReplayClock(at(9, 25)), tape, SESSIONS)
+    b.pos["ABC"] = Position("ABC", 5, 50.0)
+    rec = Rec()
+    session(tape, broker=b, alerts=rec)
+    _kind, _key, prio, _title, msg = rec.page("paper-s:orphan", "once_per_day")
+    assert prio == 4 and "5 share(s)" in msg and "paper-s:not-flat" not in rec.keys("fire")
+    assert rec.keys("resolve")[-2:] == ["paper-s:not-flat", "paper-s:short-at-close"]     # verified flat at the close
+    clean(rec, "ABC")
+
+
+def test_a_position_over_the_caps_pages_and_is_paged_as_not_flat_at_the_close(env):
+    from wt.core.types import Position
+    tape = tape_of({"ABC": QUIET_DAY, "BIG": QUIET_DAY})
+    b = BarFillBroker(ReplayClock(at(9, 25)), tape, SESSIONS)
+    b.pos["BIG"] = Position("BIG", 5000, 50.0)
+    rec = Rec()
+    session(tape, broker=b, alerts=rec)
+    assert rec.page("paper-s:over-caps", "once_per_day")[2] == 5
+    kind, _key, prio, title, msg = rec.page("paper-s:not-flat")
+    assert (kind, prio, title) == ("fire", 5, "Sleeve S NOT FLAT at the close") and "5000 share(s)" in msg
+    assert "paper-s:not-flat" not in rec.keys("resolve") and "paper-s:short-at-close" in rec.keys("resolve")
+    clean(rec, "ABC", "BIG")
+
+
+def test_a_short_pages_in_the_session_and_again_at_the_close_and_is_never_covered(env):
+    from wt.core.types import Position
+    tape = tape_of({"ABC": QUIET_DAY})
+    b = BarFillBroker(ReplayClock(at(9, 25)), tape, SESSIONS)
+    b.pos["ABC"] = Position("ABC", -7, 50.0)
+    rec = Rec()
+    session(tape, broker=b, alerts=rec)
+    assert rec.page("paper-s:short", "once_per_day")[2] == 5 and "7 share(s)" in rec.page("paper-s:short")[4]
+    assert rec.page("paper-s:short-at-close", "fire")[2] == 5
+    assert [(p.symbol, p.qty) for p in b.positions()] == [("ABC", -7)] and b.placed == []
+    assert one(journal(env), "short_position")["qty"] == -7
+    clean(rec, "ABC")
+
+
+def test_a_broker_that_cannot_be_read_after_the_close_pages_not_verified(env):
+    def hook(now, broker):
+        if now >= at(16, 0):
+            broker.positions = lambda: (_ for _ in ()).throw(RuntimeError("ABC at 41.03: broker down"))
+    rec = Rec()
+    session(tape_of({"ABC": QUIET_DAY}), hook=hook, alerts=rec)
+    kind, _key, prio, title, _msg = rec.page("paper-s:not-flat")
+    assert (kind, prio, title) == ("fire", 5, "Sleeve S could not verify flat after the close")
+    assert "paper-s:not-flat" not in rec.keys("resolve")
+    assert "could not verify flat" in events(journal(env), "END_OF_DAY_NOT_FLAT")[-1]["error"]
+    clean(rec, "ABC")
+
+
+@pytest.mark.parametrize("skew, said", [(5.04, "+5.0 s off"), (None, "could not be read")])
+def test_a_clock_skew_block_pages_and_a_good_reading_clears_it(env, monkeypatch, skew, said):
+    monkeypatch.setattr(runner_s, "measure_skew", lambda broker, clock: skew)
+    rec = Rec()
+    b = session(tape_of({"ABC": day_rows(TO_TARGET)}), alerts=rec)
+    j = journal(env)
+    kind, _key, prio, _title, msg = rec.page("paper-s:clock-skew")
+    assert (kind, prio) == ("fire", 4) and said in msg and b.placed == []
+    assert one(j, "signal_blocked")["blockers"] == ["clock_skew"] and one(j, "clock_skew")["skew_s"] == skew
+    clean(rec, "ABC")
+    monkeypatch.setattr(runner_s, "measure_skew", lambda broker, clock: 0.1)
+    monkeypatch.setattr(runner_s, "JOURNAL", env / "live" / "second.jsonl")
+    for f in (env / "var" / "smallcap" / "plans").glob("*.json"):
+        f.unlink()
+    again = Rec()
+    session(tape_of({"ABC": day_rows(TO_TARGET)}), alerts=again)
+    assert "paper-s:clock-skew" in again.keys("resolve") and "paper-s:clock-skew" not in again.keys("fire")
+
+
+def test_a_clean_session_fires_nothing(env):
+    rec = Rec()
+    session(tape_of({"ABC": day_rows(TO_TARGET)}), alerts=rec)
+    assert rec.keys("fire") == [] and rec.keys("once_per_day") == []
+    assert set(rec.keys("resolve")) == {"paper-s:clock-skew", "paper-s:not-flat", "paper-s:short-at-close"}
 
 
 def test_sleeve_qs_files_are_never_created_or_changed(env):
@@ -543,11 +826,13 @@ def test_production_builds_its_broker_and_data_client_from_sleeve_s_keys_only(en
     monkeypatch.setattr(data, "AlpacaREST", FakeREST)
     monkeypatch.setattr(read, "AccountReader", FakeReader)
     monkeypatch.setattr(locks, "LOCK_DIR", env / "locks")
-    monkeypatch.setattr(runner_s, "_session", lambda day, poll_s, broker, rest, clock, sleep: seen.update(
-        broker=broker, rest=rest))
+    monkeypatch.setattr(runner_s, "_session", lambda day, poll_s, broker, rest, clock, sleep, pager: seen.update(
+        broker=broker, rest=rest, pager=pager))
     environ = {"APCA_S_KEY_ID": "PKS-TEST", "APCA_S_SECRET_KEY": "s-secret", "APCA_API_KEY_ID": "PKQ-TEST",
                "APCA_API_SECRET_KEY": "q-secret"}
-    runner_s.run(DAY, environ=environ, now_fn=lambda: at(9, 0), sleep_fn=lambda s: None)
+    rec = Rec()
+    runner_s.run(DAY, environ=environ, now_fn=lambda: at(9, 0), sleep_fn=lambda s: None, alerts=rec)
+    assert seen["pager"].alerts is rec and rec.calls == []
     assert built["broker"] == {"key_id": "PKS-TEST", "secret": "s-secret"}
     assert built["rest"]["key_id"] == "PKS-TEST" and built["rest"]["secret"] == "s-secret"
     assert "q-secret" not in repr(built) and "PKQ-TEST" not in repr(built)      # sleeve Q's pair goes nowhere
@@ -569,9 +854,31 @@ def test_production_refuses_when_the_two_accounts_are_one(env, monkeypatch):
     monkeypatch.setattr(read, "AccountReader", lambda: type("R", (), {"account_number": lambda self: "PA3SAME"})())
     monkeypatch.setattr(locks, "LOCK_DIR", env / "locks")
     monkeypatch.setattr(runner_s, "_session", lambda *a: pytest.fail("the session must not start"))
+    rec = Rec()
     with pytest.raises(SystemExit, match="this is sleeve Q's account"):
         runner_s.run(DAY, environ={"APCA_S_KEY_ID": "PKS", "APCA_S_SECRET_KEY": "x", "APCA_API_KEY_ID": "PKQ",
-                                   "APCA_API_SECRET_KEY": "y"}, now_fn=lambda: at(9, 0), sleep_fn=lambda s: None)
+                                   "APCA_API_SECRET_KEY": "y"}, now_fn=lambda: at(9, 0), sleep_fn=lambda s: None,
+                     alerts=rec)
+    assert rec.keys() == ["paper-s:refused-account"]
+
+
+def test_production_pages_through_the_real_sender_and_an_injected_broker_does_not(env, monkeypatch):
+    """`run()` with no broker builds wt.ops.alerts.Alerts; a replay (an injected broker, no alerts) stays silent."""
+    made = []
+
+    class FakeAlerts:
+        def __init__(self):
+            made.append(self)
+
+        def once_per_day(self, key, title, message, priority=3, day=None):
+            self.key = key
+    monkeypatch.setattr(runner_s, "Alerts", FakeAlerts)
+    with pytest.raises(SystemExit, match="not both set"):
+        runner_s.run(DAY, environ={}, now_fn=lambda: at(9, 0), sleep_fn=lambda s: None)
+    assert len(made) == 1 and made[0].key == "paper-s:refused-keys"
+    with pytest.raises(SystemExit, match="not both set"):
+        session(tape_of({"ABC": QUIET_DAY}), environ={})
+    assert len(made) == 1
 
 
 # ---- parity with the batch simulation (DEC-0066 section 5, item 3, the CI half) -----------------------------------------

@@ -34,6 +34,11 @@ On the VM, paper B arms entries only while it holds `wt-leases/paper-b` (20 h, t
 ("held by …", "lost a race", "unreachable") means entries off, exits managed, page "no primary lease".
 **Break it** (owner, only when the other holder is certainly stopped): `python -m wt.ops.lease break`.
 
+Sleeve S (job `paper-s`, DEC-0066) has a lease of its own in the same bucket, `wt-leases/paper-s`, with the same
+rules and the same token: neither lease says anything about the other. Refused means sleeve S's entries are off,
+its exits are managed, and the page is "Sleeve S: no primary lease". Break it with
+`python -m wt.ops.lease break paper-s` (`make lease-break LEASE=paper-s`). A console checkout takes no lease.
+
 ## Shadow role
 `WT_ROLE=shadow` (Vault) makes the VM's runner turn entries off for every session and wraps its broker so any
 order call raises. Its dashboard snapshots (key id `DASHBOARD_KEY_ID`) land in `shadow/latest.json` until the

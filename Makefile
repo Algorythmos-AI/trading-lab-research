@@ -102,8 +102,8 @@ preflight: ## Run every job's preflight as its scheduler would (launchd's minima
 uninstall-agents: ## OWNER: stop and remove every com.wt.* launchd agent (the Mac stops running jobs; cutover, plan v7)
 	$(PY) -m wt.ops.agents uninstall
 
-lease-break: ## OWNER: expire the paper-B primary lease now (after a host that held it is gone for good)
-	$(PY) -m wt.ops.lease break
+lease-break: ## OWNER: expire a primary lease now (after a host that held it is gone for good): paper B's, or make lease-break LEASE=paper-s
+	$(PY) -m wt.ops.lease break $(LEASE)
 
 agents-diff: ## Which installed launchd agents differ from the code
 	$(PY) -m wt.ops.agents diff

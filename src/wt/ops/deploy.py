@@ -44,7 +44,7 @@ from wt.ops.alerts import Alerts, count, exc_name, say
 from wt.ops.alerts import sha as short_sha
 from wt.ops.alerts import tag as tag_word
 from wt.ops.heartbeat import ok_runs_since
-from wt.ops.locks import DEPLOY_LOCK, RUNNER_LOCK, held, job_lock
+from wt.ops.locks import DEPLOY_LOCK, RUNNER_LOCKS, held, job_lock
 from wt.ops.schedule import JOBS, PY, TRADING_JOBS
 from wt.ops.window import deploy_blockers, load_sessions
 
@@ -74,8 +74,8 @@ def running_jobs() -> dict[str, bool]:
 def gate_blockers(now: dt.datetime | None = None) -> list[str]:
     now = now or _now()
     sessions, exact = load_sessions(now)
-    # The runner's own lock too: a runner orphaned by a dead wrapper holds only that one.
-    return deploy_blockers(now, sessions, running_jobs(), held([*TRADING_JOBS, RUNNER_LOCK]), exact)
+    # The runners' own locks too: a runner orphaned by a dead wrapper holds only that one.
+    return deploy_blockers(now, sessions, running_jobs(), held([*TRADING_JOBS, *RUNNER_LOCKS]), exact)
 
 
 QUIESCE_WAIT_S = 120.0
