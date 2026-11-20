@@ -90,7 +90,8 @@ fire while such a plan lasts, and would again after a lapse.
 
 ## Keys, by name and location
 
-Values never go in a file in the repo, a log, an issue or a chat. For rotation see `secret-rotation.md`.
+Values never go in a file in the repo, a log, an issue or a chat. For rotation see `secret-rotation.md`. Which account each
+pair reaches, and why there are three: `paper-accounts.md`.
 
 | Where | Names | Who reads them | Precedence |
 |---|---|---|---|
