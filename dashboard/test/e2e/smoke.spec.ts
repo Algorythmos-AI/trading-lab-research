@@ -8,7 +8,7 @@ const PAGES = [
   { path: "/radar", heading: "Radar" },
   { path: "/options", heading: "Options" },
   { path: "/paper", heading: "Paper" },
-  { path: "/robot-b", heading: "Robot B" },
+  { path: "/gap-hunter", heading: "Gap Hunter" },
   { path: "/calendar", heading: "Calendar" },
   { path: "/strategies", heading: "Strategies" },
   { path: "/research", heading: "Research" },
@@ -188,24 +188,70 @@ test("with no stored documents the radar page still shows the pipeline's schedul
   await expect(page.getByRole("list", { name: /^The Radar pipeline for / }).getByRole("listitem")).toHaveCount(7);
 });
 
-test("today draws the session clock and the open paper position", async ({ page }) => {
+test("the stock robot's old address lands on the Gap Hunter page, which says plainly what the host does not send", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("/robot-b");
+  await expect(page).toHaveURL(/\/gap-hunter$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Gap Hunter" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Robot B" })).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "Paper account (Alpaca): Gap Hunter", exact: true })).toHaveAttribute("data-env", "paper");
+  const glance = page.getByRole("region", { name: "Gap Hunter at a glance" });
+  await expect(glance).toContainText("Paper money only");
+  await expect(glance).toContainText("Rule DEC-0068");
+  for (const name of ["Where it stands", "Morning funnel", "Trades and results", "Session runs", "Alerts"]) {
+    await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+  }
+  await expect(page.getByText("Trades and results are not sent yet")).toBeVisible();
+  // Nothing of the retired rule, no host name for the robot, and no candidate's symbol: counts only.
+  const body = (await page.locator("main").textContent()) ?? "";
+  expect(body).not.toMatch(/QQQ|Robot B|sleeve|paper-s|[Hh]oldout|\bG1\b|LABT/);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+  expect(errors).toEqual([]);
+});
+
+test("the Paper page shows two books and nothing of the closed hand-traded account", async ({ page }) => {
+  await page.goto("/paper");
+  const bar = page.getByRole("navigation", { name: "On this page" });
+  await expect(bar.getByRole("link")).toHaveCount(2);
+  await expect(page.getByRole("heading", { level: 2, name: "Clone bot" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Research arms" })).toBeVisible();
+  await expect(page.getByText("Two separate books.")).toBeVisible();
+  await expect(page.getByText(/My paper trades|hand-placed/i)).toHaveCount(0);
+});
+
+test("the Strategies page sums up the three robots and keeps the retired rule in one closed section at its foot", async ({ page }) => {
+  await page.goto("/strategies");
+  const robots = page.locator("[data-robot]");
+  await expect(robots).toHaveCount(3);
+  await expect(robots.nth(1)).toContainText("Gap Hunter");
+  await expect(robots.nth(1)).toHaveAttribute("href", "/gap-hunter");
+  const retired = page.getByTestId("retired-rule");
+  await expect(retired).not.toHaveAttribute("open", "");
+  await expect(retired.locator("summary")).toHaveText("Retired: QQQ rule (DEC-0062, DEC-0069)");
+  await retired.locator("summary").click();
+  await expect(retired).toContainText("Verdict");
+  await expect(retired.getByRole("link")).toHaveCount(0);
+});
+
+test("today draws the three robots and the session clock", async ({ page }) => {
   // 11:02 New York on the fixture's trading day, so the clock shows "now".
   await page.clock.setFixedTime(new Date("2026-09-29T15:02:00Z"));
   await page.goto("/today");
   // The owner's own day comes first: the journal's latest session, its trades drawn on the clock.
   await expect(page.getByRole("heading", { name: /^Your (day|last session) · / })).toBeVisible();
   await expect(page.getByTestId("trade-clock")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Robot B (paper)", exact: true })).toBeVisible();
-  // The robot's panes sit in a paper frame, apart from the owner's own day above them.
-  await expect(page.getByRole("group", { name: "Paper account (Alpaca): Robot B", exact: true })).toHaveAttribute("data-env", "paper");
+  await expect(page.getByRole("heading", { name: "The three robots (paper)", exact: true })).toBeVisible();
+  await expect(page.locator("[data-robot]")).toHaveCount(3);
   const clock = page.getByRole("img", { name: /^The New York day 2026-09-29 from 04:00 to 20:00/ });
   await expect(clock).toBeVisible();
   // Every lane ends in a word, never colour alone: the fixture's routine run failed.
   await expect(page.getByTestId("clock-routine")).toContainText("failed");
-  await expect(page.getByTestId("clock-paper-b")).toContainText("ok");
+  // Gap Hunter's session has a lane before the host has reported a run; the retired rule's job has none.
+  await expect(page.getByTestId("clock-paper-s")).toContainText("no run");
+  await expect(page.getByTestId("clock-paper-b")).toHaveCount(0);
   await expect(page.getByTestId("clock-now")).toContainText("now 11:02");
-  // The fixture holds QQQM; there is no live quote for it, so the bar uses the paper account's mark.
-  await expect(page.getByRole("img", { name: /^QQQM paper position: stop 199\.00, entry 200\.02, target 202\.00, price 204\.13/ })).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 });
@@ -214,14 +260,14 @@ test("the v3 panels render from the fixture, and the glossary is linked", async 
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/risk");
-  await expect(page.getByRole("heading", { name: "Limits in force" })).toBeVisible();
-  await expect(page.getByText("Daily loss latch").first()).toBeVisible();
+  await expect(page.getByText("Robot alerts and the kill switch")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "The three robots (paper)", exact: true })).toBeVisible();
   await page.goto("/operations");
   await expect(page.getByRole("heading", { name: "Your feeds" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Job reliability, 14 days" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Audit trail" })).toBeVisible();
   await page.goto("/strategies");
-  await expect(page.getByRole("heading", { name: "Robot B (paper) performance" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Forward test scorecard" })).toBeVisible();
   await page.goto("/research");
   await expect(page.getByRole("heading", { name: "Since the last trading day" })).toBeVisible();
   await page.getByRole("link", { name: "Glossary" }).click();
@@ -241,8 +287,9 @@ test("the Overview leads with the owner's own trading, then the robots and the l
   await expect(page.getByTestId("rule-streak")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Profit and loss" })).toBeVisible();
   await expect(page.getByRole("heading", { name: /^Your patterns in / })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Robot B (paper) and the pre-market scan" })).toBeVisible();
-  await expect(page.getByRole("group", { name: "Paper account (Alpaca): Robot B", exact: true })).toHaveAttribute("data-env", "paper");
+  await expect(page.getByRole("heading", { name: "The three robots (paper)", exact: true })).toBeVisible();
+  await expect(page.locator("[data-robot]")).toHaveCount(3);
+  await expect(page.getByTestId("scan-line")).toContainText("Pre-market scan");
   // The fixture's snapshot is weeks old and the server runs on the real clock: inside a trading window that is RED
   // ("stopped") and the health shows as the banner at the top, otherwise as the line at the foot. Exactly one of them.
   const healthLine = page.getByTestId("health-line");
@@ -472,7 +519,7 @@ test("the HFT page renders from the fixture", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1, name: "HFT" })).toBeVisible();
   await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
   await expect(page.locator("#health-title")).toBeVisible();
-  for (const name of ["Build phases", "Recorder", "Pairs", "Sleeves", "Books", "Learning"]) {
+  for (const name of ["Build phases", "Recorder", "Pairs", "Strategies", "Books", "Learning"]) {
     await expect(page.getByRole("heading", { level: 2, name, exact: true })).toBeVisible();
   }
   const status = page.getByRole("region", { name: "Desk status" });
@@ -482,7 +529,7 @@ test("the HFT page renders from the fixture", async ({ page }) => {
   const pairs = page.getByRole("region", { name: "Currency pairs" });
   await expect(pairs.getByRole("columnheader")).toHaveText(["Pair", "Form", "Last quote", "Updates a second", "Median spread"]);
   await expect(pairs.getByRole("cell", { name: "EUR.USD" })).toBeVisible();
-  const sleeves = page.getByRole("region", { name: "Sleeves" });
+  const sleeves = page.getByRole("region", { name: "Strategies" });
   await expect(sleeves.getByRole("row")).toHaveCount(3);
   await expect(sleeves.getByRole("row").nth(2)).toContainText("Directional change");
   await expect(page.getByRole("heading", { level: 3, name: "Shadow book" })).toBeVisible();

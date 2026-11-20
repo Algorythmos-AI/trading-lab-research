@@ -8,6 +8,7 @@ import { dayIn, NEW_YORK, num, shortDate, shortSha, sydney, SYDNEY, txt } from "
 import type { Tone } from "@/lib/labels";
 import { editionState } from "@/lib/options";
 import { radarStale } from "@/lib/radar";
+import { GAP_HUNTER } from "@/lib/robots";
 import type { JournalResult, OptionsLiveResult, OptionsResult, RadarResult, SnapshotResult } from "@/lib/snapshot";
 import { entries, list, type Snapshot } from "@/lib/types";
 import {
@@ -282,9 +283,9 @@ export function ArchitectureSection({ s, feeds, now }: { s: Snapshot | null; fee
   };
   const f = (k: FeedKey) => feeds.find((x) => x.key === k);
   const dot = (k: FeedKey) => feedDot(f(k), now);
-  const label = `Where the Stocks site's data comes from. Left of a red line everything is paper or read only. Alpaca paper account A sends bars to the routine, paper-b and forward jobs, and takes paper-b's paper orders. The forward job's ledger feeds the weekly scorecard. Those four jobs write state files that the publisher collects into the snapshot. Alpaca paper account B sends your paper option positions to the options job. A job runner on the trading host starts every job and sends alerts and dead-man pings to your phone. IBKR sends last prices to the pre-open focus, bars and implied vol to the after-close levels, and lists and prices to the radar build. The levels run picks the focus; the radar build leaves its edition in an outbox for the radar send. Webull Australia sends your real trades, read only, to the Webull sync and its backstop. Every one of those feeds reaches this site through its signed ingest: the snapshot to Overview, Today and Operations; positions, levels and focus to Options; the radar to Radar; the journal to Trades. Live prices come to Options straight from Alpaca's IEX quotes through the site, not through the ingest. The site's watchdog checks the snapshot's age and pages your phone when it is late. Host jobs: ${[
+  const label = `Where the Stocks site's data comes from. Left of a red line everything is paper or read only. Alpaca's paper accounts send bars to the routine, Gap Hunter and forward jobs, and take Gap Hunter's paper orders. The forward job's ledger feeds the weekly scorecard. Those four jobs write state files that the publisher collects into the snapshot. Alpaca paper account B sends your paper option positions to the options job. A job runner on the trading host starts every job and sends alerts and dead-man pings to your phone. IBKR sends last prices to the pre-open focus, bars and implied vol to the after-close levels, and lists and prices to the radar build. The levels run picks the focus; the radar build leaves its edition in an outbox for the radar send. Webull Australia sends your real trades, read only, to the Webull sync and its backstop. Every one of those feeds reaches this site through its signed ingest: the snapshot to Overview, Today and Operations; positions, levels and focus to Options; the radar to Radar; the journal to Trades. Live prices come to Options straight from Alpaca's IEX quotes through the site, not through the ingest. The site's watchdog checks the snapshot's age and pages your phone when it is late. Host jobs: ${[
     ["routine", "routine"],
-    ["paper-b", "paper-b"],
+    [GAP_HUNTER.job, GAP_HUNTER.name],
     ["forward", "forward"],
     ["weekly", "weekly"],
     ["dashboard", "publisher"],
@@ -321,7 +322,7 @@ export function ArchitectureSection({ s, feeds, now }: { s: Snapshot | null; fee
           <T x={20} y={67} muted>
             no real orders from here
           </T>
-          <Node x={20} y={86} w={180} h={134} title="Alpaca paper A" sub={["robot's bars,", "paper orders"]} tone="info" dot={job("paper-b", "paper-b")} />
+          <Node x={20} y={86} w={180} h={134} title="Alpaca paper accounts" sub={["bars for the jobs,", "paper orders"]} tone="info" dot={job(GAP_HUNTER.job, GAP_HUNTER.name)} />
           <Node x={20} y={286} w={180} h={46} title="Alpaca paper B" sub="your paper options, read" tone="info" dot={dot("positions")} />
           <Node x={20} y={404} w={180} h={108} title="IBKR" sub="prices, read only" tone="info" />
           <Node x={20} y={532} w={180} h={86} title="Webull Australia" sub="your real trades, read only" tone="info" dot={dot("journal")} />
@@ -340,7 +341,7 @@ export function ArchitectureSection({ s, feeds, now }: { s: Snapshot | null; fee
             signed ingest · every feed checked against its schema
           </text>
           <Node x={754} y={150} w={136} h={54} title="Overview · Today" sub={["Operations,", "Research, Risk"]} dot={dot("snapshot")} />
-          <Node x={754} y={290} w={136} h={150} title="Options" sub={["paper positions,", "levels and focus"]} dot={dot("levels")} />
+          <Node x={754} y={290} w={136} h={150} title="Options" sub={["levels and focus,", "open interest"]} dot={dot("levels")} />
           <Node x={754} y={472} w={136} h={40} title="Radar" sub="pre-market edition" dot={dot("radar")} />
           <Node x={754} y={532} w={136} h={86} title="Trades" sub="your Webull journal" dot={dot("journal")} />
           <Node x={904} y={150} w={80} h={54} title="watchdog" sub="every 10 min" />
@@ -350,7 +351,7 @@ export function ArchitectureSection({ s, feeds, now }: { s: Snapshot | null; fee
           <Node x={246} y={44} w={412} h={28} title="systemd timers → job runner · lock, preflight, deadline" />
           {[
             ["routine", "routine", "Mon–Fri 07:30", 86],
-            ["paper-b", "paper-b", "08:30 to the close", 134],
+            [GAP_HUNTER.job, GAP_HUNTER.name, "08:30 to the close", 134],
             ["forward", "forward", "12:40, after the close", 182],
             ["weekly", "weekly", "Fri 20:00", 238],
           ].map(([key, name, when, y]) => (
@@ -586,7 +587,7 @@ export function DaySection({ s, feeds, now }: { s: Snapshot | null; feeds: Feed[
     { name: "radar", where: "task", dot: fdot("radar", "radar") },
     { name: "routine", where: "host", dot: jdot("routine", "routine") },
     { name: "focus", where: "task", dot: fdot("levels", "focus") },
-    { name: "paper-b", where: "host", dot: jdot("paper-b", "paper-b") },
+    { name: GAP_HUNTER.name, where: "host", dot: jdot(GAP_HUNTER.job, GAP_HUNTER.name) },
     { name: "options job", where: "host", dot: fdot("positions", "options job") },
     { name: "Webull sync", where: "task", dot: fdot("journal", "Webull sync") },
     { name: "forward", where: "host", dot: jdot("forward", "forward") },
@@ -622,7 +623,7 @@ export function DaySection({ s, feeds, now }: { s: Snapshot | null; feeds: Feed[
       {text}
     </T>
   );
-  const label = `A trading day in New York time, 05:00 to 18:30, with Sydney time underneath. Scheduled tasks: the radar builds at ${hhmm(radar)} and is sent at ${hhmm(send)}; the focus heads-up at 08:50; your Webull trades sync every 2 minutes from 09:24 to 16:20, with a backstop at ${hhmm(backstop)}; the levels and the next focus are built at ${hhmm(levels)}. Host jobs: the routine plans before the open; paper-b trades the cash session and is flat by the close; the options job and the publisher send every 5 minutes; the forward test scores after the close.${
+  const label = `A trading day in New York time, 05:00 to 18:30, with Sydney time underneath. Scheduled tasks: the radar builds at ${hhmm(radar)} and is sent at ${hhmm(send)}; the focus heads-up at 08:50; your Webull trades sync every 2 minutes from 09:24 to 16:20, with a backstop at ${hhmm(backstop)}; the levels and the next focus are built at ${hhmm(levels)}. Host jobs: the routine plans before the open; Gap Hunter scans from the open and is flat by the close; the options job and the publisher send every 5 minutes; the forward test scores after the close.${
     showNow ? ` Now is ${hhmm(nowMin)} New York.` : ""
   } ${lanes.map((l) => l.dot.word).join("; ")}.`;
   return (
@@ -687,11 +688,11 @@ export function DaySection({ s, feeds, now }: { s: Snapshot | null; feeds: Feed[
           {/* focus heads-up */}
           {bar(2, 8 * 60 + 50, 9 * 60 + 5, "work")}
           {note(2, 9 * 60 + 5, "top 4 heads-up before the bell")}
-          {/* paper-b */}
+          {/* Gap Hunter's session */}
           {bar(3, 8 * 60 + 30, 9 * 60 + 30, "wait")}
           {bar(3, 9 * 60 + 30, 16 * 60, "work")}
           <T x={x(9 * 60 + 30) + 8} y={y(3) + 15}>
-            one plan at a time, stop from the first fill, flat by the close
+            scans from the open, flat by the close
           </T>
           {/* options job: every 5 minutes in the session */}
           {ticks(4, 9 * 60 + 4, 16 * 60 + 59, 5, "opt")}
@@ -920,11 +921,10 @@ const ADRS = [
 
 const RUNBOOKS: { file: string; when: string }[] = [
   { file: "gcp-host", when: "the host runs old code, or you need to deploy, install units or rebuild" },
-  { file: "not-flat-at-close", when: "p5 “Paper B NOT FLAT at the close”, a red banner" },
+  { file: "not-flat-at-close", when: "p5 “NOT FLAT at the close”, a red banner" },
   { file: "position-alerts", when: "“adopted a position”, “exits only”, “clock check failed”" },
   { file: "latch-reset", when: "p5 “loss limit latched”; entries stay off" },
   { file: "kill-and-flatten", when: "you want the paper robot to stop now" },
-  { file: "options-positions", when: "the Options page's paper positions are missing or old" },
   { file: "paper-options", when: "the Paper page has no history, says it is old, or a total looks wrong" },
   { file: "dashboard-late", when: "“Dashboard late”, a grey or amber freshness pill" },
   { file: "rollback", when: "the next night's jobs fail after a deploy" },

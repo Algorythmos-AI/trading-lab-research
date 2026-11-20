@@ -26,7 +26,9 @@ const { default: TodayPage } = await import("@/app/today/page");
 const { default: TradesPage } = await import("@/app/trades/page");
 const { default: RiskPage } = await import("@/app/risk/page");
 const { default: PaperPage } = await import("@/app/paper/page");
-const { default: RobotBPage } = await import("@/app/robot-b/page");
+const { default: GapHunterPage } = await import("@/app/gap-hunter/page");
+const { default: StrategiesPage } = await import("@/app/strategies/page");
+const { default: ResearchPage } = await import("@/app/research/page");
 
 beforeEach(() => {
   vi.unstubAllEnvs();
@@ -38,13 +40,13 @@ beforeEach(() => {
 const params = <T extends Record<string, string>>(q: T) => ({ searchParams: Promise.resolve(q) });
 const RENDER: Record<GuardedPage, () => Promise<string>> = {
   overview: async () => renderToString(await OverviewPage()),
-  // The live view: the one that draws the paper positions pane. The rule replay is in the folded research section.
+  // The live view: the one that drew the paper positions pane, now gone. The rule replay is in the folded research section.
   options: async () => renderToString(await OptionsPage({ searchParams: Promise.resolve({ d: undefined, view: "live", s: undefined, pane: undefined, all: undefined }) })),
   today: async () => renderToString(await TodayPage()),
   trades: async () => renderToString(await TradesPage(params({}))),
   risk: async () => renderToString(await RiskPage()),
   paper: async () => renderToString(await PaperPage(params({}))),
-  "robot-b": async () => renderToString(await RobotBPage()),
+  "gap-hunter": async () => renderToString(await GapHunterPage()),
 };
 
 const unescape = (s: string) => s.replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
@@ -52,7 +54,7 @@ const attr = (tag: string, name: string) => new RegExp(`\\s${name}="([^"]*)"`).e
 
 /**
  * Every non-real frame on the markup, as "env: label": the label is the frame's accessible name after its class's
- * name ("Paper account (Alpaca): Robot B" reads "paper: Robot B"). A frame of no known class is listed as it stands.
+ * name ("Paper account (Alpaca): Gap Hunter" reads "paper: Gap Hunter"). A frame of no known class is listed as it stands.
  */
 function nonRealFrames(html: string): string[] {
   const out: string[] = [];
@@ -141,20 +143,19 @@ describe("taking the non-real frames out", () => {
 describe("money on the guarded pages", () => {
   it("is drawn through Money where the B2 pages put it: real on Today and Trades, paper wherever a paper frame holds dollars", async () => {
     const [overview, options, today, trades, risk] = await Promise.all([RENDER.overview(), RENDER.options(), RENDER.today(), RENDER.trades(), RENDER.risk()]);
-    // Robot B's one-line result.
-    expect(moneyOf(overview)).toEqual(["paper"]);
-    // The paper positions' results (three positions and their total).
-    expect(moneyOf(options).filter((e) => e === "paper").length).toBeGreaterThanOrEqual(4);
+    // The three robots are a state word each: no paper money on the Overview.
+    expect(moneyOf(overview)).not.toContain("paper");
+    // The hand-traded paper account's positions pane is gone: no paper money on the desk, and none of the owner's.
+    expect(moneyOf(options)).not.toContain("paper");
     expect(moneyOf(options)).not.toContain("real");
-    // The owner's day result, and Robot B's paper P&L.
+    // The owner's day result; the robots' row holds no money.
     expect(moneyOf(today)).toContain("real");
-    expect(moneyOf(today)).toContain("paper");
+    expect(moneyOf(today)).not.toContain("paper");
     // The owner's record and session, and the clone's day result.
     expect(moneyOf(trades)).toContain("real");
     expect(moneyOf(trades)).toContain("paper");
-    // Robot B's paper broker account.
-    expect(moneyOf(risk).length).toBeGreaterThan(0);
-    expect(new Set(moneyOf(risk))).toEqual(new Set(["paper"]));
+    // The robots' side of Risk is alerts and the kill switch: no paper money.
+    expect(moneyOf(risk)).not.toContain("paper");
   });
 
 });
@@ -164,7 +165,7 @@ describe("the B2 wording", () => {
 
   it("names each non-real region by what it is, and no longer calls a rule on probation paper", async () => {
     const options = text(await RENDER.options());
-    expect(options).toContain("PAPER · ALPACA Manual option positions");
+    expect(options).not.toMatch(/Manual option positions|Paper option positions/);
     expect(options).toContain("Rule replay (model)");
     // "Paper" for a rule on probation, in any of the forms it used to take (the panes, the Entry rules key and table,
     // the rule chart's tooltip and counts). "The paper account" for the Alpaca account itself is right and stays.
@@ -172,18 +173,57 @@ describe("the B2 wording", () => {
     expect(options).not.toMatch(probationAsPaper);
     expect(unescape(await RENDER.options())).not.toMatch(probationAsPaper); // titles and tooltips too
     const today = text(await RENDER.today());
-    expect(today).toContain("Robot B (paper)");
+    expect(today).toContain("The three robots (paper)");
     expect(today).not.toContain("The robots, paper money only");
-    // The pre-market scan is the routine's dry run, not Robot B's account: outside every paper frame.
+    // The pre-market scan is the routine's dry run, not a robot's account: outside every paper frame.
     const todayOwn = text(outsideNonReal(await RENDER.today()));
     expect(todayOwn).toContain("Pre-market scan");
     expect(todayOwn).toContain("Candidates");
-    expect(todayOwn).not.toContain("Robot B (paper) session");
     const overview = text(await RENDER.overview());
-    expect(overview).toContain("Robot B (paper) and the pre-market scan");
+    expect(overview).toContain("The three robots (paper)");
     expect(overview).not.toContain("The robots, paper money only");
     expect(text(await RENDER.trades())).toContain("Options clone (paper)");
-    expect(text(await RENDER.risk())).toContain("Robot B (paper)");
+    expect(text(await RENDER.risk())).toContain("The three robots (paper)");
+  });
+
+  it("sums the robots up as exactly three wherever it sums them up, and names no Robot B, no sleeve and no hand-placed account anywhere", async () => {
+    const pages: Record<string, string> = {
+      overview: await RENDER.overview(),
+      today: await RENDER.today(),
+      risk: await RENDER.risk(),
+      strategies: renderToString(await StrategiesPage()),
+      "gap-hunter": await RENDER["gap-hunter"](),
+      paper: await RENDER.paper(),
+      options: await RENDER.options(),
+      research: renderToString(await ResearchPage()),
+    };
+    for (const page of ["overview", "today", "risk", "strategies"]) {
+      const robots = [...pages[page]!.matchAll(/data-robot="([a-z-]+)"/g)].map((m) => m[1]);
+      expect(robots, page).toEqual(["clone", "gap-hunter", "arms"]);
+    }
+    for (const [page, html] of Object.entries(pages)) {
+      const body = unescape(html);
+      expect(body, page).not.toMatch(/Robot B|RobotB|\bsleeves?\b|Strategy B|strategy B|Paper B\b/);
+      expect(body, page).not.toMatch(/My paper trades|hand-placed|Manual option/i);
+    }
+  });
+
+  it("keeps the QQQ rule off every main page: only the Strategies page names it, once, collapsed and marked retired", async () => {
+    const strategies = renderToString(await StrategiesPage());
+    const retired = strategies.match(/<details[^>]*data-testid="retired-rule"[\s\S]*?<\/details>/)?.[0] ?? "";
+    expect(text(retired)).toContain("Retired: QQQ rule (DEC-0062, DEC-0069)");
+    expect(retired).not.toMatch(/<details[^>]*\sopen/);
+    expect(retired).not.toMatch(/<a\s/);
+    const outside = text(strategies.replace(retired, ""));
+    // The forward test's own row for the rule is the host's data and stays, marked retired; nothing else names it.
+    expect(outside.replace(/The retired QQQ rule\./g, "")).not.toMatch(/QQQ rule|Is .* proven|G1|[Hh]oldout|evidence ladder/);
+    for (const page of ["overview", "today", "risk", "gap-hunter", "paper"] as const) {
+      const body = text(await RENDER[page]());
+      expect(body, page).not.toMatch(/QQQ rule|QQQM|Is .* proven|\bG1\b|[Hh]oldout|[Ee]vidence ladder|Virtual account/);
+    }
+    const research = text(renderToString(await ResearchPage()));
+    expect(research).not.toMatch(/QQQM|[Hh]oldout|G1 scoreboard|G2 paper evidence|Virtual equity/);
+    expect(research).toContain("of the retired QQQ rule");
   });
 
   it("the site header does not call the whole site paper", () => {
@@ -204,7 +244,6 @@ describe("Money in the source", () => {
     });
   /** Files that draw Money for a frame drawn by the page that holds them: the frame is named here. */
   const FRAMED_BY = {
-    "components/today/trading.tsx": "app/today/page.tsx",
     "components/paper/dollars.tsx": "components/paper/paper-page.tsx",
   } as Record<string, string>;
   const uses = files(SRC)
@@ -214,13 +253,9 @@ describe("Money in the source", () => {
   it("is used where B2 put it", () => {
     expect(uses.map((f) => f.rel).sort()).toEqual(
       [
-        "app/risk/page.tsx",
-        "components/client/options-positions.tsx",
         "components/journal.tsx",
         "components/options-clone.tsx",
-        "components/overview/home.tsx",
         "components/paper/dollars.tsx",
-        "components/today/trading.tsx",
         "components/today/your-day.tsx",
       ].sort(),
     );

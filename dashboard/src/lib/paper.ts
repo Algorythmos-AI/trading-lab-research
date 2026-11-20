@@ -5,11 +5,12 @@
 // what the journal has no word for: the clone's rule windows and hypotheses, results on the premium and in R,
 // rolling figures, and how the fills compared with the quotes.
 //
-// Three sources, never added together: the options clone (paper orders), the hand-placed paper account, and the
-// research arms (simulated fills). A row that cannot be read is left out and counted, never guessed at; a clone row
+// Two books, never added together: the options clone (paper orders) and the research arms (simulated fills). The
+// hand-traded paper account was closed (2026-11-20): a document that still carries its `manual` block is read as
+// before and the block is ignored. A row that cannot be read is left out and counted, never guessed at; a clone row
 // its own record does not count (`counts: false`) is listed and kept out of every figure.
 import { closeDay, contractLabel, daily, fmtMinutes, holdMinutes, nyTime, sortByClose, type DayRow, type GroupRow, type Trade } from "./journal";
-import type { ArmTrade, CloneTrade, ManualTrade, PaperOptions } from "./paper-options.types";
+import type { ArmTrade, CloneTrade, PaperOptions } from "./paper-options.types";
 import { parseContract } from "./positions";
 
 /** The clone's premium stop as a share of the premium: one R (DEC-0030). A result on the premium over this is in R. */
@@ -86,23 +87,6 @@ function counted(r: CloneTrade): r is CountedClone {
   );
 }
 
-function manualRow(v: unknown): ManualTrade | null {
-  const r = obj(v);
-  if (!r) return null;
-  const ok =
-    isStr(r.id) &&
-    isStr(r.contract) &&
-    (r.side === "long" || r.side === "short") &&
-    isNum(r.qty) &&
-    r.qty > 0 &&
-    isTime(r.opened_at) &&
-    isTime(r.closed_at) &&
-    isNum(r.entry) &&
-    isNum(r.exit) &&
-    isNum(r.pnl_usd);
-  return ok ? (r as unknown as ManualTrade) : null;
-}
-
 function armRow(v: unknown): ArmTrade | null {
   const r = obj(v);
   if (!r) return null;
@@ -169,45 +153,6 @@ export function cloneBook(doc: PaperOptions): PaperBook {
     });
   }
   return { trades: sortByClose(trades), meta, uncounted, skipped, truncated: isNum(src.truncated) ? src.truncated : 0 };
-}
-
-/** The hand-placed paper account's book; null until the host sends that history. */
-export function manualBook(doc: PaperOptions): PaperBook | null {
-  const src = obj(obj(doc)?.manual);
-  if (!src) return null;
-  const trades: Trade[] = [];
-  const meta = new Map<string, PaperMeta>();
-  const seen = new Set<string>();
-  let skipped = 0;
-  for (const v of list(src.trades)) {
-    const r = manualRow(v);
-    const c = r ? parseContract(r.contract) : null;
-    if (!r || !c || seen.has(r.id)) {
-      skipped++;
-      continue;
-    }
-    seen.add(r.id);
-    const expired = r.close === "expired";
-    trades.push({
-      id: r.id,
-      symbol: c.symbol,
-      kind: c.kind,
-      strike: c.strike,
-      expiry: c.expiry,
-      side: r.side,
-      qty: r.qty,
-      opened_at: r.opened_at,
-      closed_at: r.closed_at,
-      entry: r.entry,
-      exit: r.exit,
-      multiplier: 100,
-      pnl: r.pnl_usd,
-      close: expired ? "expired" : "order",
-    });
-    const cost = r.entry * 100 * r.qty;
-    meta.set(r.id, { rop: cost > 0 ? r.pnl_usd / cost : null, reason: expired ? "expired" : null, hyp: null, window: null, quotedAsk: null, quoteAgeS: null, bestBid: null, worstBid: null, roughTime: false });
-  }
-  return { trades: sortByClose(trades), meta, uncounted: [], skipped, truncated: isNum(src.truncated) ? src.truncated : 0 };
 }
 
 export interface ArmBook extends PaperBook {

@@ -18,11 +18,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AuditPanel } from "@/components/v3/audit";
 import { SlaPanel } from "@/components/v3/sla";
 import { duration, newYork, num, pct, shortDate, shortSha, sydney, txt } from "@/lib/format";
-import { humanize, jobKey, jobName, jobTone, sortJobKeys } from "@/lib/labels";
+import { humanize, jobTone } from "@/lib/labels";
 import { loadPageFeeds, loadUnsentFeeds } from "@/lib/feed-watch-run";
 import { loadServerCheckFacts } from "@/lib/desk-guards-run";
 import { FUNNEL_PATHS, JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_PATHS, RADAR_DESK_PATHS, RADAR_PATHS } from "@/lib/desk";
 import { FEEDS } from "@/lib/feed-watch";
+import { hostJobName, jobName, RETIRED_RULE, siteWords, sortJobKeys } from "@/lib/robots";
 import { listOptionsDates, listRadarDates, loadFunnel, loadJournal, loadLedger, loadOptions, loadOptionsLive, loadRadar, loadRadarDesk, loadSnapshot } from "@/lib/snapshot";
 import { DISK_FLOOR_GB, DISK_TARGET_GB } from "@/lib/thresholds.gen";
 import { entries, list, type LogInfo, type Snapshot } from "@/lib/types";
@@ -153,7 +154,7 @@ function LastRunsPanel({ s }: { s: Snapshot }) {
                   Started {sydney(j.started)} Sydney ({newYork(j.started, false)} NY), took {duration(j.started, j.ended)}, code{" "}
                   <span className="font-mono">{shortSha(j.sha)}</span>
                 </p>
-                {j.detail ? <p className="text-xs break-words">{j.detail}</p> : null}
+                {j.detail ? <p className="text-xs break-words">{siteWords(j.detail)}</p> : null}
               </li>
             );
           })}
@@ -253,7 +254,7 @@ function HostPanel({ s }: { s: Snapshot }) {
                 {jobs.map((j, i) => (
                   <TableRow key={`${j.label}-${i}`}>
                     {/* The two text columns wrap so the status and exit columns stay inside a half-width card. */}
-                    <TableCell className="whitespace-normal">{j.name || jobName(jobKey(j.label))}</TableCell>
+                    <TableCell className="whitespace-normal">{hostJobName(j.label, j.name)}</TableCell>
                     <TableCell className="text-muted-foreground whitespace-normal">{txt(j.local_time)}</TableCell>
                     <TableCell>
                       {j.loaded === true ? (
@@ -361,7 +362,7 @@ function DstPanel({ s }: { s: Snapshot }) {
 function LogsPanel({ s }: { s: Snapshot }) {
   const logs: [string, LogInfo | null | undefined][] = [
     ["Pre-market routine", s.ops?.routine?.log],
-    ["Robot B (paper)", s.ops?.paper?.log],
+    [RETIRED_RULE.name, s.ops?.paper?.log],
     ["Forward test", s.ops?.forward?.log],
   ];
   return (

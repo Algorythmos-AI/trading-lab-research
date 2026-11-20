@@ -5,7 +5,7 @@ import { cleanSnapshot, fixture } from "./helpers";
 describe("summarize", () => {
   it("describes the fixture night", () => {
     expect(summarize(fixture())).toBe(
-      "Tonight: routine failed (exit 1), Robot B finished normally with entries paused (kill switch), forward test recorded 1 session. 4 things need you.",
+      "Tonight: routine failed (exit 1), forward test recorded 1 session, the kill switch is on. 4 things need you.",
     );
   });
 
@@ -14,13 +14,13 @@ describe("summarize", () => {
     s.ops!.forward!.sessions = 3;
     s.overview!.needs_you = s.overview!.needs_you!.slice(0, 1);
     expect(summarize(s)).toBe(
-      "Tonight: routine failed (exit 1), Robot B finished normally with entries paused (kill switch), forward test recorded 3 sessions. 1 thing needs you.",
+      "Tonight: routine failed (exit 1), forward test recorded 3 sessions, the kill switch is on. 1 thing needs you.",
     );
   });
 
   it("reads a quiet night", () => {
     const s = cleanSnapshot();
-    expect(summarize(s)).toBe("Tonight: routine finished normally, Robot B finished normally. Nothing needs you.");
+    expect(summarize(s)).toBe("Tonight: routine finished normally, Gap Hunter finished normally. Nothing needs you.");
   });
 
   it("mentions extra jobs only when they went wrong", () => {
@@ -30,7 +30,15 @@ describe("summarize", () => {
     expect(summarize(s)).toBe("Tonight: forward test was refused (exit 3), dashboard publish timed out. Nothing needs you.");
   });
 
-  it("notes the kill switch when paper B has no result", () => {
+  it("says nothing of the retired rule's job when it finished, names it when it failed, and never says Robot B or sleeve", () => {
+    const s = cleanSnapshot({ jobs: { last: { routine: { status: "ok" }, "paper-b": { status: "ok" }, "paper-s": { status: "refused", exit: 1 } } } });
+    expect(summarize(s)).toBe("Tonight: routine finished normally, Gap Hunter was refused (exit 1). Nothing needs you.");
+    const failed = cleanSnapshot({ jobs: { last: { routine: { status: "ok" }, "paper-b": { status: "failed", exit: 2 } } } });
+    expect(summarize(failed)).toBe("Tonight: routine finished normally, the retired QQQ rule failed (exit 2). Nothing needs you.");
+    for (const x of [s, failed, fixture()]) expect(summarize(x)).not.toMatch(/Robot B|sleeve|paper-[bs]/i);
+  });
+
+  it("notes the kill switch", () => {
     const s = cleanSnapshot({ kill: { on: true }, jobs: { last: { routine: { status: "ok" } } } });
     expect(summarize(s)).toBe("Tonight: routine finished normally, the kill switch is on. Nothing needs you.");
   });

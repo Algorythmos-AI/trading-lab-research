@@ -434,32 +434,14 @@ test("the contract pane names the OPRA feed as real time while its quotes are fr
 
 const positions = (page: Page) => page.getByRole("region", { name: "Paper option positions" });
 
-test("the paper positions sit under the list, and opening one prices the contract that is held", async ({ page }) => {
+test("the desk draws no positions pane, though the host still publishes the closed paper account's positions", async ({ page }) => {
+  // The hand-traded paper account was closed (2026-11-20). The fixture's live document still lists three positions:
+  // the desk reads its rules, hourly bars and open interest from that document and shows none of the positions.
   await open(page, "/options?view=live");
-  await expect(positions(page)).toBeVisible();
-  await expect(positions(page)).toHaveAttribute("data-positions", "fresh");
-  await expect(positions(page).getByRole("listitem")).toHaveCount(3);
-  // The hand-traded Alpaca paper account, framed and named as paper: its dollars are paper money (US$, with cents).
-  await expect(positions(page).getByRole("heading")).toHaveText("PAPER · ALPACA Manual option positions");
-  await expect(page.getByRole("group", { name: "Paper account (Alpaca): Manual option positions" })).toHaveAttribute("data-env", "paper");
-  // Two contracts of the SPY call, paid 2.85 and marked 3.10: fifty dollars up. The three together: 12.50 up.
-  await expect(positions(page).getByRole("listitem").filter({ hasText: "SPY" })).toContainText("+US$50.00");
-  await expect(positions(page)).toContainText(/open result \+US\$12\.50/);
-  // A position on one of the desk's names is priced from the option feed: its delta and what a day costs.
-  await expect(positions(page).getByRole("listitem").filter({ hasText: "SPY" }).locator("[data-greeks]")).toContainText(/Δ −?\d\.\d\d · [−+]US\$[\d,]+\.\d\d(\/day| to expiry)/);
-  // A name the desk does not carry is listed, and has nowhere to open.
-  await expect(positions(page).getByRole("listitem").filter({ hasText: "IWM" }).locator("[data-greeks]")).toHaveCount(0);
-  await expect(positions(page).getByRole("listitem").filter({ hasText: "IWM" }).getByRole("button")).toHaveCount(0);
-  // Opening the SPY position selects SPY (on a phone, opens it) and loads what is held into the contract pane.
-  await positions(page).getByRole("button", { name: /^SPY/ }).click();
-  await expect(detail(page, "SPY")).toBeVisible();
-  await expect(page).toHaveURL(/s=SPY/);
-  await expect(contract(page)).toHaveAttribute("data-contract", "ready");
-  await expect(contract(page).getByRole("button", { name: "Call", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await expect(contract(page).getByLabel("Contracts")).toHaveValue("2");
-  await expect(contract(page).getByLabel("Paid, per share")).toHaveValue("2.85");
-  // 2.85 a share, 100 shares, two contracts.
-  await expect(contract(page)).toContainText("$570");
+  await expect(page.getByRole("region", { name: "Rules today" })).toBeVisible();
+  await expect(positions(page)).toHaveCount(0);
+  await expect(page.getByText(/Manual option positions/)).toHaveCount(0);
+  await expect(page.locator('[data-env="paper"]')).toHaveCount(0);
   expect((await desk(page).textContent()) ?? "").not.toMatch(/NaN|undefined|Infinity/);
   await expect(page.locator("[data-pane-error]")).toHaveCount(0);
 });
@@ -556,7 +538,6 @@ test("the live view lists the rules that have triggered today, and each name's r
   await variant(context, baseURL, "rules-off");
   await open(page, "/options?view=live");
   await expect(page.getByRole("region", { name: "Rules today" })).toHaveCount(0);
-  await expect(positions(page)).toBeVisible();
   // It belongs to the live view.
   await variant(context, baseURL, "");
   await open(page, "/options?view=brief");
@@ -588,23 +569,14 @@ test("the map marks the strikes with the most open interest, and the layer can b
   await expect(detail(page, "SPY").locator('[data-layer="oi"]')).toHaveCount(0);
 });
 
-test("the paper positions say when there are none, warn when they have gone stale, and are absent until published", async ({ page, context, baseURL }) => {
-  await variant(context, baseURL, "positions-none");
-  await open(page, "/options?view=live");
-  await expect(positions(page)).toHaveAttribute("data-positions", "empty");
-  await expect(positions(page)).toContainText("No open option positions in the paper account");
-  // Three hours old with the market open: still shown, with a warning that says how old.
-  await variant(context, baseURL, "positions-old");
-  await open(page, "/options?view=live");
-  await expect(positions(page)).toHaveAttribute("data-positions", "old");
-  await expect(positions(page).getByRole("status")).toContainText("minutes old");
-  await expect(positions(page).getByRole("listitem")).toHaveCount(3);
-  // Nothing published yet, which is production until the host's job runs: no pane, and the desk as it was.
-  await variant(context, baseURL, "positions-off");
-  await open(page, "/options?view=live");
-  await expect(positions(page)).toHaveCount(0);
-  await expect(rows(page)).toHaveCount(10);
-  await expect(page.locator("[data-pane-error]")).toHaveCount(0);
+test("the desk is the same whatever the closed account's positions say: none, stale or never published", async ({ page, context, baseURL }) => {
+  for (const flag of ["positions-none", "positions-old", "positions-off"]) {
+    await variant(context, baseURL, flag);
+    await open(page, "/options?view=live");
+    await expect(positions(page)).toHaveCount(0);
+    await expect(rows(page)).toHaveCount(10);
+    await expect(page.locator("[data-pane-error]")).toHaveCount(0);
+  }
 });
 
 test("an edition in the second format shows the day's context and each name's volatility; the first format shows neither", async ({ page, context, baseURL, isMobile }) => {

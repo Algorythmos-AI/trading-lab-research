@@ -7,7 +7,6 @@ import {
   execution,
   expiryKey,
   glance,
-  manualBook,
   MIN_SAMPLE,
   paperRows,
   paperStale,
@@ -112,22 +111,13 @@ describe("the clone's book", () => {
   });
 });
 
-describe("the hand-placed book and the arms", () => {
-  it("reads the manual trades, with an expiry at zero and a trade sold first", () => {
-    const d = doc();
-    const book = manualBook(d)!;
-    expect(book.trades.length).toBe(d.manual!.trades.length);
-    expect(cents(summarize(book.trades).net)).toBe(cents(d.manual!.trades.reduce((s, t) => s + t.pnl_usd, 0)));
-    const expired = book.trades.find((t) => t.close === "expired")!;
-    expect(expired.exit).toBe(0);
-    expect(book.meta.get(expired.id)).toMatchObject({ reason: "expired", rop: -1 });
-    expect(book.trades.some((t) => t.side === "short")).toBe(true);
-  });
-
-  it("is null until the host sends it, for the manual account and for the arms", () => {
-    expect(manualBook(doc((d) => (d.manual = null)))).toBeNull();
-    expect(manualBook(doc((d) => delete loose(d).manual))).toBeNull();
+describe("the arms", () => {
+  it("is null until the host sends the arms, and reads the clone the same with or without the closed account's block", () => {
     expect(armBooks(doc((d) => (d.arms = null)))).toBeNull();
+    const withManual = cloneBook(doc());
+    const without = cloneBook(doc((d) => delete loose(d).manual));
+    expect(without.trades.map((t) => t.id)).toEqual(withManual.trades.map((t) => t.id));
+    expect(cents(summarize(without.trades).net)).toBe(cents(summarize(withManual.trades).net));
   });
 
   it("keeps each arm apart, by its hypothesis id", () => {
@@ -277,9 +267,6 @@ describe("the list", () => {
     expect(r.opened).toMatch(/^\d{2}:\d{2}$/);
     expect(r.r).toBeCloseTo(r.rop! / R_UNIT);
     expect(rows.filter((x) => x.roughTime).length).toBe(1);
-    const manual = paperRows(manualBook(doc())!);
-    expect(manual.find((x) => x.held === "to expiry")).toBeDefined();
-    expect(manual.some((x) => x.short)).toBe(true);
   });
 });
 

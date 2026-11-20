@@ -36,7 +36,7 @@ export const VARIANT_COOKIE = "fx";
  * - `positions-off`: no options live document has been published. `positions-none`: one has, with nothing open.
  * - `positions-old`: the document is three hours old.
  * - `paper-off`: the paper options history has not been published. With `partial` it carries the clone's trades
- *   only (no hand-placed trades, no arms); with `poison` one clone row names a contract that cannot be read.
+ *   only (no arms); with `poison` one clone row names a contract that cannot be read.
  * - `clone-off`: the options clone has published nothing. `clone-latched`: its document on a bad day.
  * - `journal-poison`: a stored trade journal with a null trade, as after corruption. The panes drawn from the trades
  *   must fail alone; the rest of each page keeps working.
