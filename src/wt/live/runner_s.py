@@ -1,4 +1,4 @@
-"""Paper runner for Robot B's sleeve S, the stock desk (DEC-0066). MODE must be 'paper'.
+"""Paper runner for Gap Hunter, the stock desk (DEC-0066, where it is "sleeve S"). MODE must be 'paper'.
 
 One US$600 virtual book (HYP-0069) and two rules, of which a session runs one: the one listed in `S.switched_on`
 of config/risk.yaml (`session_trial`). Nothing is listed, so nothing trades.
@@ -6,14 +6,16 @@ of config/risk.yaml (`session_trial`). Nothing is listed, so nothing trades.
   HYP-0070  the reversal rule on a universe known at scan time (the first slice; paused by the owner).
   HYP-0071  Gap Hunter (DEC-0068): one trade a day in the primary name of the 09:25 pool. See "Gap Hunter" below.
 
-What it shares with sleeve Q (wt.live.runner_b): nothing at run time. Its own paper account and key pair
-(APCA_S_KEY_ID, APCA_S_SECRET_KEY; never APCA_API_*), journal (data/live/smallcap_journal.jsonl), plans and state
-(var/smallcap/), kill file (var/smallcap/KILL), strategy tag (S) and process lock. It never reads or writes
-data/live/plan_*.json, data/live/journal.jsonl or the QQQ rule's virtual account.
+What it shares with the retired QQQ rule's runner (wt.live.runner_b; DEC-0069): four pure helpers it imports, and
+nothing at run time. Its own paper account and key pair (APCA_S_KEY_ID, APCA_S_SECRET_KEY), journal
+(data/live/smallcap_journal.jsonl), plans and state (var/smallcap/), kill file (var/smallcap/KILL), strategy tag (S)
+and process lock. It never reads or writes data/live/plan_*.json, data/live/journal.jsonl or the QQQ rule's virtual
+account: those are an archive.
 
-It refuses to start without its own key pair, or when its account is sleeve Q's. It places no entry while DEC-0066
-does not read ACCEPTED, or while any of the session gates below is closed. A refusal turns entries off, never exit
-management.
+It refuses to start without its own key pair, and never falls back to APCA_API_*. It reads no other pair, so it does
+not matter what APCA_API_* holds: since DEC-0069 no job trades on that pair, and it may come to hold this desk's own
+keys (the market-data jobs read it). It places no entry while DEC-0066 does not read ACCEPTED, or while any of the
+session gates below is closed. A refusal turns entries off, never exit management.
 
 On the host (job `paper-s`, WT_HOST=systemd) it trades only while it holds its own primary lease (`wt-leases/paper-s`,
 wt.ops.lease): without it entries are off and exits are still managed. On a shadow host (WT_ROLE=shadow) every order
@@ -32,7 +34,7 @@ than the limit, a newest bar that is not the minute just ended (no print: treate
 off the broker's, a size of zero, and cash that has not settled.
 
 Phone pages go out during the session through a non-blocking pager (wt.ops.alerts.Pager), keys `paper-s:*`: refused
-to start (key pair, account), a second runner, no lease, the session's close unknown, the stop rule, a position
+to start (key pair), a second runner, no lease, the session's close unknown, the stop rule, a position
 adopted, a position over the hard caps, a short, a clock-skew block, and not flat (or not verified flat) after the
 close. A page is fixed words and guarded counts: never a symbol, a price, an amount or an error's text; the journal
 row written just before it holds those. The `armed` row says whether this session pages.
@@ -106,7 +108,6 @@ JOURNAL = DATA_DIR / "live" / "smallcap_journal.jsonl"
 RECORD = ROOT / "research" / "decisions" / "DEC-0066-robot-b-sleeve-s-paper-desk.md"
 RUNNER_LOCK = locks.RUNNER_LOCK_S          # "paper-s-runner": the deploy gate reads it too
 KEY_ID, KEY_SECRET = "APCA_S_KEY_ID", "APCA_S_SECRET_KEY"
-Q_KEY_ID = "APCA_API_KEY_ID"
 
 RISK_PCT = 1.0                  # of the virtual account's equity, per trade (DEC-0066 section 3)
 DAY_STOP_LOSERS = 3             # entries stop for the day after this many losers in a row ...
@@ -212,29 +213,12 @@ def session_trial(on: frozenset[str]) -> tuple[str, str | None]:
 
 
 def key_refusal(environ: Mapping[str, str]) -> str | None:
-    """Why the key pair in the environment may not run sleeve S, or None. It never falls back to sleeve Q's keys."""
+    """Why the environment may not run the stock desk, or None: it needs both of its own keys. It never falls back
+    to another pair, and it does not look at one: APCA_API_* may hold anything, this desk's own pair included."""
     kid, secret = environ.get(KEY_ID, "").strip(), environ.get(KEY_SECRET, "").strip()
     if not kid or not secret:
         return f"{KEY_ID} and {KEY_SECRET} are not both set"
-    if kid == environ.get(Q_KEY_ID, "").strip():
-        return f"{KEY_ID} is sleeve Q's key ({Q_KEY_ID})"
     return None
-
-
-def account_refusal(own: str | None, q_account: Callable[[], str | None] | None) -> str | None:
-    """Why this account may not run sleeve S, or None. `q_account` reads sleeve Q's account number, or is None when
-    this machine holds no keys for it. A number that cannot be read is not a number that differs."""
-    if not own:
-        return "sleeve S's account number could not be read"
-    if q_account is None:
-        return None
-    try:
-        other = q_account()
-    except Exception as e:  # noqa: BLE001 — unknown is a refusal
-        return f"sleeve Q's account number could not be read ({e.__class__.__name__})"
-    if not other:
-        return "sleeve Q's account number could not be read"
-    return "this is sleeve Q's account" if str(other) == str(own) else None
 
 
 class SleeveAccount(VirtualAccount):
@@ -493,36 +477,34 @@ def gap_selection(day: dt.date, open_dt: dt.datetime,
 # ---- the session ---------------------------------------------------------------------------------------------------
 def run(day: dt.date | None = None, poll_s: float = 10.0, broker: Any = None, rest: Any = None,
         now_fn: Callable[[], dt.datetime] | None = None, sleep_fn: Callable[[float], None] | None = None,
-        account_number: str | None = None, q_account: Callable[[], str | None] | None = None,
         environ: Mapping[str, str] | None = None, alerts: Any = None) -> None:
-    """broker, rest, now_fn, sleep_fn, account_number, q_account and alerts are injected by the replay tests;
-    production builds them from sleeve S's own keys. A run with an injected broker pages only through `alerts`."""
+    """broker, rest, now_fn, sleep_fn and alerts are injected by the replay tests; production builds them from the
+    desk's own keys. A run with an injected broker pages only through `alerts`."""
     if env("MODE", "backtest") != "paper":
         raise SystemExit("runner_s refuses to start: MODE must be 'paper'")
     pager = Pager(alerts if alerts is not None else (Alerts() if broker is None else None))
     try:
-        _start(day, poll_s, broker, rest, now_fn, sleep_fn, account_number, q_account, environ, pager)
+        _start(day, poll_s, broker, rest, now_fn, sleep_fn, environ, pager)
     finally:
         pager.close()                                         # also on a refusal: its page is still delivered
 
 
 def _start(day: dt.date | None, poll_s: float, broker: Any, rest: Any, now_fn: Callable[[], dt.datetime] | None,
-           sleep_fn: Callable[[float], None] | None, account_number: str | None,
-           q_account: Callable[[], str | None] | None, environ: Mapping[str, str] | None, pager: Pager) -> None:
+           sleep_fn: Callable[[float], None] | None, environ: Mapping[str, str] | None, pager: Pager) -> None:
     e = os.environ if environ is None else environ
     why = key_refusal(e)
     if why:
         log("refuse_to_start", reason=why)
-        pager.once_per_day("paper-s:refused-keys", "Sleeve S refused to start: key pair",
-                           "Its own key pair is missing or is not its own; the session's journal (refuse_to_start) "
-                           "says which. No order was sent and nothing is managed. See the position alerts "
+        pager.once_per_day("paper-s:refused-keys", "Gap Hunter refused to start: key pair",
+                           "The stock desk's own key pair is missing; the session's journal (refuse_to_start) "
+                           "names the keys. No order was sent and nothing is managed. See the position alerts "
                            "runbook.", 4)
         raise SystemExit(f"runner_s refuses to start: {why}")
     clock = now_fn or (lambda: dt.datetime.now(ET))
     sleep = sleep_fn or time.sleep
     day = day or clock().date()
     if broker is not None:
-        _guarded(day, poll_s, broker, rest, clock, sleep, account_number, q_account, pager)
+        _session(day, poll_s, broker, rest, clock, sleep, pager)
         return
     with locks.job_lock(RUNNER_LOCK, wait_s=RUNNER_LOCK_WAIT_S, poll_s=0.5) as got:
         if not got:
@@ -535,12 +517,7 @@ def _start(day: dt.date | None, poll_s: float, broker: Any, rest: Any, now_fn: C
         from wt.data.alpaca import AlpacaREST
         broker = _connect(lambda: AlpacaPaperBroker(key_id=e[KEY_ID], secret=e[KEY_SECRET]), sleep)
         rest = AlpacaREST(per_minute=150, key_id=e[KEY_ID], secret=e[KEY_SECRET])
-        reader: Callable[[], str | None] | None = None
-        if e.get(Q_KEY_ID, "").strip():
-            def reader() -> str | None:
-                from wt.brokers.alpaca_read import AccountReader
-                return AccountReader().account_number()
-        _guarded(day, poll_s, broker, rest, clock, sleep, getattr(broker, "account_number", None), reader, pager)
+        _session(day, poll_s, broker, rest, clock, sleep, pager)
 
 
 def _connect(factory: Callable[[], Any], sleep: Callable[[float], None]) -> Any:
@@ -556,20 +533,6 @@ def _connect(factory: Callable[[], Any], sleep: Callable[[float], None]) -> Any:
                 raise
             sleep(CONNECT_WAIT_S)
     raise RuntimeError("unreachable")
-
-
-def _guarded(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callable[[], dt.datetime],
-             sleep: Callable[[float], None], account_number: str | None,
-             q_account: Callable[[], str | None] | None, pager: Pager) -> None:
-    why = account_refusal(account_number, q_account)
-    if why:
-        log("refuse_to_start", reason=why)
-        pager.once_per_day("paper-s:refused-account", "Sleeve S refused to start: account",
-                           "Its account could not be told apart from sleeve Q's, or is sleeve Q's; the session's "
-                           "journal (refuse_to_start) says which. No order was sent and nothing is managed. See "
-                           "the position alerts runbook.", 4)
-        raise SystemExit(f"runner_s refuses to start: {why}")
-    _session(day, poll_s, broker, rest, clock, sleep, pager)
 
 
 def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callable[[], dt.datetime],

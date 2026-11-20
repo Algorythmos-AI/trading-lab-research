@@ -28,25 +28,25 @@ def test_host_defaults_and_override(monkeypatch):
 
 
 def test_launchd_running_jobs_and_fail_closed(monkeypatch):
-    out = "PID\tStatus\tLabel\n123\t0\tcom.wt.paper-b\n-\t0\tcom.wt.routine\n"
+    out = "PID\tStatus\tLabel\n123\t0\tcom.wt.paper-s\n-\t0\tcom.wt.routine\n"
     monkeypatch.setattr(host, "_run", lambda cmd, timeout=10.0: SimpleNamespace(stdout=out, returncode=0))
-    got = host.LaunchdHost().running_jobs([JOBS["paper-b"], JOBS["routine"], JOBS["forward"]])
-    assert got == {"com.wt.paper-b": True, "com.wt.routine": False, "com.wt.forward": False}
+    got = host.LaunchdHost().running_jobs([JOBS["paper-s"], JOBS["routine"], JOBS["forward"]])
+    assert got == {"com.wt.paper-s": True, "com.wt.routine": False, "com.wt.forward": False}
 
     def boom(cmd, timeout=10.0):
         raise OSError("no launchctl")
     monkeypatch.setattr(host, "_run", boom)
-    assert host.LaunchdHost().running_jobs([JOBS["paper-b"]]) == {"launchctl": True}
+    assert host.LaunchdHost().running_jobs([JOBS["paper-s"]]) == {"launchctl": True}
 
 
 def test_systemd_running_jobs_and_fail_closed(monkeypatch):
-    states = {"wt-paper-b.service": "active", "wt-routine.service": "inactive", "wt-forward.service": "activating"}
+    states = {"wt-paper-s.service": "active", "wt-routine.service": "inactive", "wt-forward.service": "activating"}
     monkeypatch.setattr(host, "_run", lambda cmd, timeout=10.0: SimpleNamespace(stdout=states[cmd[-1]] + "\n",
                                                                                returncode=0))
-    got = host.SystemdHost().running_jobs([JOBS["paper-b"], JOBS["routine"], JOBS["forward"]])
-    assert got == {"wt-paper-b": True, "wt-routine": False, "wt-forward": True}
+    got = host.SystemdHost().running_jobs([JOBS["paper-s"], JOBS["routine"], JOBS["forward"]])
+    assert got == {"wt-paper-s": True, "wt-routine": False, "wt-forward": True}
     monkeypatch.setattr(host, "_run", lambda cmd, timeout=10.0: SimpleNamespace(stdout="", returncode=1))
-    assert host.SystemdHost().running_jobs([JOBS["paper-b"]]) == {"systemctl": True}
+    assert host.SystemdHost().running_jobs([JOBS["paper-s"]]) == {"systemctl": True}
 
 
 def test_systemd_swap_from_meminfo(tmp_path):
@@ -66,7 +66,7 @@ def test_et_day_specs():
 @pytest.mark.parametrize("day", [dt.date(2026, 11, 2), dt.date(2027, 3, 15)])   # the Monday after each US change
 def test_et_timers_keep_new_york_wall_time_across_dst(day):
     before = dt.datetime.combine(day - dt.timedelta(days=3), dt.time(12), tzinfo=NEW_YORK)   # the Friday before
-    fires = JOBS["paper-b"].fires_et(before, days=4)
+    fires = JOBS["paper-s"].fires_et(before, days=4)
     monday = next(t for t in fires if t.date() == day)
     assert (monday.hour, monday.minute) == (8, 30) and monday.tzinfo == NEW_YORK
     assert all(t.weekday() < 5 for t in fires)                    # never on the weekend the clocks change
@@ -77,22 +77,22 @@ def test_every_trading_job_has_a_systemd_schedule_and_a_runtime_above_its_deadli
         assert j.et or j.interval_s, j.name
         if j.deadline_min:
             assert j.runtime_max_h * 60 > j.deadline_min + 1, j.name
-    assert JOBS["paper-b"].runtime_max_h >= 10
+    assert JOBS["paper-s"].runtime_max_h >= 10
 
 
-def test_paper_b_unit(tmp_path):
-    svc = units.service(JOBS["paper-b"], Path("/home/wt/trading"))
+def test_paper_s_unit(tmp_path):
+    svc = units.service(JOBS["paper-s"], Path("/home/wt/trading"))
     for line in ("Type=exec", "User=wt", "Wants=wt-secrets.service network-online.target time-sync.target",
                  "After=wt-secrets.service network-online.target time-sync.target", "OnFailure=wt-alert@%n.service",
                  "EnvironmentFile=/run/wt-secrets/env", "Environment=WT_HOST=systemd", "Restart=on-failure",
                  "RestartSec=60", "RestartPreventExitStatus=124", "RuntimeMaxSec=36000", "KillMode=mixed",
                  "TimeoutStopSec=60", "OOMScoreAdjust=-500", "LimitCORE=0",
-                 "ExecStart=/home/wt/trading/.venv/bin/python -m wt.ops.jobs run paper-b"):
+                 "ExecStart=/home/wt/trading/.venv/bin/python -m wt.ops.jobs run paper-s"):
         assert line in svc.splitlines(), line
-    assert "Requires=" not in svc                                  # a secrets restart must not restart paper-b
+    assert "Requires=" not in svc                                  # a secrets restart must not restart paper-s
     assert svc.index("StartLimitIntervalSec") < svc.index("[Service]")   # StartLimit* belong in [Unit]
-    assert "OnCalendar=Mon..Fri 08:30 America/New_York" in units.timer(JOBS["paper-b"])
-    assert "Persistent=false" in units.timer(JOBS["paper-b"])
+    assert "OnCalendar=Mon..Fri 08:30 America/New_York" in units.timer(JOBS["paper-s"])
+    assert "Persistent=false" in units.timer(JOBS["paper-s"])
 
 
 def test_dashboard_unit_never_restarts_and_has_no_start_limit():
@@ -145,7 +145,6 @@ def jobroot(tmp_path, monkeypatch):
     monkeypatch.setattr(jobs, "load_sessions", lambda now: ({}, True))
     monkeypatch.setattr(jobs, "_sha", lambda root: "abc1234")
     monkeypatch.setattr(jobs, "launchd_loaded", lambda label: True)
-    monkeypatch.setattr(jobs, "JOURNAL", tmp_path / "journal.jsonl")
     monkeypatch.setattr("wt.ops.locks.LOCK_DIR", tmp_path / "locks")
     monkeypatch.setattr("wt.ops.heartbeat.HEARTBEAT_DIR", tmp_path / "hb")
     monkeypatch.setattr(jobs.preflight, "run_checks", lambda root: [preflight.Check("ok", True)])
@@ -186,21 +185,6 @@ def test_pings_success_refusal_and_lock(jobroot, monkeypatch):
     assert len(pings) == n                                          # a held lock is not a failure: no ping
 
 
-def test_paper_b_armed_ping_on_a_day_without_a_session(jobroot):
-    root, a, box, tmp, pings = jobroot
-    (tmp / "journal.jsonl").write_text("")
-    code = (f"import json, datetime; open({str(tmp / 'journal.jsonl')!r}, 'a').write(json.dumps("
-            "{'ts': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'event': 'no_session'}) + '\\n')")
-    assert jobs.run_job(_job(code, name="paper-b"), root, alerts=a) == 0
-    assert ("wt-paper-b-armed", "") in pings and ("wt-paper-b", "") in pings
-
-
-def test_paper_b_that_never_armed_fails_its_armed_check(jobroot):
-    root, a, box, tmp, pings = jobroot
-    assert jobs.run_job(_job("raise SystemExit(3)", name="paper-b"), root, alerts=a) == 3
-    assert ("wt-paper-b-armed", "fail") in pings and ("wt-paper-b", "fail") in pings
-
-
 def test_hc_ping_is_off_without_a_key_and_never_raises(monkeypatch):
     assert hc.ping("wt-routine") is False
     monkeypatch.setenv("HC_PING_KEY", "k")
@@ -232,7 +216,6 @@ def test_preflight_checks_the_vm_secrets_file_and_paging(tmp_path, monkeypatch):
     monkeypatch.delenv("NTFY_TOPIC", raising=False)
     names = {c.name: c for c in preflight.run_checks(tmp_path)}
     assert names["paging configured"].ok is False
-    assert "paging configured" in jobs.EXITS_ONLY_CHECKS                        # a paper-b position is still managed
 
 
 def test_publisher_refuses_without_its_secrets_file(tmp_path, monkeypatch, capsys):
@@ -258,7 +241,7 @@ def test_heavy_jobs_have_memory_limits_and_the_runner_has_none():
         svc = units.service(JOBS[name], root).splitlines()
         assert "MemoryHigh=1536M" in svc and "MemoryMax=2G" in svc and "MemorySwapMax=512M" in svc
     assert "MemoryMax=1G" in units.service(JOBS["dashboard"], root).splitlines()
-    assert not any(x.startswith("Memory") for x in units.service(JOBS["paper-b"], root).splitlines())
+    assert not any(x.startswith("Memory") for x in units.service(JOBS["paper-s"], root).splitlines())
 
 
 def test_rendered_units_have_no_inline_comments():
@@ -272,7 +255,7 @@ def test_the_install_fingerprint_covers_units_static_units_and_helpers(tmp_path)
     repo = Path(__file__).resolve().parents[2]
     fp = units.fingerprint(repo)
     paths = [line.split("  ", 1)[1] for line in fp.splitlines()]
-    assert "/etc/systemd/system/wt-paper-b.service" in paths and "/etc/systemd/system/wt-backup.timer" in paths
+    assert "/etc/systemd/system/wt-paper-s.service" in paths and "/etc/systemd/system/wt-backup.timer" in paths
     assert "/usr/local/bin/wt-deploy" in paths and paths == sorted(paths)
     assert units.fingerprint(repo) == fp                              # stable
     trees = {}
@@ -292,11 +275,11 @@ def test_a_shadow_host_pings_only_its_own_heartbeat(monkeypatch):
     monkeypatch.setenv("WT_HOST_ID", "gcp-use1")
     urls = []
     monkeypatch.setattr(hc.requests, "post", lambda url, data, timeout: urls.append(url) or type("R", (), {"ok": True})())
-    assert hc.ping("wt-paper-b") is False and urls == []           # shared job slugs: never from a shadow
+    assert hc.ping("wt-paper-s") is False and urls == []           # shared job slugs: never from a shadow
     assert hc.heartbeat("published") is True
     assert urls == ["https://hc-ping.com/k/wt-host-gcp-use1"]
     monkeypatch.setenv("WT_ROLE", "primary")
-    assert hc.ping("wt-paper-b") is True and urls[-1] == "https://hc-ping.com/k/wt-paper-b"
+    assert hc.ping("wt-paper-s") is True and urls[-1] == "https://hc-ping.com/k/wt-paper-s"
 
 
 def test_status_flags_an_interval_job_that_is_not_being_started(tmp_path, monkeypatch):

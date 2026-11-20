@@ -108,7 +108,7 @@ def session(tape: Tape, start=(9, 25), crash_at=None, broker=None, hook=None, **
         clock.hooks.insert(0, broker.advance)
     if hook is not None:
         clock.hooks.append(lambda now: hook(now, broker))
-    args = {"account_number": "PA3SLEEVES", "q_account": lambda: "PA3SLEEVEQ", "environ": KEYS, **kw}
+    args = {"environ": KEYS, **kw}
     runner_s.run(DAY, poll_s=10.0, broker=broker, rest=ReplayREST(clock, tape, SESSIONS), now_fn=clock.now,
                  sleep_fn=clock.sleep, **args)
     return broker
@@ -192,7 +192,7 @@ def test_a_crash_while_holding_resumes_the_plan_and_books_the_trade_once(env):
     b = BarFillBroker(clock, tape, SESSIONS)
     with pytest.raises(ReplayCrash):
         runner_s.run(DAY, poll_s=10.0, broker=b, rest=ReplayREST(clock, tape, SESSIONS), now_fn=clock.now,
-                     sleep_fn=clock.sleep, account_number="PA3SLEEVES", q_account=lambda: "PA3SLEEVEQ", environ=KEYS)
+                     sleep_fn=clock.sleep, environ=KEYS)
     assert [p.qty for p in b.positions()] == [14] and len(b.own_sells("ABC")) == 1      # died holding, stop resting
     session(tape, start=(10, 53), broker=b)
     j = journal(env)
@@ -283,7 +283,7 @@ def test_an_unfilled_attempt_stays_spent_across_a_restart(env):
     b = BarFillBroker(clock, tape, SESSIONS)
     with pytest.raises(ReplayCrash):
         runner_s.run(DAY, poll_s=10.0, broker=b, rest=ReplayREST(clock, tape, SESSIONS), now_fn=clock.now,
-                     sleep_fn=clock.sleep, account_number="PA3SLEEVES", q_account=lambda: "PA3SLEEVEQ", environ=KEYS)
+                     sleep_fn=clock.sleep, environ=KEYS)
     session(tape, start=(10, 54), broker=b)
     j = journal(env)
     assert len(events(j, "universe")) == 2                             # it rejoined after the restart ...
@@ -383,7 +383,7 @@ def test_an_unreadable_record_is_not_an_accepted_one(tmp_path):
     ({}, "not both set"),
     ({"APCA_S_KEY_ID": "PKS"}, "not both set"),
     ({"APCA_S_SECRET_KEY": "x", "APCA_API_KEY_ID": "PKQ", "APCA_API_SECRET_KEY": "y"}, "not both set"),   # no fallback
-    ({"APCA_S_KEY_ID": "PKQ", "APCA_S_SECRET_KEY": "x", "APCA_API_KEY_ID": "PKQ"}, "sleeve Q's key"),
+    ({"APCA_S_KEY_ID": " ", "APCA_S_SECRET_KEY": "x"}, "not both set"),
 ])
 def test_it_refuses_to_start_without_its_own_keys(env, environ, why):
     assert why in runner_s.key_refusal(environ)
@@ -392,25 +392,25 @@ def test_it_refuses_to_start_without_its_own_keys(env, environ, why):
     assert [r["event"] for r in journal(env)] == ["refuse_to_start"]
 
 
-def boom() -> str:
-    raise RuntimeError("no network")
 
 
-@pytest.mark.parametrize("own, q_account, why", [
-    ("PA3SLEEVEQ", lambda: "PA3SLEEVEQ", "this is sleeve Q's account"),
-    (None, lambda: "PA3SLEEVEQ", "sleeve S's account number could not be read"),
-    ("PA3SLEEVES", boom, "sleeve Q's account number could not be read"),
-    ("PA3SLEEVES", lambda: None, "sleeve Q's account number could not be read"),
-])
-def test_it_refuses_to_start_on_sleeve_qs_account_or_when_it_cannot_tell(env, own, q_account, why):
-    with pytest.raises(SystemExit, match=why):
-        session(tape_of({"ABC": QUIET_DAY}), account_number=own, q_account=q_account)
-    assert [r["event"] for r in journal(env)] == ["refuse_to_start"]
+
+SAME = {"APCA_S_KEY_ID": "PKS-TEST", "APCA_S_SECRET_KEY": "s-secret", "APCA_API_KEY_ID": "PKS-TEST",
+        "APCA_API_SECRET_KEY": "s-secret"}
 
 
-def test_a_machine_with_no_keys_for_sleeve_q_needs_no_comparison():
-    assert runner_s.account_refusal("PA3SLEEVES", None) is None
+def test_the_data_pair_may_hold_the_desks_own_keys(env):
+    """DEC-0069: no job trades on APCA_API_* any more, and the market-data jobs' pair may be moved onto this desk's
+    account. The desk reads only its own pair, so the same keys under both names are no reason to refuse."""
+    assert runner_s.key_refusal(SAME) is None
     assert runner_s.key_refusal({"APCA_S_KEY_ID": "PKS", "APCA_S_SECRET_KEY": "x"}) is None
+    assert not hasattr(runner_s, "Q_KEY_ID") and not hasattr(runner_s, "account_refusal")
+    rec = Rec()
+    b = session(tape_of({"ABC": QUIET_DAY}), environ=SAME, alerts=rec)          # a whole session, start to close
+    events = [r["event"] for r in journal(env)]
+    assert "refuse_to_start" not in events and "armed" in events and "session_end" in events
+    assert not [k for k in rec.keys() if k.startswith("paper-s:refused")]
+    flat_and_clean(b)
 
 
 def test_it_refuses_outside_paper_mode(env, monkeypatch):
@@ -566,12 +566,7 @@ def test_a_refusal_for_its_keys_pages(env):
     clean(rec, "ABC", "PKS")
 
 
-def test_a_refusal_for_its_account_pages(env):
-    rec = Rec()
-    with pytest.raises(SystemExit, match="this is sleeve Q's account"):
-        session(tape_of({"ABC": QUIET_DAY}), account_number="PA3SAME", q_account=lambda: "PA3SAME", alerts=rec)
-    assert rec.keys() == ["paper-s:refused-account"]
-    clean(rec, "ABC", "PA3SAME")
+
 
 
 def test_a_second_runner_pages_and_exits(env, monkeypatch):
@@ -609,7 +604,7 @@ def test_a_session_whose_close_cannot_be_read_pages(env):
     rest.calendar = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("calendar down"))
     rec = Rec()
     runner_s.run(DAY, poll_s=10.0, broker=b, rest=rest, now_fn=clock.now, sleep_fn=clock.sleep,
-                 account_number="PA3SLEEVES", q_account=lambda: "PA3SLEEVEQ", environ=KEYS, alerts=rec)
+                 environ=KEYS, alerts=rec)
     assert rec.page("paper-s:close-unknown", "once_per_day")[2] == 5 and events(journal(env), "close_unknown")
     clean(rec, "ABC")
 
@@ -763,7 +758,7 @@ def crash_then(env, tape: Tape, crash: dt.datetime, damage) -> BarFillBroker:
     b = BarFillBroker(clock, tape, SESSIONS)
     with pytest.raises(ReplayCrash):
         runner_s.run(DAY, poll_s=10.0, broker=b, rest=ReplayREST(clock, tape, SESSIONS), now_fn=clock.now,
-                     sleep_fn=clock.sleep, account_number="PA3SLEEVES", q_account=lambda: "PA3SLEEVEQ", environ=KEYS)
+                     sleep_fn=clock.sleep, environ=KEYS)
     (f,) = (env / "var" / "smallcap" / "plans").glob("*.json")
     plan = json.loads(f.read_text())
     damage(plan)
@@ -818,9 +813,8 @@ def test_production_builds_its_broker_and_data_client_from_sleeve_s_keys_only(en
             built["rest"] = kw
 
     class FakeReader:
-        def account_number(self):
-            built["q_read"] = {}
-            return "PA3SLEEVEQ"
+        def __init__(self):
+            pytest.fail("the stock desk reads no other account")
 
     seen = {}
     monkeypatch.setattr(paper, "AlpacaPaperBroker", FakeBroker)
@@ -836,31 +830,39 @@ def test_production_builds_its_broker_and_data_client_from_sleeve_s_keys_only(en
     assert seen["pager"].alerts is rec and rec.calls == []
     assert built["broker"] == {"key_id": "PKS-TEST", "secret": "s-secret"}
     assert built["rest"]["key_id"] == "PKS-TEST" and built["rest"]["secret"] == "s-secret"
-    assert "q-secret" not in repr(built) and "PKQ-TEST" not in repr(built)      # sleeve Q's pair goes nowhere
-    assert "q_read" in built and isinstance(seen["broker"], FakeBroker)         # and the accounts were compared
+    assert "q-secret" not in repr(built) and "PKQ-TEST" not in repr(built)      # the other pair goes nowhere
+    assert isinstance(seen["broker"], FakeBroker)
 
 
-def test_production_refuses_when_the_two_accounts_are_one(env, monkeypatch):
+def test_production_starts_when_the_data_pair_is_the_desks_own(env, monkeypatch):
+    """The production path, with APCA_API_* equal to APCA_S_*: it builds its clients from its own names and starts.
+    Without its own pair it still refuses, whatever APCA_API_* holds."""
     import wt.brokers.alpaca_paper as paper
     import wt.brokers.alpaca_read as read
     import wt.data.alpaca as data
     from wt.ops import locks
+    built: dict[str, dict] = {}
 
     class FakeBroker:
         def __init__(self, **kw):
+            built["broker"] = kw
             self.account_number = "PA3SAME"
 
     monkeypatch.setattr(paper, "AlpacaPaperBroker", FakeBroker)
-    monkeypatch.setattr(data, "AlpacaREST", lambda **kw: object())
-    monkeypatch.setattr(read, "AccountReader", lambda: type("R", (), {"account_number": lambda self: "PA3SAME"})())
+    monkeypatch.setattr(data, "AlpacaREST", lambda **kw: built.setdefault("rest", kw))
+    monkeypatch.setattr(read, "AccountReader", lambda: pytest.fail("the stock desk reads no other account"))
     monkeypatch.setattr(locks, "LOCK_DIR", env / "locks")
-    monkeypatch.setattr(runner_s, "_session", lambda *a: pytest.fail("the session must not start"))
+    started: list[tuple] = []
+    monkeypatch.setattr(runner_s, "_session", lambda *a: started.append(a))
     rec = Rec()
-    with pytest.raises(SystemExit, match="this is sleeve Q's account"):
-        runner_s.run(DAY, environ={"APCA_S_KEY_ID": "PKS", "APCA_S_SECRET_KEY": "x", "APCA_API_KEY_ID": "PKQ",
-                                   "APCA_API_SECRET_KEY": "y"}, now_fn=lambda: at(9, 0), sleep_fn=lambda s: None,
-                     alerts=rec)
-    assert rec.keys() == ["paper-s:refused-account"]
+    runner_s.run(DAY, environ=SAME, now_fn=lambda: at(9, 0), sleep_fn=lambda s: None, alerts=rec)
+    assert len(started) == 1 and rec.calls == []
+    assert built["broker"] == {"key_id": "PKS-TEST", "secret": "s-secret"} and built["rest"]["key_id"] == "PKS-TEST"
+    assert "refuse_to_start" not in [r["event"] for r in journal(env)]
+    only_data = {"APCA_API_KEY_ID": "PKS-TEST", "APCA_API_SECRET_KEY": "s-secret"}      # no fallback to it
+    with pytest.raises(SystemExit, match="not both set"):
+        runner_s.run(DAY, environ=only_data, now_fn=lambda: at(9, 0), sleep_fn=lambda s: None, alerts=rec)
+    assert len(started) == 1 and rec.keys() == ["paper-s:refused-keys"]
 
 
 def test_production_pages_through_the_real_sender_and_an_injected_broker_does_not(env, monkeypatch):

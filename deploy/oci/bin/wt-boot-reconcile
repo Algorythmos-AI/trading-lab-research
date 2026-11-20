@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# After any boot: start the routine, paper-b and forward if the boot fell inside their windows (systemd timers are
+# After any boot: start the routine, the paper runners and forward if the boot fell inside their windows (systemd timers are
 # Persistent=false, so a start missed during a reboot is not replayed). Their job locks make a repeat harmless.
 # Only jobs whose timer is enabled: a host with its job timers disabled or masked (after a rollback to another host)
 # starts nothing, whatever its role. Nothing starts without the secrets file.

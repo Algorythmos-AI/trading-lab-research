@@ -92,17 +92,17 @@ migrate-state: ## Move runtime files from tracked paths into var/ (gated, lossle
 	$(PY) -m wt.ops.deploy migrate
 
 preflight: ## Run every job's preflight as its scheduler would (launchd's minimal environment; the unit's on Linux)
-	@if [ "$$(uname)" = Linux ]; then for j in routine paper-b forward weekly; do echo "== $$j"; \
+	@if [ "$$(uname)" = Linux ]; then for j in routine paper-s forward weekly; do echo "== $$j"; \
 	  WT_HOST=systemd PYTHONPATH=src $(PY) -m wt.ops.jobs run $$j --preflight-only || status=1; done; \
 	  echo "== host"; WT_HOST=systemd PYTHONPATH=src $(PY) -m wt.ops.preflight || status=1; exit $${status:-0}; \
-	else for j in routine paper-b forward weekly; do echo "== $$j"; \
+	else for j in routine paper-s forward weekly; do echo "== $$j"; \
 	  env -i HOME="$(HOME)" PATH="$(JOB_PATH)" /bin/zsh deploy/run_job.sh $$j --preflight-only || status=1; done; \
 	  exit $${status:-0}; fi
 
 uninstall-agents: ## OWNER: stop and remove every com.wt.* launchd agent (the Mac stops running jobs; cutover, plan v7)
 	$(PY) -m wt.ops.agents uninstall
 
-lease-break: ## OWNER: expire a primary lease now (after a host that held it is gone for good): paper B's, or make lease-break LEASE=paper-s
+lease-break: ## OWNER: expire a primary lease now (after a host that held it is gone for good): make lease-break LEASE=paper-s (no LEASE: the retired QQQ rule's, DEC-0069)
 	$(PY) -m wt.ops.lease break $(LEASE)
 
 agents-diff: ## Which installed launchd agents differ from the code
@@ -185,14 +185,14 @@ kill: ## Stop new entries on a desk (exits keep being managed): make kill [DESK=
 	else printf '%s\n' "$${REASON:-paused by make kill} ($$(date '+%Y-%m-%d %H:%M %Z'))" > KILL && echo "KILL switch ON" && cat KILL; \
 	  $(PY) -m wt.ops.audit kill_on || true; fi
 
-unkill: ## Allow entries again: paper B (refused while it is running), or make unkill DESK=options
+unkill: ## Allow entries again: remove the root KILL file (the options clone reads it), or make unkill DESK=options
 	@if [ "$(DESK)" = "options" ]; then rm -f var/options/KILL && echo "options KILL switch off"; \
 	else $(PY) -m wt.ops.control unkill; fi
 
 reset-options-latch: ## OWNER: clear an options clone latch: make reset-options-latch KIND=day|week|drawdown REASON="..."
 	@PYTHONPATH=src $(PY) -m wt.live.runner_o reset-latch "$(KIND)" "$(REASON)"
 
-reset-latch: ## OWNER: clear the virtual account's loss latch: make reset-latch REASON="why it is safe" (refused while paper B runs)
+reset-latch: ## OWNER: clear the retired QQQ rule's virtual-account latch (DEC-0069: nothing trades it now): make reset-latch REASON="why"
 	@$(PY) -m wt.ops.control reset-latch "$(REASON)"
 
 evidence: ## Show what the weekly evidence PR would commit (DRY_RUN is the default here)

@@ -256,3 +256,12 @@ The owner set the desk's direction on 2026-11-20, in chat:
 `config/risk.yaml`, the list of trial ids it may trade, and refuses entries for a rule that is not on it. The list
 is empty. Section 2 already said each rule is switched on by a dated note; the list is where the code reads that.
 A rule is switched on by a note here together with its id in that list, in one pull request.
+
+
+### 2026-11-20: no running sleeve Q (DEC-0069)
+
+DEC-0069, accepted by the owner on 2026-11-20, retires the QQQ rule. From the release that carries it, the
+two-sleeve table of section 1 no longer has a running sleeve Q: its job (`paper-b`) leaves the schedule, and its
+journal, plans and virtual account stay as an archive. The sentence in section 1 "refuses if its account number
+equals sleeve Q's" is withdrawn by that record: the desk still requires its own key pair and never falls back to
+`APCA_API_*`, and no longer compares itself with that pair or its account. Nothing else in this record changes.
