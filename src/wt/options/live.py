@@ -15,9 +15,11 @@ mark, market value and unrealised result), the market clock, and open interest b
 stands so far, replayed on market data a quarter of an hour behind (`wt.options.intraday`), once the dashboard
 says it accepts that. No account number, no balances, no buying power, no stock positions, no orders.
 
-Without the key pair the job does nothing and exits 0, so its unit can be installed before the account exists.
-When the account cannot be read nothing is sent: an empty list would say "nothing is held", which is not known.
-The desk greys the last document as it ages instead.
+Without that key pair (the manual account was deleted on 2026-11-20) the job reads the market data with the lab's data
+key pair (APCA_API_KEY_ID / APCA_API_SECRET_KEY) and sends an empty positions list: there is no manual account, so
+nothing is held in one. It never reads that pair's positions, which are another robot's. With neither pair it does
+nothing and exits 0. When the manual account cannot be read nothing is sent: an empty list would then say "nothing
+is held", which is not known. The desk greys the last document as it ages instead.
 """
 from __future__ import annotations
 
@@ -58,6 +60,7 @@ JOB = "options-live"
 
 KEY_ID_VAR = "APCA_OPTIONS_KEY_ID"
 SECRET_VAR = "APCA_OPTIONS_SECRET_KEY"
+DATA_KEY_ID_VAR, DATA_SECRET_VAR = "APCA_API_KEY_ID", "APCA_API_SECRET_KEY"   # market data only, never positions
 # The paper host, as a constant: a live key is refused here, and no setting can point this module anywhere else.
 PAPER_HOST = "https://paper-api.alpaca.markets"
 DATA_HOST = "https://data.alpaca.markets"          # market data: the stocks' last closes, to centre the strikes
@@ -617,13 +620,19 @@ def _publish(a: argparse.Namespace, account: OptionsAccount | None = None) -> in
     now = dt.datetime.now(dt.UTC).replace(microsecond=0)
     deadline = time.monotonic() + PUBLISH_BUDGET_S
     key_id, secret = os.environ.get(KEY_ID_VAR, "").strip(), os.environ.get(SECRET_VAR, "").strip()
+    manual = account is not None or bool(key_id and secret)     # is there a manual account whose positions to read
     if account is None:
-        if not key_id or not secret:
-            print(f"{KEY_ID_VAR} / {SECRET_VAR} not set: the options paper account is not configured, nothing to do")
-            return 0
+        if not manual:
+            key_id, secret = os.environ.get(DATA_KEY_ID_VAR, "").strip(), os.environ.get(DATA_SECRET_VAR, "").strip()
+            if not key_id or not secret:
+                print(f"neither {KEY_ID_VAR} / {SECRET_VAR} nor {DATA_KEY_ID_VAR} / {DATA_SECRET_VAR} is set: "
+                      "nothing to do")
+                return 0
+            print(f"{KEY_ID_VAR} / {SECRET_VAR} not set: no manual options account, so no positions; market data "
+                  f"read with {DATA_KEY_ID_VAR}")
         account = OptionsAccount(key_id, secret)
     try:
-        raw = account.positions()
+        raw = account.positions() if manual else []
     except BrokerFault as e:
         print(f"the options paper account could not be read ({e.code}): not sending", file=sys.stderr)
         return _failed(f"broker {e.code}", now)
