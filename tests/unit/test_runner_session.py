@@ -28,6 +28,9 @@ from wt.oms.manager import PlanStore, TradePlan
 from wt.ops.alerts import Pager
 from wt.risk.virtual_account import VirtualAccount
 
+# Whole sessions replayed: GitHub CI runs these; the host's deploy gate leaves them out (owner, 2026-11-20).
+pytestmark = pytest.mark.replay
+
 DAY = dt.date(2026, 9, 30)
 REAL_SIGNAL = runner_b.setups.b_intraday_momentum       # the env fixture replaces it with a scripted one
 
