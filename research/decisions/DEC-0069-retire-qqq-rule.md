@@ -100,3 +100,23 @@ From the release that carries this record:
 - What the dashboard shows for the retired rule. Its pages still read the archive's figures; the change to them is
   a separate pull request.
 - Removing `wt.live.runner_b` or the `B` block of `config/risk.yaml`. Neither is removed.
+
+## Notes
+
+### 2026-11-20: which account, and stages b to d corrected
+
+The owner pointed out that the account list holds three paper accounts and no "QQQ account". Checked read-only
+the same day, against the broker and the journals (`docs/runbooks/paper-accounts.md`):
+
+- `APCA_API_*` reaches "Robot B stocks (host)" (…Y7I) on the host and on the Mac. It holds no order of the QQQ
+  rule: none of the nine entry orders in `data/live/journal.jsonl` (2026-10-19 to 2026-11-11) is found there, or
+  in either other account. Until about 2026-11-17 the host's `APCA_API_*` pair belonged to "Manual options (mine)"
+  (…ISF), and the rule traded there. The owner deleted that account on 2026-11-20, so its orders exist only in the
+  repo's records. "The QQQ rule's paper account" in this record means the account behind `APCA_API_*`; only its
+  last weeks were spent in …Y7I, without a trade.
+- **Stage b: done.** …Y7I's one AAPL share (bought by hand on 2026-04-16) was sold by the owner on 2026-11-20. All
+  three accounts have no position and no open order.
+- **Stages c and d: withdrawn.** The owner keeps all three accounts: none is deleted, renamed or reset. The
+  market-data jobs go on reading `APCA_API_*`, which stays on …Y7I. No job places an order with it.
+- Section 4's reason ("they would block stage c") no longer applies; the guards stay removed, since they still
+  protect nothing.

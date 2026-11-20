@@ -48,7 +48,8 @@ class AlpacaPaperBroker(Broker):
     def __init__(self, timeout: tuple[float, float] = TIMEOUT, key_id: str | None = None,
                  secret: str | None = None) -> None:
         """key_id and secret: another paper account's key pair (sleeve S, DEC-0066). Both or neither; the default is
-        the QQQ rule's account, as before. The paper checks below apply to either."""
+        the APCA_API_ pair's account ("Robot B stocks (host)", docs/runbooks/paper-accounts.md). The paper checks below
+        apply to either."""
         if (key_id is None) != (secret is None):
             raise ValueError("a paper key id and its secret go together")
         self.c = TradingClient(key_id or env("APCA_API_KEY_ID"), secret or env("APCA_API_SECRET_KEY"), paper=True)
