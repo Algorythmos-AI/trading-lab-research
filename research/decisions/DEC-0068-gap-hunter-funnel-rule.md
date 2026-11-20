@@ -140,6 +140,14 @@ taken.
   already have sold half on the quote. Either way the position is closed at the next open.
 - The batch run skips a name with fewer than 30 minute bars in the whole session. That is not knowable in the
   morning; the desk does not apply it.
+- The engine caps the size at 10% of the entry bar's volume, and takes no trade under 10 shares
+  (`wt.backtest.engine`). The entry bar is the bar the order fills on, which has not printed when the order is
+  sized, so the desk does not apply the cap. On a thin fill bar the simulation trades fewer shares, or none,
+  where the desk trades its full size.
+- The first-target sale is tried at most once a minute, and only on a quote no older than
+  `S.max_quote_age_s`; the simulation has no quote and no wait.
+- A trailed stop the broker refuses because the market is already under it is treated as the stop being hit:
+  the desk sells at the market, for the exit the simulation takes at that bar's open.
 
 **What the parity tests hold** (`tests/unit/test_gap_live.py`, `tests/unit/test_runner_s_gap.py`, constructed
 days only, no market data): for each of the four rules, the live reading and the batch detector with

@@ -83,6 +83,7 @@ class MultiOMS(OMS):
     def _place_stop(self, p: MultiPlan, qty: int) -> None:
         p.stop_id = self._next_id(p, "stop")
         p.sell_ids.append(p.stop_id)
+        self._persist(p)                                     # known before it is sent (see OMS.ensure_stop)
         self._submit(Order(p.stop_id, p.symbol, "sell", qty, "stop", stop_price=p.stop, tif="gtc"), protective=True)
         self._note(p, "stop_placed", p.stop, qty)
         self._persist(p)

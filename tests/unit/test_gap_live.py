@@ -10,6 +10,7 @@ The walk never shows a rule a bar that has not closed: every call gets a prefix 
 """
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import pytest
 from gap_days import AFTERS, E3_SETUPS, e3_day, random_day
@@ -250,3 +251,20 @@ def test_staging_refuses_a_wide_or_unknown_spread_and_a_collar_the_simulation_ne
     assert (quick.expires_at.hour, quick.expires_at.minute) == (9, 35)             # the minute it was decided for
     assert sl.engine_entry(order, 5.40, 0.01) is None and sl.engine_entry(order, 5.25, 0.01) == pytest.approx(5.32)
     assert sl.engine_entry(order, 5.25, 0.025) is None
+
+
+# ---- the exit's EMA is the engine's own arithmetic (review of #570, finding 4a) ----------------------------------------
+def test_the_live_ema_is_the_engines_to_the_last_bit():
+    from wt.backtest.management import ema as engine_ema
+    flat_closes = np.full(40, 9.51)                                  # equal closes: the forms differ in the last bit
+    assert np.array_equal(sl._ema(flat_closes, 9), engine_ema(flat_closes, 9))
+    rng = np.random.default_rng(7)
+    walk_ = 10 + np.cumsum(rng.normal(0, 0.05, 400))
+    assert np.array_equal(sl._ema(walk_, 9), engine_ema(walk_, 9))
+
+
+@pytest.mark.parametrize("code", ["e2", "e4"])
+def test_a_close_exactly_on_the_ema_exits_in_both_or_neither(code):
+    bars, ctx, slip = random_day(2219)                               # its 09:40 close ties the engine's EMA9
+    got = compare(code, bars, ctx, slip)
+    assert got["trade"] and got["exits"][-1] == "runner_5m_close_below_ema9"

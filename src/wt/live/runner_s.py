@@ -1076,12 +1076,13 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         p.log.append(staged_note(s))
         made.append(p)
         store.save(p)
+        before = plan, staged
+        plan, staged = p, s                                    # in play before it is sent (see gap_place)
         oms.place_entry(p)
         log("entry_placed" if p.state == "entry_working" else "entry_not_placed", trade_id=p.trade_id, qty=qty,
             limit=s.limit, expires=s.expires_at, state=p.state, detail=p.log[-1:] if p.log else None, **row)
-        if p.active:
-            plan, staged = p, s
-        else:
+        if not p.active:
+            plan, staged = before
             st.done = "not_placed"
             bump("not_placed")
 
@@ -1109,6 +1110,10 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                 q = with_deadline(data.quote, p.symbol)
             except Exception:  # noqa: BLE001
                 log("data_timeout", what="quote", symbol=p.symbol)
+            # a target is sold on a quote no older than the entry gate allows: a stale bid over the target (a halt
+            # after a run-up) would ask for a sale that cannot fill, again at every poll
+            fresh = q if q is not None and (pd.Timestamp(now) - q[2]).total_seconds() <= guard.limits.max_quote_age_s \
+                else None
             b = bars.get(p.symbol)
             # the end-of-day steps below need nothing but the position; the target and the stagnation stop need the fill
             target = entry_t = None
@@ -1125,8 +1130,8 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                 else:
                     oms.exit_now(p, None, reason="eod_flatten", market=True)
             elif isinstance(p, GapPlan):
-                gap_exit(p, q, b, now)
-            elif target is not None and (px := target_exit_limit(q, target)) is not None:
+                gap_exit(p, fresh, b, now)
+            elif target is not None and (px := target_exit_limit(fresh, target)) is not None:
                 oms.exit_now(p, px, reason="target")
             elif p.avg_entry and b is not None and entry_t is not None and \
                     sl.stagnant(b, entry_t, p.avg_entry, p.stop):
@@ -1226,17 +1231,17 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                     signal_t=s.signal_t.isoformat(), expires=s.expires_at.isoformat(), spread=s.spread, bv=want.bv)
         made.append(p)
         store.save(p)
-        oms.place_entry(p)
+        before = plan, staged, gap_rested[0]
+        plan, staged, gap_rested[0] = p, s, key                # in play before it is sent: if the broker's answer is
+        oms.place_entry(p)                                     # lost, the loop's sync settles it from the order id
         placed = p.state == "entry_working"
         if not p.active:
+            plan, staged, gap_rested[0] = before
             gap_dead.add(key)                                  # refused by the guard or the broker: not asked again
             bump("not_placed")
         log("entry_placed" if placed else "entry_not_placed", trade_id=p.trade_id, qty=qty, limit=s.limit,
             expires=s.expires_at, state=p.state, detail=p.log[-1:] if p.log else None, attempt=gap_n,
             **({} if p.active else {"dead": key}), **row)
-        if p.active:
-            plan, staged = p, s
-            gap_rested[0] = key
 
     def gap_entries(now: dt.datetime) -> None:
         """Once for each minute, after its bars are read: has a valid order's trigger been reached (then the day's
@@ -1349,8 +1354,19 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             if wt is None:
                 return
         # the first target is a quote decision: the bid at or over it, sold with a limit at it, never on the mid
+        if not wt.partial_done and wt.qty0 >= 2 and p.partial_ids \
+                and 0 < sum(x.qty for x in broker.positions() if x.symbol == p.symbol) <= wt.qty0 - wt.partial_qty:
+            # a first-target sale whose cancel was not confirmed, and that filled after all: the half is gone, so
+            # the target is done and the stop goes to breakeven; the other half is never sold at the target too
+            log("partial_filled", trade_id=p.trade_id, symbol=p.symbol, code=p.code, qty=wt.partial_qty,
+                limit=wt.t1_price, reason="partial_t1", state=p.state, late=True)
+            sl.wt_on_partial(wt)
+            gap_save(p, wt)
+        minute = str(pd.Timestamp(now).floor("min"))
         if not wt.partial_done and pd.Timestamp(now) >= wt.entry_bar + pd.Timedelta(minutes=1) \
-                and (px := target_exit_limit(q, wt.t1_price)) is not None:
+                and p.wt.get("t1_try") != minute and (px := target_exit_limit(q, wt.t1_price)) is not None:
+            p.wt["t1_try"] = minute                            # one try a minute: an unfilled try cost its time without
+            store.save(p)                                      # half the stop, so it is never repeated at each poll
             reason = "target_all" if wt.qty0 < 2 else "partial_t1"
             sold = oms.partial_exit(p, wt.partial_qty, px, reason)
             if sold:
@@ -1392,6 +1408,14 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             moved = oms.move_stop(p, want)
             log("stop_moved" if moved else "stop_move_failed", trade_id=p.trade_id, symbol=p.symbol, code=p.code,
                 stop=want, why="breakeven" if wt.stop_reason == "stop" else wt.stop_reason)
+            if not moved and q is not None and 0 < float(q[0]) <= want:
+                # the market is already under the stop the exit wants (a broker refuses such a stop): the
+                # simulation is stopped out there, so the desk leaves too instead of keeping the old stop
+                p.wt["exit"] = wt.stop_reason
+                store.save(p)
+                log("exit_signal", trade_id=p.trade_id, symbol=p.symbol, code=p.code, reason=wt.stop_reason,
+                    why="stop_under_market")
+                oms.exit_now(p, None, reason=wt.stop_reason, market=True)
 
     held_try: dict[str, dt.datetime] = {}
     while True:

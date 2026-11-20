@@ -45,6 +45,7 @@ import numpy as np
 import pandas as pd
 
 from wt.backtest.engine import EntrySignal
+from wt.backtest.management import ema as _engine_ema
 from wt.core.clock import ET
 from wt.signals.bars import PM_OPEN, RTH_OPEN, bucket_complete_at, et_minutes, resample_clock
 from wt.signals.common import ema
@@ -262,12 +263,9 @@ class WTAction:
 
 
 def _ema(values: np.ndarray, n: int) -> np.ndarray:
-    out = np.empty(len(values), float)
-    k, acc = 2.0 / (n + 1), float(values[0])
-    for i, v in enumerate(values):
-        acc = float(v) if i == 0 else acc + k * (float(v) - acc)
-        out[i] = acc
-    return out
+    """The exit engine's own EMA (wt.backtest.management.ema), not an algebraically equal form: with equal closes
+    the two differ in the last bit, and a close exactly on the EMA must exit in both or in neither."""
+    return _engine_ema(np.asarray(values, float), n)
 
 
 def wt_on_partial(s: WTState) -> WTAction:
