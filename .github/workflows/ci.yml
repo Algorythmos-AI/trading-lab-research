@@ -22,7 +22,7 @@ jobs:
   test:
     name: test
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 35      # the full suite takes 15-19 min here since the session replays (2026-11); 20 cut one off
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONPATH: src
