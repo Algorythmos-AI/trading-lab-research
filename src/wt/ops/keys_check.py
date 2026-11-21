@@ -36,11 +36,12 @@ class Pair:
 
 PAIRS = (
     Pair("APCA_API_KEY_ID", "APCA_API_SECRET_KEY",
-         "the market-data pair: the routine, the forward test, the pipeline check, research scripts (the retired QQQ "
-         "rule's paper account, DEC-0069: no job places an order with it); "
+         "the market-data pair: the routine, the forward test, the pipeline check, research scripts (paper account "
+         "'Robot B stocks (host)'; no job places an order with it, DEC-0069); "
          "the site and make feed-agreement when the ALPACA_ pair is not set"),
     Pair("APCA_OPTIONS_KEY_ID", "APCA_OPTIONS_SECRET_KEY",
-         "second paper account: options-live (Paper positions), and the options clone when the clone pair is not set"),
+         "the deleted 'Manual options (mine)' account's pair (unset since 2026-11-20): options-live positions when "
+         "set, and the options clone when the clone pair is not set"),
     Pair("APCA_CLONE_KEY_ID", "APCA_CLONE_SECRET_KEY", "the options clone's own paper account (wins over APCA_OPTIONS_)"),
     Pair("APCA_S_KEY_ID", "APCA_S_SECRET_KEY",
          "Gap Hunter's (the stock desk's) own paper account (DEC-0066): runner_s, for orders and market data; it "

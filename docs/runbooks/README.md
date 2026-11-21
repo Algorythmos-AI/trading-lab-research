@@ -9,6 +9,7 @@ One page per incident. Each starts with how you'll notice it.
 | [Kill switch and flatten](kill-and-flatten.md) | You want trading to stop now |
 | [Loss latch reset](latch-reset.md) | ntfy priority 5 "loss limit latched"; entries stay off |
 | [Rollback a deploy](rollback.md) | The next night's jobs fail after a deploy |
+| [Paper accounts](paper-accounts.md) | Which of the three paper accounts a key pair reaches, what each is for, and their history |
 | [Rotate secrets](secret-rotation.md) | A secret may have leaked, or it's the scheduled rotation |
 | [Dashboard deploys and the watchdog drill](dashboard-deploy.md) | A dashboard deploy failed, or you want to prove paging works |
 | [Options desk: paper positions](options-positions.md) | The Paper positions pane is absent or says it is old; setting up the second paper account |

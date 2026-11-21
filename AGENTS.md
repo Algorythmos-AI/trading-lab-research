@@ -11,6 +11,10 @@ specific to this repository. Where the two conflict, the org file's "Never" sect
    - Never submit orders outside `wt.live` / `wt.oms`.
    - The crypto desk (`wt.crypto`, ADR 0005) books simulated fills on public market data only. It has no venue
      credentials, no private endpoint and no order route, and none may be added.
+   - **Three paper accounts, no more** (`docs/runbooks/paper-accounts.md`): "Robot B stocks (host)" (`APCA_API_*`,
+     market data, places no order), "Clone options (host)" (`APCA_CLONE_*`, the options clone) and "Gap Hunter"
+     (`APCA_S_*`, the stock desk). There is no "QQQ account": QQQ is a ticker. Never create, delete, rename or reset
+     an account, or generate a key pair; check which account a pair reaches, read-only, before relying on it.
 2. **Pre-registration.** Every strategy or evaluation change needs a hypothesis, an experiment and a decision
    record in `research/`, written before any affected P&L is viewed.
    - Experiments are append-only: a re-run gets a new EXP id.
