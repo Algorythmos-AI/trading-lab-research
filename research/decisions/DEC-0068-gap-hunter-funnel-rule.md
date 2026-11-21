@@ -154,3 +154,11 @@ days only, no market data): for each of the four rules, the live reading and the
 `wt.backtest.engine.simulate` agree on whether there is a trade, the entry bar, the entry price, the stop, the
 breakout-volume flag and every exit; and the runner, replayed, takes the simulation's trade on fixture days of
 each rule.
+
+### 2026-11-22: the owner confirms the eight readings
+
+Asked in chat for a yes or no on the eight readings of the 2026-11-20 note (point 2 named as the one most worth
+his attention), the owner answered "yes". All eight stand as written, with the review fixes of #572 listed under
+"Where the live desk cannot be the batch simulation". Nothing is switched on by this note: HYP-0071 trades only
+once the owner has seen the host's entry counts (`scripts/gap_hunter_counts.py`), a dated note in DEC-0066 switches
+it on, and its id is in `S.switched_on` (`config/risk.yaml`), with its key pair on the host.
