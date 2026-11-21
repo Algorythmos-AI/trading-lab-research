@@ -51,6 +51,10 @@ from wt.ops.window import deploy_blockers, load_sessions
 DEPLOY_DIR = STATE_DIR / "deploy"
 STAGE_DIR = STATE_DIR / "stage"
 STAGE_TIMEOUT_S = 1800.0
+# The whole-session replays (marker `replay`) are left out here: on this two-core host they alone took the suite past
+# both time limits (owner, 2026-11-20). GitHub CI runs every test, replays included, on the commit before it reaches
+# main.
+STAGE_SELECT = ("-m", "not replay")
 CI_OVERRIDE_ENV = "WT_DEPLOY_CI_OVERRIDE"       # owner only: deploy a commit whose checks can't be read (reason)
 TAGGER = ("-c", "user.name=wt-deploy", "-c", "user.email=wt-deploy@localhost")   # a host may have no git identity
 
@@ -243,7 +247,7 @@ def stage_tests(target: str, timeout_s: float = STAGE_TIMEOUT_S) -> tuple[bool, 
         _run(uv, "pip", "sync", "--quiet", "--python", str(d / PY), "--require-hashes", str(d / "requirements.lock.txt"))
         env = {k: v for k, v in os.environ.items() if k in ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR")}
         env.update(PYTHONPATH="src", PYTHONDONTWRITEBYTECODE="1")
-        r = subprocess.run([str(d / PY), "-m", "pytest", "-q", "-p", "no:cacheprovider", "-o", "addopts="], cwd=d,
+        r = subprocess.run([str(d / PY), "-m", "pytest", "-q", "-p", "no:cacheprovider", "-o", "addopts=", *STAGE_SELECT], cwd=d,
                            env=env, capture_output=True, text=True, timeout=timeout_s)
         tail = (r.stdout + r.stderr).strip()[-600:]
         return r.returncode == 0, tail

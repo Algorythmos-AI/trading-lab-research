@@ -12,6 +12,9 @@ from wt.core.types import Order, OrderStatus
 from wt.data.feeds import FeedNotNamed
 from wt.live.replay import BarFillBroker, ReplayClock, ReplayCrash, ReplayREST, Tape
 
+# Whole sessions replayed: GitHub CI runs these; the host's deploy gate leaves them out (owner, 2026-11-20).
+pytestmark = pytest.mark.replay
+
 DAY = dt.date(2026, 10, 1)
 SESSIONS = {DAY: ("09:30", "16:00")}
 BARS_URL = "https://data.alpaca.markets/v2/stocks/bars"

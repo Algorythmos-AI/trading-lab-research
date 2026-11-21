@@ -18,6 +18,9 @@ from wt.core.clock import ET
 from wt.live import runner_b, runner_s
 from wt.live.replay import BarFillBroker, ReplayClock, ReplayCrash, ReplayREST, Tape
 
+# Whole sessions replayed: GitHub CI runs these; the host's deploy gate leaves them out (owner, 2026-11-20).
+pytestmark = pytest.mark.replay
+
 DAY, PREV, NEXT = dt.date(2024, 3, 1), dt.date(2024, 2, 29), dt.date(2024, 3, 4)
 SESSIONS = {d: ("09:30", "16:00") for d in (PREV, DAY, NEXT)}
 KEYS = {"APCA_S_KEY_ID": "PKS-TEST", "APCA_S_SECRET_KEY": "s-secret", "APCA_API_KEY_ID": "PKQ-TEST"}

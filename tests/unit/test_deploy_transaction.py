@@ -204,6 +204,7 @@ def test_stage_tests_runs_the_suite_in_a_throwaway_worktree(world, monkeypatch, 
     monkeypatch.setenv("APCA_API_SECRET_KEY", "never-passed")
     ok, out = deploy.stage_tests(first)
     assert ok and "3 passed" in out
+    assert seen["argv"][-2:] == ["-m", "not replay"]                # the whole-session replays are GitHub CI's
     assert "APCA_API_SECRET_KEY" not in seen["env"] and seen["env"]["PYTHONPATH"] == "src"
     assert not Path(seen["cwd"]).exists()                          # removed afterwards
     assert ("venv" in [c[1] for c in calls]) and ("pip" in [c[1] for c in calls])
