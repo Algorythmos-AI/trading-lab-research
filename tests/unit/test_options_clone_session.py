@@ -976,3 +976,50 @@ def test_a_settle_delay_holds_back_only_the_newest_minute(world):
     held, _, _ = r.read_tape(m.now)
     assert all_bars["SPY"][-1].end == at("09:40") and held["SPY"][-1].end == at("09:38")
 
+
+
+def test_a_focus_name_the_desk_does_not_hold_is_never_fetched_planned_or_traded(world):
+    """DEC-0070 section 8: the clone trades the desk's names only. A focus name the desk does not hold (one the Radar
+    could supply after the switch) is left out before the cap, never fetched, and journalled as `off_desk`."""
+    days, d = [], "2026-10-16"
+    for _ in range(80):
+        days.append(d)
+        d = lv.prev_session(d)
+    days.reverse()
+    rows = [{"t": f"{x}T04:00:00Z", "o": 570 + i * 0.1, "h": 571 + i * 0.1, "l": 569 + i * 0.1, "c": 570.5 + i * 0.1,
+             "v": 1e6} for i, x in enumerate(days)]
+    m = world["m"]
+    asked: list[str] = []
+
+    def daily(symbols, start, end):
+        asked.extend(symbols)
+        return {s: rows for s in symbols}
+    m.daily = daily
+    m.contracts = lambda root, expiry, last=None: {f"{root}261019C00580000": 5000.0}
+    focus = {"items": [{"symbol": s, "rank": i + 1, "bias": "range"} for i, s in enumerate(("XYZ", "SPY", "NEWCO"))]}
+    m.focus = lambda: (focus, "2026-10-19")
+    r = world["make"]({**SAME_DAY, "names": {**SAME_DAY["names"], "standing": []}})
+    del r.prepare
+    m.now = at("09:25")
+    r.arm()
+    assert "XYZ" not in r.names and "NEWCO" not in r.names and "SPY" in r.names
+    assert "XYZ" not in asked and "NEWCO" not in asked
+    (n,) = events(world["rows"], "names")
+    assert n["off_desk"] == ["XYZ", "NEWCO"] and r.names_source.startswith("focus")
+
+
+
+def test_a_focus_of_desk_names_only_is_taken_as_before():
+    from wt.options import clone_names as cn
+    from wt.options import session as sess
+    focus = {"items": [{"symbol": s, "rank": i + 1} for i, s in enumerate(("AMZN", "tsla", "XYZ"))]}
+    desk = cn.desk_names({"names": ["SPY", "QQQ", "AMZN", "TSLA"]})
+    kept, out = cn.on_desk(focus, desk)
+    assert out == ["XYZ"] and sess.names(kept, "D", "D", ["SPY", "QQQ"], 6) == (["AMZN", "TSLA"], "focus")
+    only_desk = {"items": focus["items"][:2]}
+    assert cn.on_desk(only_desk, desk) == (only_desk, [])                  # nothing to leave out: the block as it was
+    assert sess.names(cn.on_desk({"items": [{"symbol": "XYZ", "rank": 1}]}, desk)[0], "D", "D", ["SPY", "QQQ"], 6) \
+        == (["SPY", "QQQ"], "fallback")
+    assert cn.on_desk(None, desk) == (None, [])
+    assert cn.desk_names({"names": "SPY"}) == [] and cn.desk_names(None) == []
+    assert "XYZ" not in cn.read_desk() and "AMZN" in cn.read_desk()

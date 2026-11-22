@@ -149,8 +149,9 @@ def test_a_standing_name_is_eligible_beside_the_focus_names_and_outside_the_cap(
     o = options()
     o["focus"]["items"] = many
     exp = {**EXP, **{s: [TARGET] for s in ("A", "B", "C", "D", "E", "F", "QQQ")}}
-    assert pc.eligible(o, TARGET, exp) == {"A", "B", "C", "D", "E", "F", "QQQ"}            # six focus names, then QQQ
-    assert "QQQ" not in pc.eligible(o, TARGET, {k: v for k, v in exp.items() if k != "QQQ"})  # no expiry: not traded
+    desk = ["SPY", "QQQ", "A", "B", "C", "D", "E", "F"]
+    assert pc.eligible(o, TARGET, exp, desk=desk) == {"A", "B", "C", "D", "E", "F", "QQQ"}  # six focus names, then QQQ
+    assert "QQQ" not in pc.eligible(o, TARGET, {k: v for k, v in exp.items() if k != "QQQ"}, desk=desk)  # no expiry
 
 
 def test_eligibility_ranks_dedupes_and_caps_like_the_runner():
@@ -160,7 +161,19 @@ def test_eligibility_ranks_dedupes_and_caps_like_the_runner():
     many = [{"symbol": s, "rank": i + 1} for i, s in enumerate(("A", "B", "C", "D", "E", "F", "AMZN"))]
     o["focus"]["items"] = many
     exp = dict(EXP, AMZN=[TARGET])
-    assert "AMZN" not in pc.eligible(o, TARGET, exp)                                         # seventh: beyond the cap
+    desk = ["SPY", "QQQ", "AMZN", "A", "B", "C", "D", "E", "F"]
+    assert "AMZN" not in pc.eligible(o, TARGET, exp, desk=desk)                              # seventh: beyond the cap
+
+
+def test_a_focus_name_the_desk_does_not_hold_is_never_the_clones():
+    """DEC-0070 section 8: the check judges the names as the clone takes them, the desk's names only."""
+    o = options()
+    o["focus"]["items"] = [{"symbol": "XYZ", "rank": 1}, {"symbol": "AMZN", "rank": 2}]
+    exp = dict(EXP, XYZ=[TARGET], AMZN=[TARGET])
+    assert pc.eligible(o, TARGET, exp) == {"AMZN", "QQQ"}            # XYZ left out; AMZN with QQQ standing (DEC-0058)
+    o["focus"]["items"] = [{"symbol": "XYZ", "rank": 1}]
+    assert pc.eligible(o, TARGET, exp) == {"SPY", "QQQ"}                                     # none left: the fallback
+    assert "XYZ" not in pc.clone_desk() and "AMZN" in pc.clone_desk()
 
 
 def test_after_the_close_the_check_waits_for_the_days_bar_before_judging_the_tape():

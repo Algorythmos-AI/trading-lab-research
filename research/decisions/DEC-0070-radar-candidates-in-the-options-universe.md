@@ -135,8 +135,26 @@ nothing; the four names on the Options page are still the cloud routine's. DEC-0
 
 The switch is DEC-0048 (not written). It names: the first session on which the published focus is this pipeline's
 picks; the owner's step that turns off the cloud after-close pick; the card fields for every universe name (section 5
-item 2); and the board's handling of a non-desk pick (until the owner moves the dashboard's freeze pin, a non-desk
-pick shows NO TRADE with its reason: its earnings and expiry facts are not in the board's calendar).
+item 2); and the board's handling of a non-desk pick (section 6a).
+
+#### 6a. The Trade now board and a non-desk pick (added 2026-11-23, before acceptance; a blocker for DEC-0048)
+
+An audit of the dashboard on 2026-11-23 (code only; no outcome seen) found that the statement first written here, "a
+non-desk pick shows NO TRADE", is true of the signal word only:
+
+- `signal.ts` `signalWord` cannot say CALL or PUT for a name the event calendar does not keep: its shock gate is
+  unread (`earnings_not_kept`), and CALL or PUT needs every market gate to pass. It can say WAIT or NO TRADE. Its only
+  caller is the signal record (`signal-run.ts`); no page draws it.
+- Every owner-facing surface draws from the row state (`trade-state.ts` `nameState`), which reads no calendar and holds
+  no list of names: the Trade now board's row and notice (`trade-now.ts` `rowView`, `noticeKey`, `entryPrompt`), its
+  browser notification and sound, the hero, the focus card and glance, the status rail and the manage card's "I'm in"
+  form. A non-desk name in the entry zone would read ENTER ZONE with entry, stop and target, and nothing would check
+  its earnings. No phone (ntfy) alert is sent from any trade state.
+
+`trade-now.ts` and `trade-state.ts` are inside the engine closure (`desk-eval.ts` imports both), so a guard there
+moves `ENGINE_VERSION`: the owner's change, by its own record. **Until such a guard is registered and merged, the
+switch must not publish a non-desk name in the focus**, and DEC-0048 names this as its precondition. Before the switch
+every focus name is a desk name (the cloud routine picks from the 12), so nothing on the board changes today.
 
 ### 7. DEC-0055 (PROPOSED) and HYP-0067
 
@@ -144,6 +162,25 @@ The Radar is for options only. HYP-0067 (SMALL CAP MOMENTUM against IWM) evaluat
 ground; it is withdrawn before DEC-0055 is accepted, and DEC-0055's family R totals 2. Section 7's order ("only after
 HYP-0065 is supported") is replaced by this record. HYP-0065 and HYP-0066 stand as proposed; they measure the Radar's
 DAILY RADAR list, not the desk's selection.
+
+### 8. The options clone and the pipeline check take the desk's names only (added 2026-11-23, before acceptance)
+
+The clone trades the desk's list (DEC-0030; this record does not amend the clone, above). Its code took every focus
+name, so after the switch a Radar name in the focus would have been traded, outside EXP-0050's registered scope. Rule,
+in `wt.options.clone_names.on_desk`, applied to the focus before `wt.options.session.names` by the runner and by the
+pipeline check's copy of its choice (`eligible`). `wt.options.session` itself is not changed: EXP-0037's replay pins it.
+
+1. The focus names are filtered to the desk's names (`config/options_desk.yaml`, read the same way by both) before
+   the cap of `names.max_names`. The order, the de-duplication and the source word (`focus`) are unchanged.
+2. When no focus name is left, the source is `fallback`, as for a focus picked for another day.
+3. A name left out is never fetched, planned or traded; the `names` journal line lists it (`off_desk`). Top-up
+   (DEC-0032) and the standing name (DEC-0058) apply as before.
+4. An unreadable desk file leaves no focus name: the fallback trades.
+
+`names.fallback`, `names.standing` and `names.top_up` are all desk names, and the cloud routine picks the focus from
+the 12, so no session so far would have chosen differently: EXP-0050 is unchanged. The options lab's recorder and
+probe already keep only desk names (DEC-0060, DEC-0067). Plan step 5's other part (the positions job reading hourly
+bars and rule states for a non-desk focus name) waits for DEC-0048: nothing can reach it before the switch.
 
 ## What is not decided here
 
