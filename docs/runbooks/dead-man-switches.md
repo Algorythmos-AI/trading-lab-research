@@ -45,8 +45,9 @@ incident, not a second one.
 | `wt-pipeline-check` | `0 8,18 * * 1-5` | 1 h 30 min | ~08:55 and ~18:30 | The options pipeline check didn't run or crashed (a failed check, market data unreachable included, pages through ntfy and exits 0, not here) |
 | `wt-options-review` | `0 16 * * 1-5` | 3 h | ~16:30 | The options clone's nightly review didn't run |
 | `wt-lab-tape` | `0 9 * * 1-5` | 10 h | ~17:30–17:50 (14:30–14:50 early close); ~09:25 on a day with no session or no focus list | The options lab's tape recorder didn't run or crashed: no session tape that day (DEC-0060; see `lab-tape.md`) |
+| `wt-options-select` | `0 6 * * 1-5` | 3 h | ~06:46 (no session), ~06:50–08:35 | The Radar → Options shadow selection didn't run or failed: that session has no shadow record and does not count towards DEC-0070's five clean sessions |
 
-Eight checks for the stocks and options jobs; the VM adds backup and restore-test checks (at most 14 of the free 20).
+Ten checks for the stocks and options jobs; the VM adds backup and restore-test checks (at most 16 of the free 20).
 The stock desk has no `-armed` check: its runner pages on its own, and `wt-paper-s` catches a session that never ran.
 The QQQ rule's two (`wt-paper-b-armed`, `wt-paper-b`) ended with its job (DEC-0069, 2026-11-20): pause or delete
 them on healthchecks.io once the release that removes the job is deployed, or they page for a job that no longer
