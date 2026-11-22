@@ -1,6 +1,6 @@
 {
   "schema": "stocksdelta/paper-options",
-  "schema_version": 2,
+  "schema_version": 3,
   "run_id": "paper-options-2026-10-12-201000000000",
   "as_of": "2026-10-12T20:10:00+00:00",
   "paper": true,
@@ -3020,7 +3020,13 @@
         "after_close_ok": true,
         "oi_null_share": 0.2588,
         "archived": true,
-        "shadow": true
+        "shadow": true,
+        "upload_after_close_min": 95.0,
+        "upload_late": false,
+        "rate_limit_min_share": 0.62,
+        "rate_limit_low": 0,
+        "rate_limit_429": 0,
+        "budget_refused": 0
       },
       {
         "date": "2026-10-05",
@@ -3047,7 +3053,13 @@
         "after_close_ok": true,
         "oi_null_share": 0.2588,
         "archived": true,
-        "shadow": true
+        "shadow": true,
+        "upload_after_close_min": 240.0,
+        "upload_late": true,
+        "rate_limit_min_share": 0.41,
+        "rate_limit_low": 0,
+        "rate_limit_429": 0,
+        "budget_refused": 0
       },
       {
         "date": "2026-10-06",
@@ -3071,7 +3083,13 @@
         "after_close_ok": true,
         "oi_null_share": 0.2588,
         "archived": true,
-        "shadow": true
+        "shadow": true,
+        "upload_after_close_min": 101.5,
+        "upload_late": false,
+        "rate_limit_min_share": 0.18,
+        "rate_limit_low": 4,
+        "rate_limit_429": 2,
+        "budget_refused": 7
       },
       {
         "date": "2026-10-07",
@@ -3095,7 +3113,13 @@
         "after_close_ok": true,
         "oi_null_share": 0.2588,
         "archived": false,
-        "shadow": true
+        "shadow": true,
+        "upload_after_close_min": null,
+        "upload_late": false,
+        "rate_limit_min_share": 0.55,
+        "rate_limit_low": 0,
+        "rate_limit_429": 0,
+        "budget_refused": 0
       },
       {
         "date": "2026-10-08",
@@ -3119,7 +3143,13 @@
         "after_close_ok": true,
         "oi_null_share": 0.2588,
         "archived": false,
-        "shadow": true
+        "shadow": true,
+        "upload_after_close_min": null,
+        "upload_late": false,
+        "rate_limit_min_share": 0.55,
+        "rate_limit_low": 0,
+        "rate_limit_429": 0,
+        "budget_refused": 0
       },
       {
         "date": "2026-10-09",
@@ -3143,7 +3173,13 @@
         "after_close_ok": true,
         "oi_null_share": 0.2588,
         "archived": false,
-        "shadow": false
+        "shadow": false,
+        "upload_after_close_min": null,
+        "upload_late": false,
+        "rate_limit_min_share": 0.55,
+        "rate_limit_low": 0,
+        "rate_limit_429": 0,
+        "budget_refused": 0
       },
       {
         "date": "2026-10-12",
@@ -3169,8 +3205,15 @@
         "after_close_ok": true,
         "oi_null_share": 0.2588,
         "archived": false,
-        "shadow": false
+        "shadow": false,
+        "upload_after_close_min": null,
+        "upload_late": false,
+        "rate_limit_min_share": 0.55,
+        "rate_limit_low": 0,
+        "rate_limit_429": 0,
+        "budget_refused": 0
       }
-    ]
+    ],
+    "uploads_late": 1
   }
 }

@@ -42,7 +42,10 @@ from wt.options import lab_tape_status
 from wt.options import arms_verdict, paper_manual, review
 
 SCHEMA_ID = "stocksdelta/paper-options"
-SCHEMA_VERSION = 2                # 2 adds `lab`; a site that takes only 1 is sent 1 without it
+SCHEMA_VERSION = 3                # 2 adds `lab`; 3 adds the lab's upload delay and headroom; older sites get less
+LAB_V3_KEYS = ("uploads_late",)   # the `lab` block's version 3 keys, and each session's below
+LAB_SESSION_V3_KEYS = ("upload_after_close_min", "upload_late", "rate_limit_min_share", "rate_limit_low",
+                       "rate_limit_429", "budget_refused")
 SCHEMA_PATH = ROOT / "dashboard" / "src" / "lib" / "paper-options.schema.json"
 JOURNAL = DATA_DIR / "live" / "options_journal.jsonl"
 OPT = STATE_DIR / "options"
@@ -319,9 +322,18 @@ def build(now: dt.datetime, run_id: str, journal: Path = JOURNAL, state: Path = 
 
 
 def as_version(doc: Mapping[str, Any], version: int) -> dict[str, Any]:
-    """The document in the newest format the site takes: version 1 has no `lab`."""
+    """The document in the newest format the site takes: version 2 has `lab` without the version 3 keys, version 1
+    has no `lab`."""
     if version >= SCHEMA_VERSION:
         return dict(doc)
+    if version == 2:
+        out = {**doc, "schema_version": 2}
+        lab = doc.get("lab")
+        if isinstance(lab, Mapping):
+            out["lab"] = {**{k: v for k, v in lab.items() if k not in LAB_V3_KEYS},
+                          "sessions": [{k: v for k, v in s.items() if k not in LAB_SESSION_V3_KEYS}
+                                       for s in lab.get("sessions", [])]}
+        return out
     return {**{k: v for k, v in doc.items() if k != "lab"}, "schema_version": 1}
 
 
@@ -401,7 +413,7 @@ def _run(now: dt.datetime, dry_run: bool, env: Mapping[str, str], journal: Path,
         return 0, f"{said}; the dashboard does not take the document yet, not sent"
     if takes < SCHEMA_VERSION:
         data = body(as_version(doc, takes))
-        said += f"; sent as version {takes} (the site does not take the lab block yet)"
+        said += f"; sent as version {takes} (the site does not take version {SCHEMA_VERSION} yet)"
     ok, detail = publish.send(data, url, secret, bypass, tries=SEND_TRIES, key_id=env.get("DASHBOARD_KEY_ID"))
     if not ok:
         return 1, f"{said}; sent: False ({publish.error_code(detail)})"

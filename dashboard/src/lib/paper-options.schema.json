@@ -20,9 +20,10 @@
     "schema_version": {
       "enum": [
         1,
-        2
+        2,
+        3
       ],
-      "description": "2 adds `lab`, the options lab's tape status; 1 is still taken."
+      "description": "3 adds each lab session's upload delay and rate-limit headroom; 2 adds `lab`, the options lab's tape status; 1 and 2 are still taken."
     },
     "run_id": {
       "type": "string",
@@ -271,6 +272,12 @@
               "items": {
                 "$ref": "#/definitions/lab_session"
               }
+            },
+            "uploads_late": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000,
+              "description": "Sessions (from 2026-11-23) verified past close plus 110 minutes (DEC-0060 point 4)."
             }
           }
         }
@@ -819,6 +826,75 @@
         },
         "archived": {
           "type": "boolean"
+        },
+        "upload_after_close_min": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number",
+              "minimum": -1440,
+              "maximum": 1000000
+            }
+          ],
+          "description": "Minutes from the close to the verified upload; null until archived."
+        },
+        "upload_late": {
+          "type": "boolean",
+          "description": "Verified past close plus 110 minutes (DEC-0060 point 4); sessions before 2026-11-23 predate the archive and are never late."
+        },
+        "rate_limit_min_share": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          ],
+          "description": "The lowest share of Alpaca's per-minute request limit left that the session saw; null before the recorder saved it."
+        },
+        "rate_limit_low": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000000
+            }
+          ],
+          "description": "Readings under the recorder's back-off share. Null before the recorder saved it."
+        },
+        "rate_limit_429": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000000
+            }
+          ],
+          "description": "Requests Alpaca refused as over its limit. Null before the recorder saved it."
+        },
+        "budget_refused": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000000
+            }
+          ],
+          "description": "Sweep batches (up to 100 contracts each) the lab's own request budget skipped. Null before the recorder saved it."
         }
       }
     }

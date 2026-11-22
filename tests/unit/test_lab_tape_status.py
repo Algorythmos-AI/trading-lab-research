@@ -93,10 +93,10 @@ def test_the_paper_document_carries_it_and_a_version_1_site_gets_it_without(tmp_
     doc = paper_site.build(paper_site.dt.datetime(2026, 11, 21, tzinfo=paper_site.dt.UTC), "r", tmp_path / "j.jsonl",
                            tmp_path / "state", {"costs": {"fee_per_contract_each_way": 0.65}},
                            {"WT_LAB_TAPE": str(tmp_path / "tape")})
-    assert doc["schema_version"] == 2 and len(doc["lab"]["sessions"]) == 2 and paper_site.validate(doc) == []
+    assert doc["schema_version"] == 3 and len(doc["lab"]["sessions"]) == 2 and paper_site.validate(doc) == []
     old = paper_site.as_version(doc, 1)
     assert old["schema_version"] == 1 and "lab" not in old and paper_site.validate(old) == []
-    assert paper_site.as_version(doc, 2) == doc
+    assert paper_site.as_version(doc, 3) == doc
 
 
 def test_a_broken_tape_never_stops_the_paper_history(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -106,3 +106,48 @@ def test_a_broken_tape_never_stops_the_paper_history(tmp_path: Path, monkeypatch
     doc = paper_site.build(paper_site.dt.datetime(2026, 11, 21, tzinfo=paper_site.dt.UTC), "r", tmp_path / "j.jsonl",
                            tmp_path / "state", {"costs": {"fee_per_contract_each_way": 0.65}}, {})
     assert "lab" not in doc and paper_site.validate(doc) == []
+
+
+def test_upload_delay_and_rate_limit_headroom_are_shown(tmp_path: Path) -> None:
+    new = {**V2, "session": "2026-11-23", "focus_session": "2026-11-23", "close": "2026-11-23T21:00:00+00:00",
+           "rate_limit_min_remaining_share": 0.4125, "rate_limit_low_readings": 0, "rate_limit_429": 2,
+           "budget_refused_batches": 3}
+    root = tape(tmp_path, [V2, new, {**new, "session": "2026-11-27", "focus_session": "2026-11-27",
+                                     "close": "2026-11-27T18:00:00+00:00"}])          # a half day closes at 13:00
+    (root / "receipts" / "2026-11-20.json").write_text(       # before the manifest had `close`: 16:00 New York;
+        '{"verified": true, "uploaded_at": "2026-11-22T05:01:50+00:00"}')        # before the bucket existed: not late
+    (root / "receipts" / "2026-11-23.json").write_text('{"verified": true, "uploaded_at": "2026-11-23T22:51:00+00:00"}')
+    (root / "receipts" / "2026-11-27.json").write_text('{"verified": false, "uploaded_at": "2026-11-27T19:00:00+00:00"}')
+    lab = L.block(root=root)
+    assert lab is not None
+    old, mon, half = lab["sessions"]
+    assert old["upload_after_close_min"] == 1921.8 and not old["upload_late"] and old["rate_limit_min_share"] is None
+    assert old["rate_limit_429"] is None and old["budget_refused"] is None              # not saved by that recorder
+    assert mon["upload_after_close_min"] == 111.0 and mon["upload_late"] and lab["uploads_late"] == 1
+    assert (mon["rate_limit_min_share"], mon["rate_limit_low"], mon["rate_limit_429"], mon["budget_refused"]) == (
+        0.4125, 0, 2, 3)
+    assert half["upload_after_close_min"] is None and not half["upload_late"] and not half["archived"]
+    valid(lab)
+
+
+
+def test_a_version_2_site_gets_the_lab_block_without_the_version_3_keys(tmp_path: Path) -> None:
+    new = {**V2, "session": "2026-11-23", "focus_session": "2026-11-23", "close": "2026-11-23T21:00:00+00:00",
+           "rate_limit_min_remaining_share": 0.5, "rate_limit_low_readings": 0, "rate_limit_429": 0,
+           "budget_refused_batches": 0}
+    tape(tmp_path / "tape", [V2, new], archived=("2026-11-23",))
+    doc = paper_site.build(paper_site.dt.datetime(2026, 11, 24, tzinfo=paper_site.dt.UTC), "r", tmp_path / "j.jsonl",
+                           tmp_path / "state", {"costs": {"fee_per_contract_each_way": 0.65}},
+                           {"WT_LAB_TAPE": str(tmp_path / "tape")})
+    two = paper_site.as_version(doc, 2)
+    assert two["schema_version"] == 2 and len(two["lab"]["sessions"]) == 2
+    # the version 2 schema as the site had it: these keys absent, everything else unchanged (additionalProperties off)
+    old = json.loads(json.dumps(SCHEMA))
+    old["properties"]["schema_version"]["enum"] = [1, 2]
+    lab = [x for x in old["properties"]["lab"]["oneOf"] if x.get("type") == "object"][0]
+    for k in paper_site.LAB_V3_KEYS:
+        del lab["properties"][k]
+    for k in paper_site.LAB_SESSION_V3_KEYS:
+        del old["definitions"]["lab_session"]["properties"][k]
+    assert list(jsonschema.Draft7Validator(old).iter_errors(two)) == []
+    assert list(jsonschema.Draft7Validator(old).iter_errors({**doc, "schema_version": 2}))      # unstripped: refused
