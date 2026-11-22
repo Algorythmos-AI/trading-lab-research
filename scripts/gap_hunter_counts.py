@@ -92,6 +92,9 @@ def main(start: str, end: str) -> None:
     from wt.backtest.runner import minute_bars
     from wt.data.alpaca import AlpacaREST
     a = AlpacaREST(per_minute=150, shared=True)
+    from wt.scanner import pool
+    # past sessions: the after-close pools (the same build as the live 09:25 pool the desk reads)
+    runner_s.POOL_DIR, runner_s.PM_BARS_DIR = pool.POOL_DIR, pool.PM_BARS_DIR
     s, e = dt.date.fromisoformat(start), dt.date.fromisoformat(end)
     days = sorted(d for d in (dt.date.fromisoformat(f.stem) for f in runner_s.POOL_DIR.glob("*.parquet")) if s <= d <= e)
     closes = {r.date: str(r.close)[:5] for r in a.calendar(start, end).itertuples()}

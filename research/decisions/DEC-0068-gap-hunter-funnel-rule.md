@@ -162,3 +162,21 @@ his attention), the owner answered "yes". All eight stand as written, with the r
 "Where the live desk cannot be the batch simulation". Nothing is switched on by this note: HYP-0071 trades only
 once the owner has seen the host's entry counts (`scripts/gap_hunter_counts.py`), a dated note in DEC-0066 switches
 it on, and its id is in `S.switched_on` (`config/risk.yaml`), with its key pair on the host.
+
+### 2026-11-22: where the morning pool comes from
+
+Reading 7 of the 2026-11-20 note named `data/candidates/<day>.parquet`. Checked on the host before the first live
+session, that file is written only after the close, by the forward test. The pre-market routine builds the pool
+at each stage, but it kept the pool in memory. A live session would therefore have found no pool and taken no entry.
+
+From the pull request that carries this note:
+
+- At 09:25 the pre-market routine runs the after-close pool's own build: the 09:00 to 09:25 window, on the
+  consolidated feed (`PoolConfig()`'s defaults). It saves the pool to `data/candidates_live/<day>.parquet`, with
+  `data/pm_bars_live/<day>.parquet`.
+- The stock desk reads that file at the first poll at or after the open. Everything else in reading 7 stands.
+- If the build fails, the routine pages ("Gap Hunter: no morning pool") and the desk takes no entry that session.
+- The forward test's after-close pool stays where it was and is never written by the routine. The forward test
+  reuses a pool file that already exists, so writing to the same folder would have changed its inputs.
+- The before-switch-on counts (EXP-0053) were taken on the after-close pools: the same build on the same window,
+  made later.
