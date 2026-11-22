@@ -222,7 +222,9 @@ def redact_tokens(text: str) -> str:
 # failed pipeline check pages through ntfy on its own), and the nightly review is what the clone's verdict is read from.
 # paper-s joined with its host job (DEC-0066): its runner pages on its own, but only a check sees a session that never ran.
 # paper-b left on 2026-11-20 with its job (DEC-0069): its two checks, wt-paper-b and wt-paper-b-armed, get no more pings.
-HC_JOBS = frozenset({"routine", "paper-s", "forward", "weekly", "paper-o", "pipeline-check", "options-review"})
+# lab-tape joined on 2026-11-22 (DEC-0060): a weekday the recorder never starts is otherwise seen only on the Paper page.
+HC_JOBS = frozenset({"routine", "paper-s", "forward", "weekly", "paper-o", "pipeline-check", "options-review",
+                     "lab-tape"})
 
 # Jobs that left the schedule (DEC-0036: the crypto desk is closed). A unit for one can still be installed and fire
 # until the owner runs `sudo wt-install-units`, which removes it. `main` exits 0 quietly for these: no lock, no

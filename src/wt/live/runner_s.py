@@ -42,8 +42,8 @@ row written just before it holds those. The `armed` row says whether this sessio
 Gap Hunter (HYP-0071). The two rules share everything above: arming, the gates, the book, the day stop, the stop
 rule, reconciliation, the end of the day, the pages. What differs:
 
-  the name     At the first poll at or after the open the day's pool (data/candidates/<day>.parquet, with
-               data/pm_bars/<day>.parquet) goes through `wt.scanner.gap_hunter.select`; its primary is the only
+  the name     At the first poll at or after the open the day's pool (data/candidates_live/<day>.parquet, with
+               data/pm_bars_live/<day>.parquet, saved by the pre-market routine at 09:25) goes through `wt.scanner.gap_hunter.select`; its primary is the only
                name traded. No pool, a pool not dated today, or no name through the filters: no entry this
                session, journaled (`gap_primary`), and exits are still managed. There is no rotation to rank 2.
   the entry    Each minute, once its bars are read, `wt.live.setups_live` says which order each registered gap
@@ -126,8 +126,8 @@ CONNECT_TRIES, CONNECT_WAIT_S = 5, 15.0
 RUNNER_LOCK_WAIT_S = 10.0       # how long a starting runner waits for its own process lock
 
 # ---- Gap Hunter (HYP-0071, DEC-0068) ----
-POOL_DIR = DATA_DIR / "candidates"          # the 09:25 pool, written before the open by the pre-market routine
-PM_BARS_DIR = DATA_DIR / "pm_bars"          # (wt.scanner.pool keeps the same two paths)
+POOL_DIR = DATA_DIR / "candidates_live"     # the 09:25 pool, saved before the open by the pre-market routine
+PM_BARS_DIR = DATA_DIR / "pm_bars_live"     # (wt.scanner.pool: LIVE_POOL_DIR, LIVE_PM_BARS_DIR)
 PM_FROM = "04:00"
 GAP_ENTRY_ORDERS_MAX = 40       # entry orders a day; the rest of S.max_orders_per_day (60) is left to the exit
 STOP_MOVE_TRIES = 3             # a stop the broker will not take at one price is not asked for a fourth time

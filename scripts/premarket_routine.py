@@ -40,7 +40,7 @@ from wt.risk.virtual_account import VirtualAccount  # noqa: E402
 from wt.scanner.explain import explain, pool_musts  # noqa: E402
 from wt.scanner.features import PMCache  # noqa: E402
 from wt.scanner import quality  # noqa: E402
-from wt.scanner.pool import DailyIndex, PoolConfig, build_day  # noqa: E402
+from wt.scanner.pool import LIVE_PM_BARS_DIR, LIVE_POOL_DIR, DailyIndex, PoolConfig, build_day, save_day  # noqa: E402
 from wt.scanner.ranking import SpecCandidate, funnel  # noqa: E402
 from wt.signals.musts import next_half_dollar_above  # noqa: E402
 from wt.signals.spec_setups import SETUPS  # noqa: E402
@@ -104,6 +104,23 @@ def page(key: str, title: str, message: str, priority: int) -> None:
         print(f"alert {key}: {e!r}")
 
 
+LIVE_POOL_AT = "09:25"
+
+
+def live_pool(d: dt.date, build) -> bool:
+    """Gap Hunter's pool of the morning (DEC-0068): the after-close pool's own build (the 09:00 to 09:25 window, on
+    the consolidated feed), run at 09:25 and saved to LIVE_POOL_DIR for the stock desk to read at the open. False
+    when it could not be built (the caller pages; the desk then takes no entry that session). Never raises."""
+    try:
+        pool, pmb, stats = build()
+        save_day(d, pool, pmb, stats, pool_dir=LIVE_POOL_DIR, pm_dir=LIVE_PM_BARS_DIR)
+    except Exception as e:  # noqa: BLE001 — the dry run's own record must still be written
+        print(f"{d} {LIVE_POOL_AT} live pool: not built ({e.__class__.__name__})")
+        return False
+    print(f"{d} {LIVE_POOL_AT} live pool: {len(pool)} names saved for Gap Hunter")
+    return True
+
+
 def sip_through(a) -> str | None:
     t = getattr(a, "sip_through", None)
     return None if t is None else t.tz_convert(ET).strftime("%H:%M")
@@ -165,6 +182,13 @@ def run(d: dt.date, feed: str, replay: bool) -> Path | None:
         if name == "tickets":
             body["tickets"] = tickets(pool, f, spec)
         write(folder, f"{hhmm.replace(':', '')}_{name}", body)
+    if not replay:
+        wait_until(d, LIVE_POOL_AT, replay)
+        if not live_pool(d, lambda: build_day(d, p, a, daily, universe, splits.sf, cache, shares, prev_sessions,
+                                              PoolConfig(snapshot=("09:00", LIVE_POOL_AT), feed="sip"),
+                                              split_refresh=splits.refresh)):
+            page("routine:live-pool", "Gap Hunter: no morning pool",
+                 f"The {LIVE_POOL_AT} pool could not be built, so Gap Hunter takes no entry today.", 4)
     wait_until(d, "11:31", replay)
     write(folder, "1131_signals", {**signals(a, d, pool, pmb, f, feed), **failed, "sip_through_et": sip_through(a)})
     return folder

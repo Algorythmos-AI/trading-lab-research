@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import datetime as dt
 import statistics
+from pathlib import Path
 from dataclasses import asdict, dataclass, field
 
 import numpy as np
@@ -38,6 +39,10 @@ from wt.signals.patterns import pm_pattern
 
 POOL_DIR = DATA_DIR / "candidates"
 PM_BARS_DIR = DATA_DIR / "pm_bars"
+# Gap Hunter's pool of the morning (DEC-0068): the same build, saved by the pre-market routine at 09:25, before the
+# open. Apart from the after-close pool above, which the forward test builds and reuses if it already exists.
+LIVE_POOL_DIR = DATA_DIR / "candidates_live"
+LIVE_PM_BARS_DIR = DATA_DIR / "pm_bars_live"
 SPLIT_CHECK_HI, SPLIT_CHECK_LO = 0.90, -0.25
 
 
@@ -220,11 +225,13 @@ def build_day(d: dt.date, p: dt.date, client, daily: "DailyIndex", universe: set
     return cands, pmb, st
 
 
-def save_day(d: dt.date, cands: pd.DataFrame, pmb: pd.DataFrame, stats: PoolStats) -> None:
-    POOL_DIR.mkdir(parents=True, exist_ok=True)
-    PM_BARS_DIR.mkdir(parents=True, exist_ok=True)
+def save_day(d: dt.date, cands: pd.DataFrame, pmb: pd.DataFrame, stats: PoolStats,
+             pool_dir: Path | None = None, pm_dir: Path | None = None) -> None:
+    pool_dir, pm_dir = pool_dir or POOL_DIR, pm_dir or PM_BARS_DIR
+    pool_dir.mkdir(parents=True, exist_ok=True)
+    pm_dir.mkdir(parents=True, exist_ok=True)
     out = cands.copy() if len(cands) else pd.DataFrame({"date": [], "symbol": []})
     out.attrs["stats"] = asdict(stats)
-    out.to_parquet(POOL_DIR / f"{d}.parquet")
+    out.to_parquet(pool_dir / f"{d}.parquet")
     if len(pmb):
-        pmb[["symbol", "t", "o", "h", "l", "c", "v"]].to_parquet(PM_BARS_DIR / f"{d}.parquet")
+        pmb[["symbol", "t", "o", "h", "l", "c", "v"]].to_parquet(pm_dir / f"{d}.parquet")

@@ -33,7 +33,7 @@ from typing import Any
 import requests
 import yaml
 
-from wt.core.config import CONFIG_DIR, STATE_DIR
+from wt.core.config import CONFIG_DIR, ROOT, STATE_DIR
 from wt.data.feeds import require_feed
 from wt.lab import focus, tiers
 from wt.options.chain import parse_occ
@@ -307,14 +307,16 @@ def main(argv: Sequence[str] | None = None, get: Get | None = None, now: dt.date
     except (OSError, ValueError, KeyError) as e:
         write(args.out, {"v": 1, "passed": False, "refused": f"market calendar unreadable: {e.__class__.__name__}"})
         return 1
-    want = probe_session(local.date(), local.time() >= dt.time(16, 0), cal)
+    close = tiers.close_time(local.date()) if local.date().isoformat() in cal else dt.time(16, 0)
+    want = probe_session(local.date(), local.time() >= close, cal)            # a half day closes at 13:00
     asked = [n.strip().upper() for n in args.names.split(",") if n.strip()] if args.names else None
     names, refused = choose_names(focus.read(env), asked, want, desk_names())
     if refused:
         write(args.out, {"v": 1, "ran_at": when.isoformat(timespec="seconds"), "passed": False, "refused": refused})
         print(f"refused: {refused}")
         return 1
-    free = shutil.disk_usage(args.out.parent if args.out.parent.exists() else STATE_DIR.parent).free / 1e9
+    tape = Path(env.get("WT_LAB_TAPE") or ROOT.parent / "lab-tape")      # the tape's own disk, as the recorder's
+    free = shutil.disk_usage(tape if tape.exists() else tape.parent).free / 1e9
     if get is None:
         with requests.Session() as s:
             result = run(http_get(s), env, names, dt.date.fromisoformat(str(want)), when, free, cal)

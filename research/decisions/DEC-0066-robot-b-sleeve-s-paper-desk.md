@@ -265,3 +265,31 @@ two-sleeve table of section 1 no longer has a running sleeve Q: its job (`paper-
 journal, plans and virtual account stay as an archive. The sentence in section 1 "refuses if its account number
 equals sleeve Q's" is withdrawn by that record: the desk still requires its own key pair and never falls back to
 `APCA_API_*`, and no longer compares itself with that pair or its account. Nothing else in this record changes.
+
+### 2026-11-22: HYP-0071 (Gap Hunter) is switched on
+
+The owner switched Gap Hunter's rule on in chat on 2026-11-22. Shown the host's entry counts and asked to choose,
+he chose "Switch it on as it is", and asked for everything to be made functional.
+
+**DEC-0068's conditions, each met:**
+
+1. The selection runs beside the frozen funnel, whose goldens are unchanged (#564).
+2. The owner saw the counts on the host's pools first. They are filed as `before_switch_on_counts.json` in
+   EXP-0053's folder: 40 sessions, 39 with a primary; the day's one attempt reached on 5, filled on 3 (an upper
+   bound, since minute bars carry no quotes for the spread must).
+3. The gap entries run live through `wt.live.runner_s` with the partial exit and match the batch simulation on
+   fixture days (#570, with the review fixes of #572). The owner confirmed DEC-0068's eight readings on
+   2026-11-22.
+4. This note, with `HYP-0071` in `S.switched_on`, in one pull request.
+
+**The switch-on itself:**
+
+- `S.switched_on` is `[HYP-0071]`.
+- HYP-0070 stays paused, as the owner set it on 2026-11-20. A session runs one trial, and with both listed it
+  places no entry (DEC-0068's note of 2026-11-20, point 8).
+- Nothing trades until this change is released and on the host, with Gap Hunter's own key pair
+  (`APCA_S_KEY_ID`, `APCA_S_SECRET_KEY`) set there by the owner. Without the pair, the job refuses the session.
+- EXP-0053 counts trades from the first session after that.
+- The book, its limits, the day stop and the stop rule are this record's, unchanged: US$600 virtual, 1% risk,
+  one trade a day under DEC-0068, −2R or 3 losers a day, and the −6.0R / 30-trade / 2027-03-31 stop rule.
+- From the first session of the host job, console sessions on the Mac stop (note of 2026-11-20, "the host job").

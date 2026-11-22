@@ -132,6 +132,7 @@ class Recorder:
     off_file: Path = STATE_DIR / "lab" / "OFF"
     free_gb: Callable[[], float] | None = None
     memory_mb: Callable[[], float] | None = None    # None: rss_mb, looked up when called
+    clock_offset: Callable[[], float | None] | None = None   # None: clock_offset_ms (chrony), looked up when called
     inline_minute: bool = False                     # tests: run the minute's work on the main thread
 
     def __post_init__(self) -> None:
@@ -151,6 +152,7 @@ class Recorder:
         self.stale_by_name: dict[str, int] = {}                   # name: stale ticks after the freeze
         self.batch_syms: dict[tuple[int, int], tuple[str, ...]] = {}   # (tier, batch): the symbols last written
         self.tail_counted = False
+        self.offsets: list[float] = []                 # the host clock's offset (ms), read every 30 minutes
         self.tier1: dict[str, list[str]] = {n: [] for n in self.names}
         self.tier2: set[str] = set()
         self.selected: set[str] = set()
@@ -237,10 +239,23 @@ class Recorder:
                    and self.reading[0] < self.settings.back_off_share)
             return not low and len(self.sent) + n <= self.settings.budget_per_min
 
-    def send(self, url: str, params: Mapping[str, str], headers: Mapping[str, str], timeout: float) -> Answer:
+    def claim(self, n: int = 1, keep: int = 0) -> bool:
+        """Take `n` requests of the minute's budget, leaving `keep` for others, in one step under the lock: the
+        tick loop and the minute's worker thread can never both see room for the same slot."""
+        with self.lock:
+            if not self.room(n + keep):
+                return False
+            t = self._t()
+            self.sent.extend([t] * n)
+            return True
+
+    def send(self, url: str, params: Mapping[str, str], headers: Mapping[str, str], timeout: float,
+             claimed: bool = False) -> Answer:
+        """One request. `claimed`: its slot was taken by `claim`; otherwise it is taken here, unchecked."""
         check_url(url)                                  # whatever `get` is, the lab never calls another URL
         with self.lock:
-            self.sent.append(self._t())
+            if not claimed:
+                self.sent.append(self._t())
             self.counts["requests"] += 1
         a = self.get(url, params, headers, timeout)
         hl = {k.lower(): v for k, v in a.headers.items()}
@@ -254,19 +269,19 @@ class Recorder:
 
     def guarded(self, url: str, params: Mapping[str, str], headers: Mapping[str, str], timeout: float) -> Answer:
         """`send`, but refusing when the session must stop or the budget is spent (used page by page)."""
-        if self.should_stop() is not None or not self.room(1):
+        if self.should_stop() is not None or not self.claim(1):
             raise Stop("budget or stop")
-        return self.send(url, params, headers, timeout)
+        return self.send(url, params, headers, timeout, claimed=True)
 
     def paced(self, deadline: float) -> Get:
         """A sender that waits for room in the budget (and for a low remaining-requests reading to pass) instead of
         refusing; past `deadline` (time.monotonic) it answers status 0 without sending."""
         def get(url: str, params: Mapping[str, str], headers: Mapping[str, str], timeout: float) -> Answer:
-            while not self.room(1):
+            while not self.claim(1):
                 if time.monotonic() > deadline or self.should_stop() is not None:
                     return Answer(0, {}, None, 0.0)
                 self.clock.sleep(0.25)
-            return self.send(url, params, headers, timeout)
+            return self.send(url, params, headers, timeout, claimed=True)
         return get
 
     def _gap(self, tick: int, stream: str, reason: str) -> None:
@@ -297,12 +312,12 @@ class Recorder:
 
     def stocks(self, tick: int) -> None:
         names = list(self.names)
-        if not self.room(1):
+        if not self.claim(1):
             self._gap(tick, "stock", "budget")
             self._sample(tick, 0, 0, names, 0, 0, 0, None, "budget", names)
             return
         a = self.send(f"{DATA_HOST}/v2/stocks/snapshots", {"symbols": ",".join(self.names), "feed": "sip"},
-                      self.headers, self.settings.timeout_s)
+                      self.headers, self.settings.timeout_s, claimed=True)
         if a.status != 200 or not isinstance(a.body, dict):
             self._gap(tick, "stock", f"status {a.status}")
             self._sample(tick, 0, 0, names, 0, 0, a.status, None, "failed", names)
@@ -393,7 +408,7 @@ class Recorder:
         batches = [syms[i:i + BATCH] for i in range(0, len(syms), BATCH)]
         go: list[tuple[int, list[str]]] = []
         for i, b in enumerate(batches):
-            if self.should_stop() is None and self.room(len(go) + 1 + reserve):
+            if self.should_stop() is None and self.claim(1, keep=reserve):
                 go.append((i, b))
             else:
                 self._sample(tick, tier, i, b, 0, 0, 0, None, "budget", b)
@@ -403,7 +418,7 @@ class Recorder:
         def one(ib: tuple[int, list[str]]) -> tuple[int, list[str], Answer, int]:
             i, b = ib
             a = self.send(f"{DATA_HOST}/v1beta1/options/snapshots", {"symbols": ",".join(b), "feed": "opra"},
-                          self.headers, self.settings.timeout_s)
+                          self.headers, self.settings.timeout_s, claimed=True)
             return i, b, a, self._ns()
 
         with cf.ThreadPoolExecutor(max_workers=self.settings.workers) as pool:
@@ -453,7 +468,17 @@ class Recorder:
         with self.lock:
             return {s for v in self.tier1.values() for s in v}
 
+    CLOCK_EVERY_MIN = 30
+
     def minute_work(self, tick: int) -> None:
+        if (tick // self.settings.minute_ticks) % self.CLOCK_EVERY_MIN == 0:
+            try:
+                off = (self.clock_offset or clock_offset_ms)()
+            except Exception:  # noqa: BLE001 (a clock reading never stops the session)
+                off = None
+            if off is not None:
+                with self.lock:
+                    self.offsets.append(off)
         try:
             self.select(tick)
             with self.lock:
@@ -641,6 +666,8 @@ class Recorder:
             "names_without_tier1": sorted(n for n in self.names if not self.tier1.get(n)),
             "first_fresh_tick_by_name": dict(sorted(self.first_fresh.items())),
             "tier1_crossed_share": round(c["tier1_crossed_rows"] / c["tier1_rows"], 6) if c["tier1_rows"] else 0.0,
+            "clock_offset_ms_max_abs": max((abs(x) for x in self.offsets), default=None),
+            "clock_offset_readings": len(self.offsets),
             "requests": c["requests"], "restarts": c["restarts"], "tick_errors": c["errors"],
             "stopped": self.stopped,
             "rows": rows,
