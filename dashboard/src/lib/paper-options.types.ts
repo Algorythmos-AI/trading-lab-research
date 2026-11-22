@@ -18,7 +18,10 @@ export type Price = number;
  */
 export interface PaperOptions {
   schema: "stocksdelta/paper-options";
-  schema_version: 1;
+  /**
+   * 2 adds `lab`, the options lab's tape status; 1 is still taken.
+   */
+  schema_version: 1 | 2;
   run_id: string;
   /**
    * When the host built it: an ISO time with its zone.
@@ -100,6 +103,21 @@ export interface PaperOptions {
          */
         trades: ArmTrade[];
       }[];
+  /**
+   * The options lab's tape (DEC-0060, DEC-0067): each recorded session's health, the shadow period and the archive. Counts only. Null or absent until the host sends it (version 2).
+   */
+  lab?: null | {
+    first_v2: Ymd;
+    shadow_done: number;
+    shadow_needed: number;
+    counted: number;
+    recorded: number;
+    archived: number;
+    /**
+     * @maxItems 20
+     */
+    sessions: LabSession[];
+  };
 }
 export interface CloneTrade {
   trade_id: string;
@@ -208,4 +226,47 @@ export interface ArmTrade {
    */
   pnl_usd: number;
   rop: number | null;
+}
+/**
+ * One recorded session of the options lab's tape (DEC-0060): counts, rates and statuses only, no name.
+ */
+export interface LabSession {
+  date: Ymd;
+  recorder: 1 | 2;
+  recorded: boolean;
+  /**
+   * Passes EXP-0052's counting rules (DEC-0067 point 3).
+   */
+  counts: boolean;
+  /**
+   * @maxItems 10
+   */
+  why_not: (
+    | "v1"
+    | "no_focus"
+    | "opening"
+    | "fresh_coverage"
+    | "stale_run"
+    | "clock"
+    | "crossed"
+    | "not_recorded"
+  )[];
+  partial: boolean;
+  shadow: boolean;
+  coverage: null | number;
+  coverage_fresh: null | number;
+  stale_ticks: null | number;
+  stale_names: number;
+  longest_stale_s: null | number;
+  ticks_down: null | number;
+  restarts: number;
+  stopped:
+    null | ("off_switch" | "stopped" | "memory" | "disk" | "errors" | "never_finished" | "other");
+  tier1: number;
+  tier2: number;
+  crossed_share: null | number;
+  prints: null | number;
+  after_close_ok: boolean;
+  oi_null_share: null | number;
+  archived: boolean;
 }

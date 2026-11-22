@@ -18,7 +18,11 @@
       "const": "stocksdelta/paper-options"
     },
     "schema_version": {
-      "const": 1
+      "enum": [
+        1,
+        2
+      ],
+      "description": "2 adds `lab`, the options lab's tape status; 1 is still taken."
     },
     "run_id": {
       "type": "string",
@@ -208,6 +212,64 @@
                 "items": {
                   "$ref": "#/definitions/arm_trade"
                 }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "lab": {
+      "description": "The options lab's tape (DEC-0060, DEC-0067): each recorded session's health, the shadow period and the archive. Counts only. Null or absent until the host sends it (version 2).",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "first_v2",
+            "shadow_done",
+            "shadow_needed",
+            "counted",
+            "recorded",
+            "archived",
+            "sessions"
+          ],
+          "properties": {
+            "first_v2": {
+              "$ref": "#/definitions/ymd"
+            },
+            "shadow_done": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "shadow_needed": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "counted": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            "recorded": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            "archived": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            "sessions": {
+              "type": "array",
+              "maxItems": 20,
+              "items": {
+                "$ref": "#/definitions/lab_session"
               }
             }
           }
@@ -548,6 +610,215 @@
             "number",
             "null"
           ]
+        }
+      }
+    },
+    "lab_session": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One recorded session of the options lab's tape (DEC-0060): counts, rates and statuses only, no name.",
+      "required": [
+        "date",
+        "recorder",
+        "recorded",
+        "counts",
+        "why_not",
+        "partial",
+        "shadow",
+        "coverage",
+        "coverage_fresh",
+        "stale_ticks",
+        "stale_names",
+        "longest_stale_s",
+        "ticks_down",
+        "restarts",
+        "stopped",
+        "tier1",
+        "tier2",
+        "crossed_share",
+        "prints",
+        "after_close_ok",
+        "oi_null_share",
+        "archived"
+      ],
+      "properties": {
+        "date": {
+          "$ref": "#/definitions/ymd"
+        },
+        "recorder": {
+          "enum": [
+            1,
+            2
+          ]
+        },
+        "recorded": {
+          "type": "boolean"
+        },
+        "counts": {
+          "type": "boolean",
+          "description": "Passes EXP-0052's counting rules (DEC-0067 point 3)."
+        },
+        "why_not": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "enum": [
+              "v1",
+              "no_focus",
+              "opening",
+              "fresh_coverage",
+              "stale_run",
+              "clock",
+              "crossed",
+              "not_recorded"
+            ]
+          }
+        },
+        "partial": {
+          "type": "boolean"
+        },
+        "shadow": {
+          "type": "boolean"
+        },
+        "coverage": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          ]
+        },
+        "coverage_fresh": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          ]
+        },
+        "stale_ticks": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000000
+            }
+          ]
+        },
+        "stale_names": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 6
+        },
+        "longest_stale_s": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100000
+            }
+          ]
+        },
+        "ticks_down": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000000
+            }
+          ]
+        },
+        "restarts": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "stopped": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "enum": [
+                "off_switch",
+                "stopped",
+                "memory",
+                "disk",
+                "errors",
+                "never_finished",
+                "other"
+              ]
+            }
+          ]
+        },
+        "tier1": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "tier2": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "crossed_share": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          ]
+        },
+        "prints": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000000
+            }
+          ]
+        },
+        "after_close_ok": {
+          "type": "boolean"
+        },
+        "oi_null_share": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          ]
+        },
+        "archived": {
+          "type": "boolean"
         }
       }
     }
