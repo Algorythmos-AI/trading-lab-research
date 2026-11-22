@@ -27,6 +27,7 @@ def record(tmp_path: Path, minutes: float, api_kw: dict[str, Any] | None = None,
     if freeze:
         api.frozen = (START + dt.timedelta(minutes=freeze[0]), START + dt.timedelta(minutes=freeze[1]))
     rec = make(tmp_path, clock, api, settings=recorder.Settings(stale_after_s=stale_after_s))
+    rec.clock_offset = lambda: 0.0      # a fixed reading: the machine's own (chrony) differs between two runs
     rec.run(START, START + dt.timedelta(minutes=minutes))
     doc = rec.finish({"focus_session": DAY.isoformat(), "names": ["AAA", "BBB"]})
     return rec, doc, api
