@@ -75,7 +75,7 @@ describe("the focus card's staleness", () => {
   const strip = (e: Options, now?: Date, isLive = true) => renderToStaticMarkup(createElement(FocusStrip, { e, now, live: isLive }));
   it("the strip draws a badge only when it has a clock and something is off", () => {
     const e = focusOptions(v1);
-    e.focus!.picked_at = `${v1.built_from}T21:54:00Z`; // after the close the edition was built from, as the real pick is
+    expect(e.focus!.picked_at!.startsWith(v1.built_from!)).toBe(true); // the fixture picks after the close it was built from
     const today = at(`${e.session}T14:00:00Z`);
     expect(strip(e, today)).not.toContain("data-focus-stale");
     expect(strip(e)).not.toContain("data-focus-stale");

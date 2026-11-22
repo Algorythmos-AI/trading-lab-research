@@ -27,10 +27,20 @@ export interface EvalCase {
 }
 
 const BASE = optionsJson as unknown as OptionsEdition;
+/**
+ * The focus edition as it was when the pinned hashes were written: its pick stamped on the session's own evening.
+ * The fixture now stamps it after the close the edition was built from (as the real pick is); the cases keep the old
+ * stamp so the golden stays byte-identical.
+ */
+const pinned = (e: OptionsEdition): Options => {
+  const out = focusOptions(e, true);
+  out.focus!.picked_at = `${e.session}T21:54:00Z`;
+  return out as unknown as Options;
+};
 const EDITIONS: [string, Options][] = [
-  ["focus", focusOptions(BASE, true) as unknown as Options],
-  ["partial", focusOptions(partialOptions(BASE), true) as unknown as Options],
-  ["v2", focusOptions(v2Options(BASE), true) as unknown as Options],
+  ["focus", pinned(BASE)],
+  ["partial", pinned(partialOptions(BASE))],
+  ["v2", pinned(v2Options(BASE))],
 ];
 const S = BASE.session;
 const ny = (hhmm: string) => Date.parse(`${S}T${hhmm}:00-04:00`);

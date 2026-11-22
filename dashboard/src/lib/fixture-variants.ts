@@ -215,7 +215,8 @@ const plus = (day: string, days: number) =>
 export function focusOptions(e: OptionsEdition, script = false): OptionsEdition {
   const out = structuredClone(e);
   out.focus = {
-    picked_at: `${e.session}T21:54:00Z`,
+    // Picked after the close the edition was built from, as the real pick is (an evening pick is for the next session).
+    picked_at: `${e.built_from ?? e.session}T21:54:00Z`,
     method: "fixture",
     items: [
       {
