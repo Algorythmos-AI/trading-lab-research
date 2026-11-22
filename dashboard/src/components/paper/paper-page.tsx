@@ -1,4 +1,5 @@
-// The Paper options page under its heading (DEC-0057): the glance, then the options clone and the research arms.
+// The Paper options page under its heading (DEC-0057): the glance, then the options clone, the options lab's tape
+// status (DEC-0060) and the research arms.
 // Two books, each in a frame of its own evidence class, never added together. Server-rendered; apart from the page
 // file so a test can render it.
 //
@@ -23,6 +24,7 @@ import { ANCHOR_MARGIN, Panel } from "@/components/panel";
 import { StatTile, StatTiles } from "@/components/stat-tile";
 import { TradesJumpBar, type JumpLink } from "@/components/trades-jump-bar";
 import { Dollars } from "@/components/paper/dollars";
+import { LabTape } from "@/components/paper/lab-tape";
 import { EnvFrame } from "@/components/ui/env-chip";
 import { Notice } from "@/components/ui/notice";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -96,6 +98,7 @@ export const PAPER_FRAMES = {
 
 const GROUPS = {
   clone: { id: "clone-bot", label: "Clone bot", short: "Clone" },
+  lab: { id: "options-lab", label: "Options lab", short: "Lab" },
   arms: { id: "research-arms", label: "Research arms", short: "Arms" },
 } as const;
 
@@ -109,7 +112,7 @@ const count = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString(
 export function PaperBody({ result, clone, q, now }: { result: PaperOptionsResult; clone: OptionsCloneResult; q: Query; now: Date }) {
   const filter = parseFilter(q);
   const doc = result.status === "ok" ? result.doc : null;
-  const links: JumpLink[] = (["clone", "arms"] as const).map((k) => ({ href: `#${GROUPS[k].id}`, label: GROUPS[k].label, short: GROUPS[k].short, level: 1 }));
+  const links: JumpLink[] = (["clone", "lab", "arms"] as const).map((k) => ({ href: `#${GROUPS[k].id}`, label: GROUPS[k].label, short: GROUPS[k].short, level: 1 }));
   return (
     <>
       <TradesJumpBar links={links} />
@@ -135,6 +138,11 @@ export function PaperBody({ result, clone, q, now }: { result: PaperOptionsResul
             <CloneHistory doc={doc} clone={clone} filter={filter} now={now} />
           </PaneBoundary>
         ) : null}
+      </Group>
+      <Group group="lab" intro="What replaced the research arms (DEC-0060): a recording of the focus names' option quotes, kept to measure real stop hits, costs and fills. It places no trade.">
+        <PaneBoundary name="Options lab tape">
+          <LabTape doc={doc} />
+        </PaneBoundary>
       </Group>
       <Group group="arms" intro="Variations of the clone's rules, run beside it as simulated trades until 17 Nov 2026. Counting ended then with too few sessions; each trial closes on 5 Nov 2027 with no verdict. No order was ever sent for them.">
         <PaneBoundary name="Research arms">

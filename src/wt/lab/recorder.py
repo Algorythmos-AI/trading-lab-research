@@ -60,6 +60,7 @@ MAX_NAMES = 6                                       # config/options_clone.yaml 
 CHANGE_KEY = ("tier", "bid", "ask", "bid_size", "ask_size", "quote_ts", "last", "last_size", "last_ts", "volume")
 # greeks and IV are not in the key: on a row they are as of its quote or trade change, never forward-filled as current
 STATE = "state.json"
+START_GRACE_S = 1.0                                 # a tick is still run when the run starts this late for it
 RECORDER_VERSION = 2                                # 2: sample and member streams, freshness by name (DEC-0067)
 
 
@@ -562,7 +563,10 @@ class Recorder:
         tick_s = self.settings.tick_s
         scheduled = max(0, math.ceil((end - start).total_seconds() / tick_s))
         self.clock.sleep((start - self.clock.now()).total_seconds())
-        tick = max(0, math.ceil((self.clock.now() - start).total_seconds() / tick_s))   # resume: from now
+        # resume: from now. A run that wakes just after a tick is due (the sleep to 09:30 returns a few ms late) runs
+        # that tick, not the next: on 2026-11-20 tick 0 was skipped as "a late start" by 3 ms
+        late = (self.clock.now() - start).total_seconds()
+        tick = max(0, math.ceil(late / tick_s - START_GRACE_S / tick_s))
         self.scheduled, self.first_tick, self.start = scheduled, tick, start
         since = -1 if self.last_tick is None else self.last_tick
         if tick > since + 1 and since + 1 < scheduled:                     # ticks nobody ran: said, never hidden
