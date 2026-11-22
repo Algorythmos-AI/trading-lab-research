@@ -31,7 +31,8 @@ TYPED_MODULES := src/wt/research/b_audit.py src/wt/research/b_exec_audit.py src/
                  src/wt/options/pipeline_check.py src/wt/research/external_posts.py \
                  src/wt/options/shadow.py src/wt/options/arms_verdict.py \
                  src/wt/owner/positions.py src/wt/data/feeds.py src/wt/ops/keys_check.py \
-                 src/wt/options/select.py src/wt/options/select_stage2.py src/wt/options/select_fetch.py
+                 src/wt/options/select.py src/wt/options/select_stage2.py src/wt/options/select_fetch.py \
+                 src/wt/options/radar_candidates.py src/wt/options/universe.py src/wt/options/radar_select.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
