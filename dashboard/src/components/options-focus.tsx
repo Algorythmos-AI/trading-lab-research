@@ -9,7 +9,8 @@
 import { Fragment, type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowDownToLine, ArrowUpFromLine, ChevronRight, MoveHorizontal, Target } from "lucide-react";
-import { newYork } from "@/lib/format";
+import { focusStaleness, type FocusStaleness } from "@/lib/edition-truth";
+import { newYork, weekDate } from "@/lib/format";
 import { TestingTag } from "@/components/client/trade-now";
 import { AltChips, FocusStateChip, LiveDistance, type LiveInputs, SideFrame } from "@/components/client/focus-card-live";
 import { TradeTicket } from "@/components/client/ticket";
@@ -510,9 +511,21 @@ export function DrawingGuide() {
   );
 }
 
-export function FocusStrip({ e }: { e: Options }) {
+/** The words for a focus card that may not be this session's. Dates only: no names, no levels. */
+export function focusStaleWords(s: FocusStaleness, session: string): string {
+  return s.kind === "other_session"
+    ? `Not this session's pick: picked for ${weekDate(s.pickedFor)}, and this board is ${weekDate(session)}.`
+    : `Not today's: this focus came with ${weekDate(session)}'s edition, and no newer edition has arrived.`;
+}
+
+/**
+ * The focus strip. With `now`, it says when the card may not be this session's (a pick made for another session, or
+ * an edition from an earlier session); `live` is false when an older edition was opened on purpose.
+ */
+export function FocusStrip({ e, now, live = true }: { e: Options; now?: Date; live?: boolean }) {
   const f = e.focus;
   if (!f || f.items.length === 0) return null;
+  const stale = now ? focusStaleness(f.picked_at, e.session, now, live) : null;
   const pre = new Map((f.premarket?.items ?? []).map((p) => [p.symbol, p]));
   const tickers = new Map(e.tickers.map((t) => [t.symbol, t]));
   const items = [...f.items].sort((a, b) => a.rank - b.rank);
@@ -544,6 +557,11 @@ export function FocusStrip({ e }: { e: Options }) {
           Enter only on a break then retest.
         </p>
       </div>
+      {stale ? (
+        <p role="status" data-focus-stale={stale.kind} className="border-warn/60 bg-warn-soft text-explain w-fit rounded-md border px-2 py-1 font-medium">
+          {focusStaleWords(stale, e.session)}
+        </p>
+      ) : null}
       {/* On a phone the cards sit side by side and swipe. From sm one card per row, two from xl: the ladder is drawn
           530 px wide and its labels shrink below 14 px in a narrower card. */}
       {/* relative: the strip (and each card) is the containing block of the ladders' screen-reader text (sr-only is
