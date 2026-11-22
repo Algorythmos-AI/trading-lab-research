@@ -28,6 +28,7 @@ host:
   overlay:
     - {label: com.wt.paper-o, name: "Paper options clone", must_start_before_et: "09:25"}
     - {label: com.wt.paper-s, name: "Gap Hunter (stock desk)", must_start_before_et: "09:30"}
+    - {label: com.wt.options-select, name: "Radar → Options selection (shadow)", must_start_before_et: "07:00"}
   jobs:
     - {label: com.wt.routine, local_time: "21:30", tz: Australia/Sydney, must_start_before_et: "07:55",
        name: "Pre-market routine", what: "SPEC-0001 dry run; waits until 07:55 ET, stages at 08:00 / 08:30 / 09:00 / 09:15"}

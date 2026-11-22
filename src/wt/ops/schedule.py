@@ -167,6 +167,14 @@ JOBS: dict[str, Job] = {j.name: j for j in (
         deadline_min=45, trading=False, et="Mon..Fri 17:15", desk="options", preflight=False,
         what="EXP-0037: fetch and hash the session's replay inputs; run the one replay when its list closes",
         runtime_max_h=1.0),
+    # Radar → Options selection, the shadow (DEC-0070, PROPOSED): S's Radar edition through the fail-closed gate into
+    # Stage 1 (wt.options.select, unchanged). 06:45 New York, after the Radar's build; it reads the Radar until 07:45
+    # while the edition is missing or stale, then runs once and writes var/options-select/<S>/. It publishes nothing,
+    # places no order and reads no account. The deadline (from the child's start) ends it by 08:35, before 08:40.
+    Job("options-select", "com.wt.options-select", 0, 0, ("-m", "wt.options.radar_select", "job"), "backtest",
+        "options_select", deadline_min=110, trading=False, et="Mon..Fri 06:45", desk="options", preflight=False,
+        what="Radar to Options selection (shadow): the Radar's candidates through the gate into Stage 1; publishes nothing",
+        runtime_max_h=2.5),
     # The options lab's tape (DEC-0060): the focus names' OPRA option quotes and SIP stock quotes, 09:30 to the close,
     # then the day's prints, open interest and the upload. Research only: no order, no account, no trading code
     # (tests/unit/test_lab_boundary.py). Starts 09:15, waits in-process for the 09:25 focus list; done by close + 110.

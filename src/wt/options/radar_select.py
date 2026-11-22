@@ -4,6 +4,12 @@ frozen Stage 1 rules (DEC-0046, `wt.options.select`, unchanged).
 
     python -m wt.options.radar_select run --session <S> [--root <dir>]
     python -m wt.options.radar_select replay --session <S> [--root <dir>]
+    python -m wt.options.radar_select job [--root <dir>]
+
+`job` is the host job (`wt-options-select`, 06:45 New York on weekdays): S is today in New York (a day with no session
+writes nothing and exits 0); it reads the Radar until the edition is S's and fresh or it is 07:45 New York, then runs
+once on the last edition read (DEC-0070 section 4). A second job run for S finds the folder and exits 0; while
+`var/options-select/OFF` exists the job runs nothing.
 
 `S` is the session being selected for; the bundle is for D, the session before it (Stage 1 scores a finished
 session). The run is a shadow: it writes records and publishes nothing, and the Options page's four names do not
@@ -57,6 +63,12 @@ RUN_VERSION = 1
 PUBLISH_BY = (8, 40)
 CHAIN_REQUEST_BUDGET = 150
 CHAIN_TIME_BUDGET_S = 600
+
+# The job reads the Radar until this New York time on S, every RADAR_RETRY_EVERY_S, while the edition is missing,
+# stale or invalid (the Radar's catch-up routines fire at 06:30 and 07:30), then runs on what it last read.
+RADAR_RETRY_UNTIL = (7, 45)
+RADAR_RETRY_EVERY_S = 300.0
+OFF = "OFF"                    # var/options-select/OFF: the job runs nothing while it exists (the owner's switch)
 
 EXIT_OK, EXIT_ERROR, EXIT_USAGE, EXIT_EXISTS, EXIT_TOO_EARLY, EXIT_REPLAY = 0, 1, 2, 3, 4, 5
 
@@ -186,6 +198,60 @@ def run(session: str, *, now: dt.datetime, read_radar: Callable[[], Any], client
     return records
 
 
+def today_session(now: dt.datetime) -> str | None:
+    """Today in New York, when it is a session; else None."""
+    day = now.astimezone(s2.NY).date().isoformat()
+    return day if lv.is_session(day) else None
+
+
+def wait_for_radar(session: str, *, read_radar: Callable[[], Any], desk: Sequence[str], cfg: rc.Config,
+                   clock: Callable[[], dt.datetime], sleep: Callable[[float], None]
+                   ) -> tuple[Callable[[], Any], dt.datetime, str, int]:
+    """Read the Radar until its edition for `session` is fresh (status ok) or it is RADAR_RETRY_UNTIL New York.
+    Returns a reader that gives back the last read (its edition, or its exception again), so the run sees one edition
+    and one hash; the time of that read (the run's `now`); its status; and how many reads it took."""
+    until = s2.ny_time(session, RADAR_RETRY_UNTIL)
+    tries = 0
+    while True:
+        tries += 1
+        at = clock()
+        edition: Any = None
+        failure: Exception | None = None
+        try:
+            edition = read_radar()
+        except Exception as e:                              # read again later; at the end, the run records it
+            failure = e
+        status = rc.extract(edition, session, at, desk, cfg)["status"]
+        if status == "ok" or at >= until:
+            def last(edition: Any = edition, failure: Exception | None = failure) -> Any:
+                if failure is not None:
+                    raise failure
+                return edition
+            return last, at, status, tries
+        sleep(min(RADAR_RETRY_EVERY_S, max(1.0, (until - at).total_seconds())))
+
+
+def sweep_dead_tmp(root: Path, session: str) -> list[Path]:
+    """Remove S's temporary folders left by a run that was killed (its process is gone); a live run's is kept."""
+    gone: list[Path] = []
+    for tmp in root.glob(f".{session}.tmp-*"):
+        try:
+            pid = int(tmp.name.rsplit("-", 1)[1])
+        except ValueError:
+            continue
+        try:
+            os.kill(pid, 0)
+            alive = True
+        except ProcessLookupError:
+            alive = False
+        except PermissionError:                             # another user's process: not ours to judge
+            alive = True
+        if not alive:
+            shutil.rmtree(tmp, ignore_errors=True)
+            gone.append(tmp)
+    return gone
+
+
 def bundle_for(fetched: Mapping[str, Any], names: Sequence[str]) -> dict[str, Any]:
     """The Stage 1 bundle for `names` from a fetch for a superset of them."""
     doc = {"schema": sel.BUNDLE_SCHEMA, "version": sel.BUNDLE_VERSION, "session": fetched["session"],
@@ -288,14 +354,16 @@ def main(argv: list[str] | None = None, *, client: Callable[[], sf.Client] = sf.
     import time
     ap = _Parser(prog="python -m wt.options.radar_select", description="Radar → Options selection (shadow)")
     sub = ap.add_subparsers(dest="cmd", required=True, parser_class=_Parser)
-    for name in ("run", "replay"):
+    for name in ("run", "replay", "job"):
         a = sub.add_parser(name)
-        a.add_argument("--session", required=True)
+        if name != "job":
+            a.add_argument("--session", required=True)
         a.add_argument("--root", type=Path, default=VAR)
     try:
         args = ap.parse_args(argv)
     except SystemExit as e:
         return e.code if isinstance(e.code, int) else EXIT_USAGE
+    job = args.cmd == "job"
     try:
         cfg = rc.load_config()
         params, psha = sel.load_params()
@@ -304,31 +372,53 @@ def main(argv: list[str] | None = None, *, client: Callable[[], sf.Client] = sf.
     except (rc.ConfigError, sel.ParamsError, OSError, ValueError) as e:
         print(f"radar_select: configuration: {e}", file=sys.stderr)
         return EXIT_ERROR
-    if rc.ev_date(args.session) is None or not lv.is_session(args.session):
-        print("radar_select: --session must be a session date written YYYY-MM-DD", file=sys.stderr)
-        return EXIT_USAGE
+    if job:
+        session = today_session(clock())
+        if session is None:
+            print("radar_select job: today is not a session; nothing to select")
+            return EXIT_OK
+        if (args.root / OFF).exists():
+            print(f"radar_select job {session}: {args.root.name}/{OFF} exists; nothing run, nothing written")
+            return EXIT_OK
+    else:
+        session = args.session
+        if rc.ev_date(session) is None or not lv.is_session(session):
+            print("radar_select: --session must be a session date written YYYY-MM-DD", file=sys.stderr)
+            return EXIT_USAGE
     if args.cmd == "replay":
         try:
-            problems = replay(args.root / args.session, desk, cfg, params, psha, ref)
+            problems = replay(args.root / session, desk, cfg, params, psha, ref)
         except (OSError, ValueError, KeyError) as e:
             print(f"radar_select: replay: cannot read the run ({type(e).__name__})", file=sys.stderr)
             return EXIT_ERROR
         for p in problems:
             print(f"radar_select: replay: {p}", file=sys.stderr)
-        print(f"radar_select replay {args.session}: {'reproduces' if not problems else 'DIFFERS'}")
+        print(f"radar_select replay {session}: {'reproduces' if not problems else 'DIFFERS'}")
         return EXIT_REPLAY if problems else EXIT_OK
-    if (args.root / args.session).exists():
-        print(f"radar_select run {args.session}: already run; nothing written")
-        return EXIT_EXISTS
+    # A job's second run for S (a restart, a run by hand) is not a failure: the first run's folder stands.
+    exists = EXIT_OK if job else EXIT_EXISTS
+    if (args.root / session).exists():
+        print(f"radar_select {args.cmd} {session}: already run; nothing written")
+        return exists
     pause = sleep or time.sleep
     try:
         c = client()
-        records = run(args.session, now=clock(), read_radar=read_radar, client=c, desk=desk, cfg=cfg,
+        reader, now, tries = read_radar, clock(), 1
+        if job:
+            for gone in sweep_dead_tmp(args.root, session) if args.root.is_dir() else []:
+                print(f"radar_select job {session}: removed {gone.name}, left by a run that was stopped")
+            # The reader's module is imported before the wait: a deploy may switch the checkout under a waiting job.
+            if read_radar is _read_radar:
+                import wt.options.pipeline_check  # noqa: F401
+            reader, now, status, tries = wait_for_radar(session, read_radar=read_radar, desk=desk, cfg=cfg,
+                                                        clock=clock, sleep=pause)
+            print(f"radar_select job {session}: radar {status} after {tries} read{'s' if tries > 1 else ''}")
+        records = run(session, now=now, read_radar=reader, client=c, desk=desk, cfg=cfg,
                       params=params, params_sha=psha, picker_ref=ref, earnings_rows=read_earnings(),
                       macro_rows=sf.read_rows(sf.EVENTS / "macro_events.csv"),
                       chain_reader=alpaca_chain_reader(c, feed=chain_feed, clock=clock, sleep=pause, cfg=cfg),
                       clock=clock, sleep=pause)
-        folder = write_run(args.root, args.session, records)
+        folder = write_run(args.root, session, records)
     except sf.TooEarly as e:
         print(f"radar_select: too early: {e}", file=sys.stderr)
         return EXIT_TOO_EARLY
@@ -336,17 +426,16 @@ def main(argv: list[str] | None = None, *, client: Callable[[], sf.Client] = sf.
         print(f"radar_select: fetch: {e}", file=sys.stderr)
         return EXIT_ERROR
     except FileExistsError:
-        print(f"radar_select run {args.session}: already run; nothing written")
-        return EXIT_EXISTS
+        print(f"radar_select {args.cmd} {session}: already run; nothing written")
+        return exists
     except (sel.BundleError, sel.CalendarError, OSError, ValueError) as e:
         print(f"radar_select: {type(e).__name__}: {e}", file=sys.stderr)
         return EXIT_ERROR
     r = records["run.json"]
-    print(f"radar_select run {args.session}: radar {r['radar_status']}, "
+    print(f"radar_select {args.cmd} {session}: radar {r['radar_status']}, "
           f"{r['counts']['universe']['admitted']} admitted of {r['counts']['universe']['candidates_gated']} gated, "
           f"picks {' '.join(p['symbol'] for p in r['picks']) or '(none)'}{' LATE' if r['late'] else ''}; {folder}")
     return EXIT_OK
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

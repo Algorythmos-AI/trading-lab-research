@@ -49,6 +49,7 @@ MEMORY: dict[str, tuple[str | None, str, str | None]] = {
     "deploy-notify": (None, "256M", "64M"),
     "lab-tape": ("768M", "1G", "0"),
     "lab-archive-check": (None, "512M", "0"),
+    "options-select": (None, "768M", "0"),
 }
 
 
