@@ -293,3 +293,10 @@ he chose "Switch it on as it is", and asked for everything to be made functional
 - The book, its limits, the day stop and the stop rule are this record's, unchanged: US$600 virtual, 1% risk,
   one trade a day under DEC-0068, −2R or 3 losers a day, and the −6.0R / 30-trade / 2027-03-31 stop rule.
 - From the first session of the host job, console sessions on the Mac stop (note of 2026-11-20, "the host job").
+
+### 2026-11-22: DEC-0073 proposes execution stops and a reading of the date stop
+
+Written before Gap Hunter's first session; no Gap Hunter trade exists. At the rate EXP-0053's counts show, about
+6.5 trades close by 2027-03-31, so no test of R can judge the rule by then. DEC-0073 keeps section 4 as written. It
+proposes stops on execution faults that carry over to the next session, and fixes what the date stop means when
+there are fewer than 30 trades. Section 4 changes only once the owner accepts DEC-0073.
