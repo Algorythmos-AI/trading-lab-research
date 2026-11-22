@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { verdict, WHY } from "@/components/paper/lab-tape";
 import { PAPER_FRAMES, PaperBody } from "@/components/paper/paper-page";
 import { fixturePaperOptions } from "@/lib/fixture-variants";
 import type { OptionsClone } from "@/lib/options-clone.types";
@@ -8,6 +9,7 @@ import type { PaperOptions } from "@/lib/paper-options.types";
 import type { OptionsCloneResult, PaperOptionsResult } from "@/lib/snapshot";
 import cloneJson from "./fixtures/options-clone.v1.json";
 import paperJson from "./fixtures/paper-options.v1.json";
+import paperV2 from "./fixtures/paper-options.v2.json";
 import { NON_REAL_FRAMES } from "./env-allowlist";
 import { assertOnlyEnvs } from "./env-guard";
 
@@ -102,7 +104,7 @@ describe("the two books", () => {
     expect(all.filter((v, i) => all.indexOf(v) !== i)).toEqual([]);
     const bar = html.match(/<nav aria-label="On this page"[\s\S]*?<\/nav>/)?.[0] ?? "";
     const links = [...bar.matchAll(/href="#([^"]+)"/g)].map((m) => m[1]!);
-    expect(links).toEqual(["clone-bot", "research-arms"]);
+    expect(links).toEqual(["clone-bot", "options-lab", "research-arms"]);
     expect(links.filter((h) => !all.includes(h))).toEqual([]);
   });
 
@@ -186,5 +188,52 @@ describe("what the page does without its documents", () => {
     expect(text(render({}, { clone: cloneSays(sum(counted)) }))).not.toContain("out of step");
     // A different count is a trade one document has and the other does not yet: no warning.
     expect(text(render())).not.toContain("out of step");
+  });
+});
+
+describe("the options lab's tape (DEC-0060, DEC-0067)", () => {
+  const withLab = paperV2 as unknown as PaperOptions;
+  const lab = (doc: PaperOptions = withLab) =>
+    renderToStaticMarkup(createElement(PaperBody, { result: { status: "ok", doc, source: "fixture" }, clone: { status: "ok", doc: cloneDoc, source: "fixture" }, q: {}, now }));
+
+  it("shows one line a session, newest first, each coloured by whether it counts and saying why not", () => {
+    const html = lab();
+    const days = [...html.matchAll(/data-lab-session="([\d-]+)" data-tone="(\w+)"/g)].map((m) => [m[1], m[2]]);
+    expect(days.map((d) => d[0])).toEqual([...withLab.lab!.sessions.map((s) => s.date)].reverse());
+    const tone = Object.fromEntries(days);
+    expect(tone["2026-10-01"]).toBe("bad");                    // the v1 recorder: never counts
+    expect(tone["2026-10-05"]).toBe("bad");                    // stale names: does not count
+    expect(tone["2026-10-06"]).toBe("warn");                   // a shadow session
+    expect(tone["2026-10-09"]).toBe("warn");                   // counts, partial
+    expect(tone["2026-10-12"]).toBe("bad");
+    expect(html).toContain(WHY.v1);
+    expect(html).toContain(WHY.fresh_coverage);
+    expect(html).toContain(WHY.stale_run);
+    expect(html).toContain("stopped by the off switch");
+  });
+
+  it("sums up the shadow period, the counted sessions and the archive", () => {
+    const html = lab();
+    expect(html).toContain("Shadow period done");
+    expect(html).toContain("1 counted session");
+    expect(html).toContain("4 of 8 not archived");
+  });
+
+  it("names no stock and no contract", () => {
+    const section = lab().split('id="options-lab"')[1]!.split('id="research-arms"')[0]!;
+    expect(section).not.toMatch(/[A-Z]{1,5}\d{6}[CP]\d{8}/);
+    expect(section).not.toContain("AAA");
+  });
+
+  it("says the status is not sent yet when the host sends a version 1 document", () => {
+    expect(lab(paper())).toContain("The lab&#x27;s tape status is not being sent yet");
+  });
+
+  it("gives each state its colour from the rules alone", () => {
+    const base = withLab.lab!.sessions[3]!;
+    expect(verdict({ ...base, counts: true, shadow: false, partial: false }).tone).toBe("good");
+    expect(verdict({ ...base, counts: true, shadow: true }).tone).toBe("warn");
+    expect(verdict({ ...base, counts: false, shadow: true }).tone).toBe("bad");
+    expect(verdict({ ...base, recorded: false }).label).toBe("Not recorded");
   });
 });

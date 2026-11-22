@@ -53,6 +53,10 @@ The tape is PRIVATE: it never goes into the repository, the dashboard or a log. 
 
 ## Checking a session
 
+The Paper page's **Options lab** section shows one line a session from the manifests: counts, shadow, partial or not
+counting (with the reason), fresh coverage, and whether it is archived. It rides the paper history that the
+`options-live` job sends, so it updates every few minutes in the session and twice a day otherwise. The details:
+
 ```bash
 sudo -u wt cat /home/wt/lab-tape/$(TZ=America/New_York date +%F)/manifest.json | python3 -m json.tool | head -60
 ```
