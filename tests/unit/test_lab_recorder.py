@@ -603,3 +603,50 @@ def test_a_run_that_wakes_a_few_milliseconds_late_still_runs_tick_zero(tmp_path:
     rec2 = make(tmp_path / "b", late, Alpaca(late))
     rec2.run(START, START + dt.timedelta(minutes=2))
     assert rec2.finish({})["ticks_down"] == 1
+
+
+def test_the_budget_is_taken_in_one_step_whatever_the_threads(tmp_path: Path) -> None:
+    import threading
+    clock = Clock(START)
+    rec = make(tmp_path, clock, Alpaca(clock), settings=recorder.Settings(budget_per_min=50))
+    wins: list[bool] = []
+    go = threading.Barrier(40)
+
+    def grab() -> None:
+        go.wait()
+        for _ in range(5):
+            wins.append(rec.claim(1))
+    threads = [threading.Thread(target=grab) for _ in range(40)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert sum(wins) == 50 and len(rec.sent) == 50                     # 200 tries, exactly the budget granted
+    assert not rec.claim(1) and rec.claim(0)
+
+
+def test_a_session_never_sends_more_than_its_budget_in_any_minute(tmp_path: Path) -> None:
+    clock = Clock(START - dt.timedelta(seconds=30))
+    api = Alpaca(clock)
+    at: list[float] = []
+
+    def timed(url: str, params: Mapping[str, str], headers: Mapping[str, str], timeout: float) -> Answer:
+        at.append(clock.t.timestamp())
+        return api(url, params, headers, timeout)
+    rec = make(tmp_path, clock, api, settings=recorder.Settings(budget_per_min=20), inline=False)   # needs ~27
+    rec.get = timed
+    rec.run(START, START + dt.timedelta(minutes=6))
+    assert len(at) == rec.counts["requests"] > 60                       # it was held to the budget, not idle
+    assert max(sum(1 for t in at if s <= t < s + 60) for s in at) <= 20 # no 60-second window over the budget
+    rec.flush()
+    assert any(r.startswith("budget") for r in reasons(rec))            # and the refusals were written down
+
+
+def test_the_clock_is_read_every_thirty_minutes_and_its_worst_reading_kept(tmp_path: Path) -> None:
+    clock = Clock(START - dt.timedelta(seconds=30))
+    readings = iter([0.4, -3.5, 1.2, 9.9])
+    rec = make(tmp_path, clock, Alpaca(clock))
+    rec.clock_offset = lambda: next(readings)
+    rec.run(START, START + dt.timedelta(minutes=61))
+    doc = rec.finish({})
+    assert doc["clock_offset_readings"] == 3 and doc["clock_offset_ms_max_abs"] == 3.5     # minutes 0, 30 and 60

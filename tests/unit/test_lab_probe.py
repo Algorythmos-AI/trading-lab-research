@@ -243,3 +243,20 @@ def test_exp0052_counting_rules_are_all_parsed_as_rules() -> None:
                   "tier1_crossed_share", "ticks_down"):
         assert any(field in r for r in rules), field
     assert cfg["recording"]["tier1"]["max_contracts_per_name"] == 300 and cfg["replaces"] == "EXP-0041"
+
+
+def test_on_a_half_day_the_probe_is_after_the_close_from_13_00(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """2026-11-27 closes at 13:00: at 13:30 New York the probe is for the next session, not today's."""
+    monkeypatch.setattr(tiers, "sessions", lambda path=None: CAL + ("2026-11-27", "2026-11-30"))
+    monkeypatch.setattr(tiers, "close_time", lambda day, path=None: dt.time(13, 0) if day == dt.date(2026, 11, 27)
+                        else dt.time(16, 0))
+    monkeypatch.setattr(focus, "read", lambda env=None, get=None, now=None: focus.Focus("2026-11-30", ("NVDA",), "0" * 64))
+    monkeypatch.setattr(probe, "desk_names", lambda path=None: DESK)
+    monkeypatch.setattr("os.environ", {**ENV, "WT_LAB_TAPE": str(tmp_path / "tape")})
+    seen: list[str] = []
+    monkeypatch.setattr(probe.shutil, "disk_usage", lambda path: seen.append(str(path)) or type("U", (), {"free": 40e9})())
+    out = tmp_path / "probe.json"
+    half = dt.datetime(2026, 11, 27, 18, 30, tzinfo=dt.UTC)                      # 13:30 New York
+    assert probe.main(["--out", str(out)], get=Fake(), now=half) == 0
+    assert json.loads(out.read_text())["session"] == "2026-11-30"
+    assert seen == [str(tmp_path)]                     # the tape's own disk (its folder does not exist yet: its parent)
