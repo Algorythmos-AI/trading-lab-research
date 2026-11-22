@@ -19,9 +19,9 @@ export type Price = number;
 export interface PaperOptions {
   schema: "stocksdelta/paper-options";
   /**
-   * 2 adds `lab`, the options lab's tape status; 1 is still taken.
+   * 3 adds each lab session's upload delay and rate-limit headroom; 2 adds `lab`, the options lab's tape status; 1 and 2 are still taken.
    */
-  schema_version: 1 | 2;
+  schema_version: 1 | 2 | 3;
   run_id: string;
   /**
    * When the host built it: an ISO time with its zone.
@@ -117,6 +117,10 @@ export interface PaperOptions {
      * @maxItems 20
      */
     sessions: LabSession[];
+    /**
+     * Sessions (from 2026-11-23) verified past close plus 110 minutes (DEC-0060 point 4).
+     */
+    uploads_late?: number;
   };
 }
 export interface CloneTrade {
@@ -269,4 +273,28 @@ export interface LabSession {
   after_close_ok: boolean;
   oi_null_share: null | number;
   archived: boolean;
+  /**
+   * Minutes from the close to the verified upload; null until archived.
+   */
+  upload_after_close_min?: null | number;
+  /**
+   * Verified past close plus 110 minutes (DEC-0060 point 4); sessions before 2026-11-23 predate the archive and are never late.
+   */
+  upload_late?: boolean;
+  /**
+   * The lowest share of Alpaca's per-minute request limit left that the session saw; null before the recorder saved it.
+   */
+  rate_limit_min_share?: null | number;
+  /**
+   * Readings under the recorder's back-off share. Null before the recorder saved it.
+   */
+  rate_limit_low?: null | number;
+  /**
+   * Requests Alpaca refused as over its limit. Null before the recorder saved it.
+   */
+  rate_limit_429?: null | number;
+  /**
+   * Sweep batches (up to 100 contracts each) the lab's own request budget skipped. Null before the recorder saved it.
+   */
+  budget_refused?: null | number;
 }

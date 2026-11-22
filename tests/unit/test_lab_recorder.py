@@ -650,3 +650,32 @@ def test_the_clock_is_read_every_thirty_minutes_and_its_worst_reading_kept(tmp_p
     rec.run(START, START + dt.timedelta(minutes=61))
     doc = rec.finish({})
     assert doc["clock_offset_readings"] == 3 and doc["clock_offset_ms_max_abs"] == 3.5     # minutes 0, 30 and 60
+
+
+def test_the_recorder_saves_its_headroom_across_a_restart(tmp_path: Path) -> None:
+    from wt.lab import recorder
+    from wt.lab.probe import Answer
+    day = recorder.dt.date(2026, 11, 23)
+
+    class Clock:
+        def now(self) -> recorder.dt.datetime:
+            return recorder.dt.datetime(2026, 11, 23, 15, tzinfo=recorder.dt.UTC)
+
+        def sleep(self, s: float) -> None:
+            pass
+
+    shares = iter([("900", "1000"), ("250", "1000"), ("600", "1000")])
+
+    def get(url: str, params: Any, headers: Any, timeout: float) -> Answer:
+        rem, lim = next(shares, ("x", "1000"))
+        return Answer(429 if rem == "250" else 200, {"X-RateLimit-Remaining": rem, "X-RateLimit-Limit": lim}, {}, 0.0)
+
+    rec = recorder.Recorder(get, {}, ["AAA"], day, tmp_path, Clock())
+    for _ in range(4):
+        rec.send("https://data.alpaca.markets/v2/stocks/snapshots", {}, {}, 1.0)
+    assert rec.min_share == 0.25 and rec.counts["low_readings"] == 1 and rec.counts["refused_429"] == 1
+    assert rec.headroom() == {"rate_limit_min_remaining_share": 0.25, "rate_limit_low_readings": 1, "rate_limit_429": 1,
+                              "budget_refused_batches": 0}
+    rec.save()
+    again = recorder.Recorder(get, {}, ["AAA"], day, tmp_path, Clock())
+    assert again.min_share == 0.25 and again.counts["low_readings"] == 1 and again.counts["refused_429"] == 1

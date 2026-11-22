@@ -219,6 +219,21 @@ describe("the options lab's tape (DEC-0060, DEC-0067)", () => {
     expect(html).toContain("4 of 8 not archived");
   });
 
+  it("shows each session's rate-limit low and how long after the close it was archived", () => {
+    const html = lab();
+    const row = (day: string) => html.split(`data-lab-session="${day}"`)[1]!.split("</tr>")[0]!;
+    expect(html).toContain("1 upload past close + 110 min");
+    expect(row("2026-10-05")).toContain("uploaded 4.0 h after the close (due within 110 min)");
+    expect(row("2026-10-05")).toMatch(/text-warn[^>]*data-lab-upload[^>]*>4\.0 h/);
+    expect(row("2026-10-02")).toMatch(/data-lab-upload[^>]*>1\.6 h/);
+    expect(row("2026-10-06")).toMatch(/text-warn[^>]*data-lab-headroom[^>]*>18%/);
+    expect(row("2026-10-06")).toContain("2 requests refused by Alpaca&#x27;s rate limit");
+    expect(row("2026-10-06")).toContain("7 sweep batches skipped by the lab&#x27;s own request budget");
+    expect(row("2026-10-06")).toContain("rate limit under 30% left 4 times");
+    expect(row("2026-10-01")).toMatch(/data-lab-headroom[^>]*>—/);          // saved only by later recorders
+    expect(row("2026-10-07")).toMatch(/data-lab-upload[^>]*>—/);            // not archived yet
+  });
+
   it("names no stock and no contract", () => {
     const section = lab().split('id="options-lab"')[1]!.split('id="research-arms"')[0]!;
     expect(section).not.toMatch(/[A-Z]{1,5}\d{6}[CP]\d{8}/);
