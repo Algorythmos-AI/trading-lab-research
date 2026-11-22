@@ -1,0 +1,352 @@
+"""Radar → Options selection, one session at a time (DEC-0070, PROPOSED): read the stored Radar edition, turn it into
+checked candidates, gate them into the universe, fetch the Stage 1 bundle for that universe and score it with the
+frozen Stage 1 rules (DEC-0046, `wt.options.select`, unchanged).
+
+    python -m wt.options.radar_select run --session <S> [--root <dir>]
+    python -m wt.options.radar_select replay --session <S> [--root <dir>]
+
+`S` is the session being selected for; the bundle is for D, the session before it (Stage 1 scores a finished
+session). The run is a shadow: it writes records and publishes nothing, and the Options page's four names do not
+change. Publishing waits for the switch record (DEC-0048) and the owner's merge.
+
+A run writes one folder, `var/options-select/<S>/`, built in a temporary folder beside it and renamed into place
+whole, so the folder exists only when every file in it was written; a second run for S finds it and stops
+(idempotent):
+
+| File | What |
+|---|---|
+| `candidates.json` | `wt.options.radar_candidates` record: the edition's hash, freshness status, in-scope symbols |
+| `fetch.json` | the bars fetched for the desk and every candidate, and the event rows (the gate's and Stage 1's inputs) |
+| `universe.json` | `wt.options.universe` record: every candidate's verdict, the chain facts read, the universe |
+| `stage1-bundle.json` | the Stage 1 bundle for the universe (`select.check_bundle` shape) |
+| `stage1.json` | the Stage 1 output (`select.run_bundle`), with params_sha, picker_ref and bundle_sha |
+| `run.json` | the run's summary: times, statuses, counts, picks and where each came from, every file's sha256 |
+
+`replay` recomputes the universe from `candidates.json`, `fetch.json` and the chain facts saved in `universe.json`,
+then Stage 1 from the rebuilt bundle, and fails when any hash differs from the saved one.
+
+What is never written: the edition's prose (why, notes, labels, headlines), any price after the run, any outcome.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import hashlib
+import json
+import os
+import shutil
+import sys
+from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
+from typing import Any
+
+from wt.options import chain as ch
+from wt.options import levels as lv
+from wt.options import radar_candidates as rc
+from wt.options import select as sel
+from wt.options import select_fetch as sf
+from wt.options import select_stage2 as s2
+from wt.options import universe as un
+
+VAR = sel.ROOT / "var" / "options-select"
+EARNINGS_FILES = ("earnings.csv", "earnings_radar.csv")
+RUN_SCHEMA = "wt.options/radar-select-run"
+RUN_VERSION = 1
+# The run must have its picks by this New York time on S to be in time for the switch's publish (Stage 2's Pass A
+# fetches at 08:50; the site freezes S's focus at 09:25). A shadow run after it is still recorded, marked late.
+PUBLISH_BY = (8, 40)
+CHAIN_REQUEST_BUDGET = 150
+CHAIN_TIME_BUDGET_S = 600
+
+EXIT_OK, EXIT_ERROR, EXIT_USAGE, EXIT_EXISTS, EXIT_TOO_EARLY, EXIT_REPLAY = 0, 1, 2, 3, 4, 5
+
+ChainReader = Callable[[str, float, str], "Sequence[ch.Quote] | None"]
+
+
+def sha_of(doc: Any) -> str:
+    return hashlib.sha256(sel.dumps(doc).encode("ascii")).hexdigest()
+
+
+def read_earnings(events_dir: Path = sf.EVENTS) -> list[dict[str, Any]]:
+    """The rows of both earnings files, the desk's first. A missing Radar file gives no rows (every Radar name is then
+    earnings_unknown); a missing desk file is an error."""
+    rows = sf.read_rows(events_dir / EARNINGS_FILES[0])
+    extra = events_dir / EARNINGS_FILES[1]
+    return rows + (sf.read_rows(extra) if extra.exists() else [])
+
+
+def alpaca_chain_reader(client: sf.Client, *, feed: str, clock: Callable[[], dt.datetime],
+                        sleep: Callable[[float], None], cfg: rc.Config) -> ChainReader:
+    """A ChainReader over `/v1beta1/options/snapshots/<root>`: the contracts of the expiries from S to S plus
+    `chain_expiry_max_days`, strikes within `chain_ntm_pct` of the close. One fetcher with its own request and time
+    budgets serves every name, its clock starting at the first read; a name whose fetch fails reads as None
+    (chain_unavailable), never as an empty chain. Names are read in the gate's priority order, so a budget that runs
+    out cuts the least preferred names first."""
+    held: list[sf.Fetcher] = []                    # made at the first read, so the budget starts with the chains
+
+    def read(symbol: str, close: float, session: str) -> Sequence[ch.Quote] | None:
+        if not held:
+            held.append(sf.Fetcher(client, max_requests=CHAIN_REQUEST_BUDGET,
+                                   deadline=clock() + dt.timedelta(seconds=CHAIN_TIME_BUDGET_S), clock=clock,
+                                   sleep=sleep))
+        f = held[0]
+        s = dt.date.fromisoformat(session)
+        params = {"feed": feed, "limit": 1000,
+                  "expiration_date_gte": s.isoformat(),
+                  "expiration_date_lte": (s + dt.timedelta(days=cfg.chain_expiry_max_days)).isoformat(),
+                  "strike_price_gte": f"{close * (1 - cfg.chain_ntm_pct):.2f}",
+                  "strike_price_lte": f"{close * (1 + cfg.chain_ntm_pct):.2f}"}
+        try:
+            pages = f.paged("chain", session, f"/v1beta1/options/snapshots/{symbol.replace('.', '')}", params)
+        except sf.FetchError:
+            return None
+        snaps: dict[str, Any] = {}
+        for body in pages:
+            got = body.get("snapshots")
+            if isinstance(got, Mapping):
+                snaps.update(got)
+        return ch.parse_snapshots(snaps)
+    return read
+
+
+def _last_close(bars: Any, d: str) -> float | None:
+    try:
+        parsed = sel.parse_bars(bars)
+    except Exception:
+        return None
+    if not parsed or parsed[-1].d != d or parsed[-1].c <= 0:
+        return None
+    return parsed[-1].c
+
+
+def run(session: str, *, now: dt.datetime, read_radar: Callable[[], Any], client: sf.Client, desk: Sequence[str],
+        cfg: rc.Config, params: sel.Params, params_sha: str, picker_ref: str, earnings_rows: list[Any],
+        macro_rows: list[Any], chain_reader: ChainReader | None, clock: Callable[[], dt.datetime],
+        sleep: Callable[[float], None]) -> dict[str, dict[str, Any]]:
+    """Every record of one run, by file name (see the module text). Raises sf.TooEarly before D's close is final and
+    sf.FetchError when the bars cannot be fetched; nothing is returned then, so nothing is written."""
+    if not lv.is_session(session):
+        raise ValueError(f"{session} is not a session date")
+    d = lv.prev_session(session)
+    try:
+        edition = read_radar()
+        read_problem = None
+    except Exception as e:                                  # the reader's failure is the Radar missing, said so
+        edition, read_problem = None, type(e).__name__
+    cand = rc.extract(edition, session, now, desk, cfg)
+    if read_problem and cand["status"] == "radar_missing":
+        cand["detail"] = f"the edition could not be read ({read_problem})"
+    pending = sorted((c for c in cand["candidates"] if not c["core"]), key=lambda c: un.priority(c, cfg))
+    extra = [c["symbol"] for c in pending]
+    # The desk's bars first, on their own: a Radar symbol the broker refuses can never cost the desk its Stage 1.
+    fetched = sf.fetch_stage1(client, d, list(desk), min_bars=params.min_bars, earnings_rows=earnings_rows,
+                              macro_rows=macro_rows, clock=clock, sleep=sleep)
+    extra_fetch: str | None = None
+    if extra and not cfg.unset():
+        try:
+            more = sf.fetch_stage1(client, d, extra, min_bars=params.min_bars, earnings_rows=earnings_rows,
+                                   macro_rows=macro_rows, clock=clock, sleep=sleep)
+            fetched = {**fetched, "names": fetched["names"] + extra, "bars": {**fetched["bars"], **more["bars"]}}
+        except (sf.FetchError, sel.BundleError) as e:    # no bars: every Radar name is rejected on its bars
+            extra_fetch = getattr(e, "cause", type(e).__name__)
+    chains: dict[str, un.ChainFacts | None] = {}
+    if extra and not cfg.unset() and chain_reader is not None:
+        for sym in extra:
+            close = _last_close(fetched["bars"].get(sym, []), d)
+            if close is None:                               # the gate rejects it on its bars first
+                continue
+            quotes = chain_reader(sym, close, session)
+            chains[sym] = None if quotes is None else un.chain_facts(quotes, close, session, cfg,
+                                                                      root=sym.replace(".", ""))
+    universe = un.gate(cand, desk, fetched["bars"], chains, earnings_rows, params, cfg)
+    bundle = bundle_for(fetched, universe["names"])
+    out = sel.run_bundle(bundle, params, sha=params_sha, ref=picker_ref)
+    records: dict[str, dict[str, Any]] = {
+        "candidates.json": cand, "fetch.json": fetched, "universe.json": universe,
+        "stage1-bundle.json": bundle, "stage1.json": out,
+    }
+    deadline = s2.ny_time(session, PUBLISH_BY)
+    records["run.json"] = {
+        "schema": RUN_SCHEMA, "version": RUN_VERSION, "session": session, "finished_session": d,
+        "mode": "shadow", "run_at": now.astimezone(dt.UTC).isoformat(),
+        "finished_at": clock().astimezone(dt.UTC).isoformat(), "publish_by": deadline.isoformat(),
+        "late": clock() > deadline,
+        "radar_status": cand["status"], "radar_detail": cand["detail"],
+        "gate_unset": universe["gate_unset"],
+        "radar_bars_fetch": "ok" if extra_fetch is None else extra_fetch,
+        "desk": list(desk),
+        "counts": {"candidates": cand["counts"], "universe": universe["counts"], "stage1": out["counts"]},
+        "picks": [{"symbol": s, "origin": universe["origin"].get(s, "core")} for s in out["picks"]],
+        "selection_note": out["selection_note"],
+        "hashes": {"universe_config": cfg.sha, "params_sha": params_sha, "picker_ref": picker_ref,
+                   "bundle_sha": out["bundle_sha"],
+                   "edition_sha256": (cand["provenance"] or {}).get("edition_sha256"),
+                   **{name: sha_of(doc) for name, doc in records.items()}},
+    }
+    return records
+
+
+def bundle_for(fetched: Mapping[str, Any], names: Sequence[str]) -> dict[str, Any]:
+    """The Stage 1 bundle for `names` from a fetch for a superset of them."""
+    doc = {"schema": sel.BUNDLE_SCHEMA, "version": sel.BUNDLE_VERSION, "session": fetched["session"],
+           "adjustment": sel.BUNDLE_ADJUSTMENT, "names": list(names),
+           "bars": {n: fetched["bars"].get(n, []) for n in names},
+           "earnings_rows": fetched["earnings_rows"], "macro_rows": fetched["macro_rows"]}
+    sel.check_bundle(doc)
+    return doc
+
+
+def write_run(root: Path, session: str, records: Mapping[str, Mapping[str, Any]]) -> Path:
+    """Write the run's folder whole: a temporary folder, every file, then one rename. Raises FileExistsError when S's
+    folder exists (a second run is refused, never merged)."""
+    final = root / session
+    if final.exists():
+        raise FileExistsError(str(final))
+    root.mkdir(parents=True, exist_ok=True)
+    tmp = root / f".{session}.tmp-{os.getpid()}"
+    if tmp.exists():
+        shutil.rmtree(tmp)
+    tmp.mkdir()
+    try:
+        for name in [n for n in records if n != "run.json"] + ["run.json"]:
+            s2.write_new(tmp / name, sel.dumps(records[name]))
+        if final.exists():                                 # a run that finished meanwhile wins; this one is dropped
+            raise FileExistsError(str(final))
+        try:
+            os.rename(tmp, final)
+        except OSError as e:                               # macOS: ENOTEMPTY/EEXIST when another run won the race
+            if final.exists():
+                raise FileExistsError(str(final)) from e
+            raise
+        fd = os.open(root, os.O_RDONLY)
+        try:
+            os.fsync(fd)                                   # the rename itself survives a power cut
+        finally:
+            os.close(fd)
+    except BaseException:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
+    return final
+
+
+def replay(folder: Path, desk: Sequence[str], cfg: rc.Config, params: sel.Params, params_sha: str,
+           picker_ref: str) -> list[str]:
+    """What differs between the saved run and a recomputation from its saved inputs; empty when it reproduces."""
+    def load(name: str) -> dict[str, Any]:
+        doc = json.loads((folder / name).read_text(encoding="utf-8"))
+        if not isinstance(doc, dict):
+            raise ValueError(f"{name} is not an object")
+        return doc
+    saved = {n: load(n) for n in ("candidates.json", "fetch.json", "universe.json", "stage1-bundle.json",
+                                  "stage1.json", "run.json")}
+    problems = [f"{n}: sha256 differs from run.json" for n, doc in saved.items()
+                if n != "run.json" and saved["run.json"]["hashes"].get(n) != sha_of(doc)]
+    if cfg.sha != saved["run.json"]["hashes"]["universe_config"]:
+        problems.append("universe config changed since the run")
+    if params_sha != saved["run.json"]["hashes"]["params_sha"]:
+        problems.append("Stage 1 params changed since the run")
+    if picker_ref != saved["run.json"]["hashes"]["picker_ref"]:
+        problems.append("Stage 1 code changed since the run (picker_ref)")
+    if list(desk) != saved["run.json"]["desk"]:
+        problems.append("the desk's names changed since the run (options_desk.yaml)")
+    desk = saved["run.json"]["desk"]
+    chains = {v["symbol"]: None if v["chain"] is None else un.ChainFacts(**v["chain"])
+              for v in saved["universe.json"]["verdicts"] if v["chain"] is not None or v["reject"] == "chain_unavailable"}
+    uni = un.gate(saved["candidates.json"], desk, saved["fetch.json"]["bars"], chains,
+                  saved["fetch.json"]["earnings_rows"], params, cfg)
+    if sha_of(uni) != sha_of(saved["universe.json"]):
+        problems.append("universe.json does not reproduce")
+    bundle = bundle_for(saved["fetch.json"], uni["names"])
+    if sha_of(bundle) != sha_of(saved["stage1-bundle.json"]):
+        problems.append("stage1-bundle.json does not reproduce")
+    out = sel.run_bundle(bundle, params, sha=params_sha, ref=picker_ref)
+    if sha_of(out) != sha_of(saved["stage1.json"]):
+        problems.append("stage1.json does not reproduce")
+    return problems
+
+
+# ---------------------------------------------------------------- command line
+
+class _Parser(argparse.ArgumentParser):
+    def error(self, message: str) -> Any:
+        print(f"radar_select: usage: {message}", file=sys.stderr)
+        raise SystemExit(EXIT_USAGE)
+
+
+def _now() -> dt.datetime:
+    return dt.datetime.now(dt.UTC)
+
+
+def _read_radar() -> Any:
+    from wt.options.pipeline_check import read_edition
+    return read_edition("radar")
+
+
+def main(argv: list[str] | None = None, *, client: Callable[[], sf.Client] = sf._client,
+         read_radar: Callable[[], Any] = _read_radar, clock: Callable[[], dt.datetime] = _now,
+         sleep: Callable[[float], None] | None = None, chain_feed: str = "indicative") -> int:
+    import time
+    ap = _Parser(prog="python -m wt.options.radar_select", description="Radar → Options selection (shadow)")
+    sub = ap.add_subparsers(dest="cmd", required=True, parser_class=_Parser)
+    for name in ("run", "replay"):
+        a = sub.add_parser(name)
+        a.add_argument("--session", required=True)
+        a.add_argument("--root", type=Path, default=VAR)
+    try:
+        args = ap.parse_args(argv)
+    except SystemExit as e:
+        return e.code if isinstance(e.code, int) else EXIT_USAGE
+    try:
+        cfg = rc.load_config()
+        params, psha = sel.load_params()
+        ref = sel.picker_ref()
+        desk = sf.desk_names()
+    except (rc.ConfigError, sel.ParamsError, OSError, ValueError) as e:
+        print(f"radar_select: configuration: {e}", file=sys.stderr)
+        return EXIT_ERROR
+    if rc.ev_date(args.session) is None or not lv.is_session(args.session):
+        print("radar_select: --session must be a session date written YYYY-MM-DD", file=sys.stderr)
+        return EXIT_USAGE
+    if args.cmd == "replay":
+        try:
+            problems = replay(args.root / args.session, desk, cfg, params, psha, ref)
+        except (OSError, ValueError, KeyError) as e:
+            print(f"radar_select: replay: cannot read the run ({type(e).__name__})", file=sys.stderr)
+            return EXIT_ERROR
+        for p in problems:
+            print(f"radar_select: replay: {p}", file=sys.stderr)
+        print(f"radar_select replay {args.session}: {'reproduces' if not problems else 'DIFFERS'}")
+        return EXIT_REPLAY if problems else EXIT_OK
+    if (args.root / args.session).exists():
+        print(f"radar_select run {args.session}: already run; nothing written")
+        return EXIT_EXISTS
+    pause = sleep or time.sleep
+    try:
+        c = client()
+        records = run(args.session, now=clock(), read_radar=read_radar, client=c, desk=desk, cfg=cfg,
+                      params=params, params_sha=psha, picker_ref=ref, earnings_rows=read_earnings(),
+                      macro_rows=sf.read_rows(sf.EVENTS / "macro_events.csv"),
+                      chain_reader=alpaca_chain_reader(c, feed=chain_feed, clock=clock, sleep=pause, cfg=cfg),
+                      clock=clock, sleep=pause)
+        folder = write_run(args.root, args.session, records)
+    except sf.TooEarly as e:
+        print(f"radar_select: too early: {e}", file=sys.stderr)
+        return EXIT_TOO_EARLY
+    except sf.FetchError as e:
+        print(f"radar_select: fetch: {e}", file=sys.stderr)
+        return EXIT_ERROR
+    except FileExistsError:
+        print(f"radar_select run {args.session}: already run; nothing written")
+        return EXIT_EXISTS
+    except (sel.BundleError, sel.CalendarError, OSError, ValueError) as e:
+        print(f"radar_select: {type(e).__name__}: {e}", file=sys.stderr)
+        return EXIT_ERROR
+    r = records["run.json"]
+    print(f"radar_select run {args.session}: radar {r['radar_status']}, "
+          f"{r['counts']['universe']['admitted']} admitted of {r['counts']['universe']['candidates_gated']} gated, "
+          f"picks {' '.join(p['symbol'] for p in r['picks']) or '(none)'}{' LATE' if r['late'] else ''}; {folder}")
+    return EXIT_OK
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

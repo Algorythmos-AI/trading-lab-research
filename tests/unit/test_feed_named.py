@@ -49,7 +49,8 @@ KNOWN_REQUESTS = {"scripts/r3_run.py": 1, "scripts/replay_check_b.py": 1, "scrip
                   "src/wt/live/runner_b.py": 2, "src/wt/live/runner_o.py": 4, "src/wt/live/runner_s.py": 2,
                   "src/wt/live/scan_s.py": 1,
                   "src/wt/options/live.py": 2,
-                  "src/wt/options/pipeline_check.py": 2, "src/wt/options/select_fetch.py": 5,
+                  "src/wt/options/pipeline_check.py": 2, "src/wt/options/radar_select.py": 1,
+                  "src/wt/options/select_fetch.py": 5,
                   "src/wt/scanner/features.py": 1}
 
 
