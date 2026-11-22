@@ -531,3 +531,9 @@ The text above is otherwise unchanged.
 Viewed before this note: the owner trade DEC-0052 names, entered on a side the board had re-armed after a failed break
 at the same level, and its result; that session's 2-minute bars and the board's recorded states; that session read by
 DEC-0052's rule as written; everything DEC-0052 lists as seen (DEC-0053, "What has already been seen").
+
+## Note on DEC-0072 (added 2026-11-23)
+
+DEC-0072, proposed on 2026-11-23, adds an exception once it is accepted. A row whose symbol is not one of the desk's
+names (`OPTIONS_NAMES`) reads paused. "Unchanged: the board's states and its engine" then holds except for DEC-0052,
+DEC-0053 and DEC-0072. No state of a desk name changes.
