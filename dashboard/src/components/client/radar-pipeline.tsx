@@ -1,10 +1,11 @@
 "use client";
 
 // The Radar page's pipeline, live: where the session's edition stands in one badge, the stages of the morning's run
-// as one rail (each with its state in words and the time it happened), the last twenty sessions, and the selection
-// funnel's counts. Drawn from the one summary the page's server render read (radar-pipeline-run.ts) by the same pure
-// code the tests run (radar-pipeline.ts), and redrawn here as the clock moves on. Nothing here polls: the layout's
-// own refresh, each minute while the tab is visible, brings the next summary and the next server time.
+// as one rail (each with its state in words and the time it happened), the last twenty sessions, and the Radar's and
+// the desk's counts as two separate facts. Drawn from the one summary the page's server render read
+// (radar-pipeline-run.ts) by the same pure code the tests run (radar-pipeline.ts), and redrawn here as the clock moves
+// on. Nothing here polls: the layout's own refresh, each minute while the tab is visible, brings the next summary and
+// the next server time.
 import { useSyncExternalStore } from "react";
 import { StepRail, type RailState, type RailStep } from "@/components/step-rail";
 import { TONE_ICON, TONE_TEXT } from "@/components/status";
@@ -203,6 +204,12 @@ function ReliabilityStrip({ r }: { r: Reliability }) {
         <span data-on-time-rate className={cn("font-mono text-lg font-semibold tabular-nums", TONE_TEXT[tone])}>
           {rate === null ? "No record yet" : `${rate}% on time`}
         </span>
+        {rate !== null ? (
+          <span data-on-time-n className="text-muted-foreground font-mono text-xs tabular-nums" title={'Sessions with "no record" are left out of the rate.'}>
+            n={r.counted}
+            {r.no_record > 0 ? ` of ${n}` : ""}
+          </span>
+        ) : null}
         {summary ? <span className="text-muted-foreground text-xs">{summary}</span> : null}
       </div>
       <div className="flex items-center gap-1" role="img" aria-label={`The last ${n} sessions, oldest first: ${summary || "no record yet"}`}>
@@ -243,28 +250,35 @@ function Chip({ tone, children }: { tone: Tone; children: React.ReactNode }) {
   );
 }
 
-function Count({ n, label }: { n: number | null; label: string }) {
-  return (
-    <li className="border-border min-w-0 flex-1 rounded-lg border px-2 py-2 text-center">
-      <div className="font-mono text-2xl font-semibold tabular-nums">{n === null ? "—" : n}</div>
-      <div className="text-muted-foreground text-xs leading-tight">{label}</div>
-    </li>
-  );
-}
-
-function FunnelCard({ session, funnel }: { session: string; funnel: FunnelObs | null }) {
+/**
+ * Two facts, side by side and never one funnel. The Radar count is the previous morning's edition (the funnel's
+ * health document reads the Radar of the session the focus was picked after); the desk count is the Options desk's
+ * fixed list, judged after the close. The desk's names are not drawn from the Radar's.
+ */
+function FunnelCard({ session, radarMorning, funnel }: { session: string; radarMorning: string; funnel: FunnelObs | null }) {
   const radar = funnel?.radar ?? null;
   const focus = funnel?.focus ?? null;
   return (
-    <section aria-label="The selection funnel" data-funnel-card className="border-border grid gap-2 rounded-lg border p-3">
-      <h3 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">Selection funnel for {weekDate(session)}</h3>
+    <section aria-label="Radar scan and desk pick" data-funnel-card className="border-border grid gap-2 rounded-lg border p-3">
+      <h3 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">Radar scan and desk pick for {weekDate(session)}</h3>
       {funnel ? (
         <>
-          <ol className="flex items-stretch gap-1.5" aria-label="How many names each stage left">
-            <Count n={radar?.kept ?? null} label="on the radar" />
-            <Count n={focus?.judged ?? null} label="judged" />
-            <Count n={focus?.kept ?? null} label="in focus" />
-          </ol>
+          <ul className="grid gap-1.5 sm:grid-cols-2" aria-label="Two separate counts">
+            <li data-radar-scanned className="border-border rounded-lg border px-2 py-2">
+              <div className="text-sm">
+                Radar scanned <span className="font-mono text-lg font-semibold tabular-nums">{radar?.kept ?? "—"}</span>
+              </div>
+              <div className="text-muted-foreground text-xs leading-tight">{`morning of ${weekDate(radarMorning)}`}</div>
+            </li>
+            <li data-desk-picked className="border-border rounded-lg border px-2 py-2">
+              <div className="text-sm">
+                Desk <span className="font-mono text-lg font-semibold tabular-nums">{focus?.judged ?? "—"}</span> →{" "}
+                <span className="font-mono text-lg font-semibold tabular-nums">{focus?.kept ?? "—"}</span> picked
+              </div>
+              <div className="text-muted-foreground text-xs leading-tight">the desk&apos;s fixed list, after the close</div>
+            </li>
+          </ul>
+          <p className="text-muted-foreground text-xs">The desk&apos;s names are its own fixed list; they are not drawn from the Radar&apos;s names.</p>
           <div className="flex flex-wrap gap-1.5">
             {radar ? <Chip tone={EVIDENCE[radar.evidence].tone}>Radar: {EVIDENCE[radar.evidence].words.toLowerCase()}</Chip> : <Chip tone="neutral">Radar: no record</Chip>}
             {focus ? <Chip tone={EVIDENCE[focus.evidence].tone}>Focus pick: {EVIDENCE[focus.evidence].words.toLowerCase()}</Chip> : <Chip tone="neutral">Focus pick: no record</Chip>}
@@ -273,7 +287,7 @@ function FunnelCard({ session, funnel }: { session: string; funnel: FunnelObs | 
           </div>
         </>
       ) : (
-        <p className="text-muted-foreground text-sm">No funnel record for this session yet. It arrives after the evening&apos;s focus pick.</p>
+        <p className="text-muted-foreground text-sm">No record of the Radar scan or the desk pick for this session yet. It arrives after the evening&apos;s focus pick.</p>
       )}
     </section>
   );
@@ -337,7 +351,7 @@ export function RadarPipelineView({ file, nowMs }: { file: PipelineFile | null; 
       <StageList rows={v.rows} />
       <div className="grid gap-4 lg:grid-cols-2">
         <ReliabilityStrip r={v.reliability} />
-        <FunnelCard session={v.days.focus} funnel={v.obs?.funnel ?? null} />
+        <FunnelCard session={v.days.focus} radarMorning={v.days.previous} funnel={v.obs?.funnel ?? null} />
       </div>
     </div>
   );

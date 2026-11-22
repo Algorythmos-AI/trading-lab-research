@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { pipelineClock, pipelineView, PIPELINE_TICK_MS, RadarPipelineView, resetPipelineClock } from "@/components/client/radar-pipeline";
 import { RadarSchedulePanel } from "@/components/radar-schedule";
 import { feedById, slotsAround, type DocFeed } from "@/lib/feed-watch";
+import { weekDate } from "@/lib/format";
 import { VARIANT_FLAGS, type VariantFlag } from "@/lib/fixture-variants";
 import {
   beaconObs,
@@ -270,7 +271,7 @@ describe("the last sessions", () => {
     expect(r.marks).toHaveLength(20);
     expect(r.marks.slice(-5).map((m) => m.mark)).toEqual(["on_time", "late", "by_hand", "missed", "no_record"]);
     // The fifteen sessions the summary does not hold are no record, and stay out of the rate.
-    expect(r).toMatchObject({ on_time: 1, late: 1, by_hand: 1, missed: 1, no_record: 16, rate: 0.25 });
+    expect(r).toMatchObject({ on_time: 1, late: 1, by_hand: 1, missed: 1, no_record: 16, counted: 4, rate: 0.25 });
     expect(reliabilityOf(days, null, now).rate).toBeNull();
   });
 
@@ -668,7 +669,7 @@ describe("the fixture", () => {
 
   it("the last sessions hold one late, one by hand, one never stored and two with no record", () => {
     const r = pipelineView(fixturePipeline(FROZEN), FROZEN).reliability;
-    expect(r).toMatchObject({ on_time: 15, late: 1, by_hand: 1, missed: 1, no_record: 2 });
+    expect(r).toMatchObject({ on_time: 15, late: 1, by_hand: 1, missed: 1, no_record: 2, counted: 18 });
     expect(Math.round(r.rate! * 100)).toBe(83);
   });
 });
@@ -682,10 +683,37 @@ describe("the card", () => {
     expect(out.match(/data-rail-state=/g)).toHaveLength(7);
     expect(out).toContain("83% on time");
     expect(out.match(/data-mark=/g)).toHaveLength(20);
-    expect(out).toContain("on the radar");
     expect(out).toContain("Replay matches");
     expect(out).not.toContain("data-rail-now-mark"); // every stage's time has passed
     expect(html(fixturePipeline(t("2026-10-12T12:00:00Z")), t("2026-10-12T12:00:00Z"))).toContain("data-rail-now-mark");
+  });
+
+  it("shows the sample size beside the on-time rate, and that no-record sessions are left out", () => {
+    const out = html(fixturePipeline(FROZEN), FROZEN);
+    // 18 sessions carry a record; 2 of the 20 have none and are not in the rate.
+    expect(out).toMatch(/data-on-time-n[^>]*>n=<!-- -->18<!-- --> of 20</);
+    const r = pipelineView(fixturePipeline(FROZEN), FROZEN).reliability;
+    expect(r.counted + r.no_record).toBe(r.marks.length);
+    expect(html(null, FROZEN)).not.toContain("data-on-time-n");
+  });
+
+  it("draws the Radar's count and the desk's pick as two separate facts, never one funnel", () => {
+    const v = pipelineView(fixturePipeline(FROZEN), FROZEN);
+    const out = html(fixturePipeline(FROZEN), FROZEN);
+    expect(out).not.toContain("on the radar");
+    expect(out).not.toMatch(/>in focus</);
+    expect(out).not.toMatch(/[Ss]election funnel/);
+    // The Radar's count is the previous session's morning edition.
+    expect(v.days.previous).toBe(v.days.sessions[v.days.sessions.length - 2]);
+    const radar = /data-radar-scanned[\s\S]*?<\/li>/.exec(out)![0];
+    expect(radar).toContain("Radar scanned");
+    expect(radar).toContain(`morning of ${weekDate(v.days.previous)}`);
+    expect(radar).toContain(String(v.obs!.funnel!.radar!.kept));
+    const desk = /data-desk-picked[\s\S]*?<\/li>/.exec(out)![0];
+    expect(desk).toContain(`>${v.obs!.funnel!.focus!.judged}<`);
+    expect(desk).toContain(`>${v.obs!.funnel!.focus!.kept}<`);
+    expect(desk).toContain("picked");
+    expect(out).toContain("not drawn from the Radar");
   });
 
   it("with no summary it is the schedule alone, and says so", () => {
@@ -693,7 +721,7 @@ describe("the card", () => {
     expect(out).toContain('aria-label="Radar pipeline: Schedule only"');
     expect(out).toContain("No pipeline record has been written yet");
     expect(out).not.toMatch(/>Late<|>Failed</);
-    expect(out).toContain("No funnel record for this session yet");
+    expect(out).toContain("No record of the Radar scan or the desk pick for this session yet");
   });
 
   it("an old summary says how old", () => {

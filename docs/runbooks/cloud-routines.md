@@ -7,7 +7,7 @@ its status line and stays quiet.
 
 | Routine | Id | When | What it does | Writes |
 |---|---|---|---|---|
-| Options levels, after close | `trig_01EUa31y41kKS4WuJqBXJwWN` | 21:52 UTC, Mon–Fri | Pulls IBKR daily and hourly bars and the volatility snapshot for the ten names, builds the levels, picks the next session's four focus names, posts the focus card, then runs the shadow step | The options edition (`/api/ingest`, `trading-lab/options`) |
+| Options levels, after close | `trig_01EUa31y41kKS4WuJqBXJwWN` | 21:52 UTC, Mon–Fri | Pulls IBKR daily and hourly bars and the volatility snapshot for the twelve desk names (`config/options_desk.yaml`), builds the levels, picks the next session's four focus names, posts the focus card, then runs the shadow step | The options edition (`/api/ingest`, `trading-lab/options`) |
 | Options focus, pre-open | `trig_01WyzH7k8xAUgj8RZsakUDW7` | 08:50 New York, Mon–Fri | Prices the focus names before the open and republishes the focus block; posts the pre-open card | The edition's focus block |
 | Radar build | `trig_01PW2UvCBejb4UxCEB58PEVp` | 05:30 New York, Mon–Fri | Builds the pre-market radar edition and leaves it in the outbox; the run beacon (below) is its to send when a stage starts and ends | The radar outbox file; run beacons |
 | Radar catch-up | `trig_015qsK3nrRQgscNZh6strL4F` | After the build, Mon–Fri (its times are not recorded here) | Stops at once when the day's edition is already stored; otherwise does the build's work | The radar outbox file, when the build left none |
@@ -44,7 +44,7 @@ fails to send must never fail the routine. The routine reads `editions.radar_run
 
 The Radar page (`/radar`) leads with the pipeline of the session in view, read from one summary the dashboard's
 10-minute cron writes (`ops/radar-pipeline.json`, `dashboard/src/lib/radar-pipeline-run.ts`): the levels and focus
-pick the session day before (16:52 New York), the build (05:30), the edition stored (about 05:45; the store's own
+pick the session day before (21:52 UTC: 16:52 New York in winter, 17:52 in summer while New York is on daylight time), the build (05:30), the edition stored (about 05:45; the store's own
 receipt time of its first copy), the evidence kept and the desk file, the pre-open prices (08:50), the card saved
 (09:11) and the open (09:30). A session with no run beacon says "no build record"; the page never fills one in. Its
 badge is "On time" only for an edition stored by the feed watch's radar deadline (11:12 UTC plus 60 minutes), says

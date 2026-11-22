@@ -323,11 +323,11 @@ const whenWord = (w: string | null) => (w === "amc" ? " after the close" : w ===
 export function YourNamesPanel({ names, reads, earnings, year }: { names: YourName[]; reads: OpenRead[]; earnings: Earnings[]; year: string }) {
   return (
     <Panel
-      title="Your names this morning"
+      title="Names you trade most (your record)"
       icon={UserRound}
       means={`The names you trade most, each against its nearest marked level. Right: your ${year} result before fees, and how many trades.`}
     >
-      <ul aria-label="Your names this morning" className="grid gap-2">
+      <ul aria-label="Names you trade most (your record)" className="grid gap-2">
         {names.map((n) => {
           const o = reads.find((r) => r.symbol === n.symbol);
           const report = earnings.find((e) => e.symbol === n.symbol);

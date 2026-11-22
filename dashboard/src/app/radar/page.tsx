@@ -13,10 +13,10 @@ import {
   WatchlistPanel,
 } from "@/components/radar";
 import { MoversPanel, OpenMapPanel, SessionPanel, VerdictPanel, WeekPanel, YourNamesPanel } from "@/components/radar-brief";
+import { RadarEditionNotice } from "@/components/radar-edition-notice";
 import { RadarSchedulePanel } from "@/components/radar-schedule";
-import { Notice } from "@/components/ui/notice";
 import { sydney, weekDate } from "@/lib/format";
-import { radarStale, type Radar } from "@/lib/radar";
+import type { Radar } from "@/lib/radar";
 import {
   briefWeek,
   dayVerdict,
@@ -65,12 +65,7 @@ export default async function RadarPage({ searchParams }: { searchParams: Promis
       />
       <RadarSchedulePanel file={pipeline.file} now={pipeline.now} />
       <EditionPicker dates={dates} current={r.edition_date} />
-      {!date && radarStale(r.edition_date, now) ? (
-        <Notice tone="bad" size="sm" role="alert">
-          This radar is from {weekDate(r.edition_date)}. Today&apos;s session has opened and no newer edition has published (or the
-          market is shut for a holiday), so its levels and notes may be out of date.
-        </Notice>
-      ) : null}
+      <RadarEditionNotice editionDate={r.edition_date} now={now} live={!date} />
       <PaneBoundary name="The brief">
         <Brief r={r} options={options} trades={trades} />
       </PaneBoundary>

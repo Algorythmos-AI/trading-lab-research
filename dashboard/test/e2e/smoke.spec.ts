@@ -119,12 +119,16 @@ test("a live quote older than 30 seconds reads as stale", async ({ page }) => {
 test("the radar leads with the brief: the day, SPY's open, the session, your names, the week", async ({ page }) => {
   await page.goto("/radar");
   // The pipeline card leads: where the session's edition stands, the seven stages of the morning's run, the last
-  // twenty sessions, the funnel's counts, and the cloud jobs behind it. The fixture is a clean run so far at whatever
+  // twenty sessions, the Radar's and the desk's counts, and the cloud jobs behind it. The fixture is a clean run so far at whatever
   // time this runs, so the badge is never a late or a failed one.
   await expect(page.getByRole("status", { name: /^Radar pipeline: (On time|Building now|Waiting for the edition|Not due yet|No session today)$/ })).toBeVisible();
   await expect(page.getByRole("list", { name: /^The Radar pipeline for / }).getByRole("listitem")).toHaveCount(7);
   await expect(page.getByRole("img", { name: /^The last 20 sessions, oldest first: / })).toBeVisible();
-  await expect(page.getByRole("list", { name: "How many names each stage left" }).getByRole("listitem")).toHaveCount(3);
+  // The Radar's count and the desk's pick are two separate facts, never one funnel.
+  const counts = page.getByRole("list", { name: "Two separate counts" });
+  await expect(counts.getByRole("listitem")).toHaveCount(2);
+  await expect(counts).toContainText(/Radar scanned (\d+|—)morning of /);
+  await expect(counts).toContainText(/Desk (\d+|—) → (\d+|—) picked/);
   const jobs = page.getByRole("list", { name: "The cloud jobs behind the Radar, in order" });
   await expect(jobs.getByRole("listitem")).toHaveCount(4);
   await expect(jobs).toContainText("Radar build");
@@ -132,7 +136,7 @@ test("the radar leads with the brief: the day, SPY's open, the session, your nam
   await expect(page.getByRole("group", { name: /^The day: ((Normal|Careful|Event) day|Not fully checked)$/ })).toBeVisible();
   await expect(page.getByRole("img", { name: /^SPY close 778\.55, expected move ±5\.85\. Levels: PML 749\.60/ })).toBeVisible();
   await expect(page.getByRole("img", { name: /^The New York session on 2026-09-21: no entries 09:30 to 09:35/ })).toBeVisible();
-  const names = page.getByRole("list", { name: "Your names this morning" });
+  const names = page.getByRole("list", { name: "Names you trade most (your record)" });
   await expect(names.getByRole("listitem").first()).toContainText("SPY");
   await expect(page.getByRole("list", { name: "This week" })).toContainText("PCE inflation");
   await expect(page.getByRole("list", { name: "This week" })).toContainText("MU");
