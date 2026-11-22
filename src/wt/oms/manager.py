@@ -7,6 +7,8 @@ Rules:
   * Exactly one resting exit order at any time. A target or discretionary exit runs:
     cancel stop -> confirm the cancel (an error is NOT a confirmation) -> read the broker position twice ->
     sell min(position, entry fills) -> if it doesn't fill in time: cancel, confirm, re-protect with a new stop.
+    A stop whose cancel the exit sent but could not confirm is not replaced for EXIT_HOLD_S (DEC-0071): the exit is
+    asked again on the next loop and finds it cancelled, instead of a fresh stop to cancel once more.
   * Every submission has its own client order id (a sequence number persisted with the plan). After a timeout the
     order is resolved by id: a found order that matches is success, whatever its status; "not found" means it
     never reached the broker; a failed lookup leaves the plan in `submitting` for the next loop to resolve.
@@ -33,6 +35,7 @@ from wt.core.types import Order, OrderStatus
 from wt.risk.pretrade import Context, PreTradeGuard
 
 TERMINAL = ("closed", "aborted")
+EXIT_HOLD_S = 15.0      # DEC-0071: about one loop of the stock desk (10 s polls); after it the stop goes back
 ACTIVE_POSITION = ("in_position", "exiting")
 
 
@@ -68,6 +71,8 @@ class TradePlan:
     entry_counted: bool = False
     recorded: bool = False
     origin: str = "entry"             # entry | orphan (a position no plan placed, adopted so it can be exited)
+    exit_hold_stop: str = ""          # DEC-0071: the stop an exit asked to cancel, unconfirmed; not replaced until
+    exit_hold_until: float = 0.0      # this time (epoch seconds), so the next loop's exit can sell
     log: list[Any] = field(default_factory=list)
 
     @property
@@ -116,8 +121,9 @@ class OMS:
                  guard: PreTradeGuard | None = None, context: Callable[[str], Context] | None = None,
                  persist: Callable[[TradePlan], None] | None = None,
                  on_entry: Callable[[TradePlan], None] | None = None, confirm_polls: int = 20,
-                 poll_s: float = 0.25, strategy: str | None = None) -> None:
-        self.b, self.sell_timeout_s, self.sleep = broker, sell_timeout_s, sleep
+                 poll_s: float = 0.25, strategy: str | None = None,
+                 clock: Callable[[], float] = time.time) -> None:
+        self.b, self.sell_timeout_s, self.sleep, self.clock = broker, sell_timeout_s, sleep, clock
         self.guard, self.context, self.persist_cb, self.on_entry = guard, context, persist, on_entry
         self.confirm_polls, self.poll_s, self.strategy = confirm_polls, poll_s, strategy
         self._gone: set[str] = set()        # ids get_order has reported cancelled or rejected: never resting again
@@ -298,10 +304,17 @@ class OMS:
         if p.state in ACTIVE_POSITION and self._position_qty(p.symbol) <= 0:
             self._close(p, "stop")                           # audit C1: a stop-out is a close like any other
 
+    def held_for_exit(self, p: TradePlan) -> bool:
+        """True while the plan's stop is one an exit asked to cancel without a confirmation, for at most EXIT_HOLD_S
+        (DEC-0071). Tied to that stop's id: a stop placed since is never held."""
+        return bool(p.stop_id) and p.exit_hold_stop == p.stop_id and self.clock() < p.exit_hold_until
+
     def ensure_stop(self, p: TradePlan) -> None:
         """A GTC stop for min(entry fills, long position), replacing a wrongly sized one (cancel confirmed first)."""
         cur = self._read(p.stop_id) if p.stop_id else None
         want = min(p.filled_qty, max(self._position_qty(p.symbol), 0))
+        if (cur is None or cur.status.terminal) and self.held_for_exit(p):
+            return                          # the exit asked for it to go and is asked again: it sells next (DEC-0071)
         if cur is not None and not cur.status.terminal:
             if cur.qty - cur.filled_qty == want:
                 return
@@ -345,8 +358,12 @@ class OMS:
                 self.b.cancel(p.stop_id)
                 ok, _ = self._confirm_terminal(p.stop_id)
                 if not ok:
+                    if p.exit_hold_stop != p.stop_id:            # the hold starts once per stop: never extended
+                        p.exit_hold_stop, p.exit_hold_until = p.stop_id, self.clock() + EXIT_HOLD_S
                     self._note(p, "exit_deferred", reason, "stop cancel not confirmed")
+                    self._persist(p)
                     return False
+        p.exit_hold_stop, p.exit_hold_until = "", 0.0
         qty = self._stable_position(p.symbol)
         if qty <= 0:
             self._close(p, "stop" if p.sell_ids else reason)
@@ -417,6 +434,9 @@ class OMS:
                 continue
             try:
                 if plan is not None and plan.symbol == sym and plan.active and plan.filled_qty:
+                    if self.held_for_exit(plan):    # DEC-0071: its exit cancelled the stop and is asked again
+                        acts.append(f"held {sym}: stop cancelled for an exit that is due; not replaced")
+                        continue
                     self.ensure_stop(plan)          # resizes or replaces the plan's own stop (cancel confirmed)
                     acts.append(f"protected {sym}: stop for {min(q, plan.filled_qty)} @ {plan.stop}")
                 elif sym in stop_for:

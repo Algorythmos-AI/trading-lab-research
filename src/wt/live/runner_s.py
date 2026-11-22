@@ -692,7 +692,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
 
     made: list[TradePlan] = []                                # plans created by this process today
     oms = OMS(broker, guard=guard, context=context, persist=store.save, on_entry=on_entry, strategy=STRATEGY,
-              sleep=sleep)
+              sleep=sleep, clock=lambda: clock().timestamp())
 
     def nbbo(sym: str) -> list[float] | None:
         try:

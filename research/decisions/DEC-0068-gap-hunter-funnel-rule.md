@@ -180,3 +180,11 @@ From the pull request that carries this note:
   reuses a pool file that already exists, so writing to the same folder would have changed its inputs.
 - The before-switch-on counts (EXP-0053) were taken on the after-close pools: the same build on the same window,
   made later.
+
+### 2026-11-23: an exit whose stop cancel is not confirmed (DEC-0071)
+
+One more difference from the batch simulation, recorded and narrowed by DEC-0071. When an exit cannot confirm its
+stop's cancel, it is asked again on the next poll. Until DEC-0071 takes effect, that poll's reconcile first puts a
+fresh stop back, and the exit has to cancel it too: about a loop and two orders each time. Robot B lost up to two
+such rounds on its end-of-day flattens. With DEC-0071, the stop is not replaced for up to 15 s, so the next poll
+sells. The simulation exits at the bar's open in both cases. No reading of the rule changes.
