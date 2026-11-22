@@ -21,9 +21,10 @@
       "enum": [
         1,
         2,
-        3
+        3,
+        4
       ],
-      "description": "3 adds each lab session's upload delay and rate-limit headroom; 2 adds `lab`, the options lab's tape status; 1 and 2 are still taken."
+      "description": "4 adds `select`, the Radar → Options shadow's status; 3 adds each lab session's upload delay and rate-limit headroom; 2 adds `lab`, the options lab's tape status; 1 to 3 are still taken."
     },
     "run_id": {
       "type": "string",
@@ -278,6 +279,38 @@
               "minimum": 0,
               "maximum": 100000,
               "description": "Sessions (from 2026-11-23) verified past close plus 110 minutes (DEC-0060 point 4)."
+            }
+          }
+        }
+      ]
+    },
+    "select": {
+      "description": "The Radar → Options shadow selection (DEC-0070): each recent session it ran for, in codes, counts, times and flags. A shadow: these are not the published focus names. No symbol, no pick, no free text. Null or absent until the host sends it (version 4).",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "off",
+            "sessions"
+          ],
+          "properties": {
+            "mode": {
+              "const": "shadow"
+            },
+            "off": {
+              "type": "boolean"
+            },
+            "sessions": {
+              "type": "array",
+              "maxItems": 10,
+              "items": {
+                "$ref": "#/definitions/select_session"
+              }
             }
           }
         }
@@ -895,6 +928,189 @@
             }
           ],
           "description": "Sweep batches (up to 100 contracts each) the lab's own request budget skipped. Null before the recorder saved it."
+        }
+      }
+    },
+    "count_or_null": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        }
+      ]
+    },
+    "code_counts": {
+      "type": "object",
+      "maxProperties": 40,
+      "propertyNames": {
+        "pattern": "^[a-z0-9_-]{1,32}$"
+      },
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 100000
+      }
+    },
+    "select_session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session",
+        "radar_status",
+        "run_at",
+        "finished_at",
+        "late",
+        "gate_unset",
+        "radar_bars_ok",
+        "candidates",
+        "universe",
+        "stage1",
+        "picks_from_radar"
+      ],
+      "properties": {
+        "session": {
+          "$ref": "#/definitions/ymd"
+        },
+        "radar_status": {
+          "enum": [
+            null,
+            "ok",
+            "radar_missing",
+            "radar_stale",
+            "radar_invalid"
+          ]
+        },
+        "run_at": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/stamp"
+            }
+          ]
+        },
+        "finished_at": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/stamp"
+            }
+          ]
+        },
+        "late": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "gate_unset": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "radar_bars_ok": {
+          "type": "boolean"
+        },
+        "candidates": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "in_scope_symbols",
+            "out_of_scope_symbols",
+            "unknown_lists",
+            "candidates",
+            "core",
+            "discovered",
+            "rejected"
+          ],
+          "properties": {
+            "in_scope_symbols": {
+              "$ref": "#/definitions/count_or_null"
+            },
+            "out_of_scope_symbols": {
+              "$ref": "#/definitions/count_or_null"
+            },
+            "unknown_lists": {
+              "$ref": "#/definitions/count_or_null"
+            },
+            "candidates": {
+              "$ref": "#/definitions/count_or_null"
+            },
+            "core": {
+              "$ref": "#/definitions/count_or_null"
+            },
+            "discovered": {
+              "$ref": "#/definitions/count_or_null"
+            },
+            "rejected": {
+              "$ref": "#/definitions/code_counts"
+            }
+          }
+        },
+        "universe": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "core",
+            "candidates_gated",
+            "admitted",
+            "rejected"
+          ],
+          "properties": {
+            "core": {
+              "$ref": "#/definitions/count_or_null"
+            },
+            "candidates_gated": {
+              "$ref": "#/definitions/count_or_null"
+            },
+            "admitted": {
+              "$ref": "#/definitions/count_or_null"
+            },
+            "rejected": {
+              "$ref": "#/definitions/code_counts"
+            }
+          }
+        },
+        "stage1": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "names",
+            "data_valid",
+            "ranked",
+            "eligible",
+            "picked"
+          ],
+          "properties": {
+            "names": {
+              "$ref": "#/definitions/count_or_null"
+            },
+            "data_valid": {
+              "$ref": "#/definitions/count_or_null"
+            },
+            "ranked": {
+              "$ref": "#/definitions/count_or_null"
+            },
+            "eligible": {
+              "$ref": "#/definitions/count_or_null"
+            },
+            "picked": {
+              "$ref": "#/definitions/count_or_null"
+            }
+          }
+        },
+        "picks_from_radar": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
         }
       }
     }

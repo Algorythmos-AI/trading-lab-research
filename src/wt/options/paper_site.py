@@ -38,11 +38,12 @@ import yaml
 
 from wt.core.config import CONFIG_DIR, DATA_DIR, ROOT, STATE_DIR
 from wt.ops import publish, safeio
-from wt.options import lab_tape_status
+from wt.options import lab_tape_status, select_status
 from wt.options import arms_verdict, paper_manual, review
 
 SCHEMA_ID = "stocksdelta/paper-options"
-SCHEMA_VERSION = 3                # 2 adds `lab`; 3 adds the lab's upload delay and headroom; older sites get less
+SCHEMA_VERSION = 4                # 2 adds `lab`; 3 adds the lab's upload delay and headroom; 4 adds `select`, the
+                                  # Radar → Options shadow (DEC-0070); older sites get less
 LAB_V3_KEYS = ("uploads_late",)   # the `lab` block's version 3 keys, and each session's below
 LAB_SESSION_V3_KEYS = ("upload_after_close_min", "upload_late", "rate_limit_min_share", "rate_limit_low",
                        "rate_limit_429", "budget_refused")
@@ -318,14 +319,23 @@ def build(now: dt.datetime, run_id: str, journal: Path = JOURNAL, state: Path = 
         lab = None
     if lab is not None:
         doc["lab"] = lab
+    try:
+        shadow = select_status.block()
+    except Exception:  # noqa: BLE001 (the shadow's status must never stop the paper history either)
+        shadow = None
+    if shadow is not None:
+        doc["select"] = shadow
     return doc
 
 
 def as_version(doc: Mapping[str, Any], version: int) -> dict[str, Any]:
-    """The document in the newest format the site takes: version 2 has `lab` without the version 3 keys, version 1
-    has no `lab`."""
+    """The document in the newest format the site takes: version 3 has no `select`, version 2 has `lab` without the
+    version 3 keys, version 1 has no `lab`."""
     if version >= SCHEMA_VERSION:
         return dict(doc)
+    doc = {k: v for k, v in doc.items() if k != "select"}
+    if version == 3:
+        return {**doc, "schema_version": 3}
     if version == 2:
         out = {**doc, "schema_version": 2}
         lab = doc.get("lab")

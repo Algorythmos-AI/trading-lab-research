@@ -31,7 +31,7 @@ import {
 import type { OptionsEdition } from "@/lib/options.types";
 import type { Trade } from "@/lib/journal";
 import { loadRadarPipeline } from "@/lib/radar-pipeline-run";
-import { listRadarDates, loadJournal, loadOptions, loadRadar, pageTime } from "@/lib/snapshot";
+import { listRadarDates, loadJournal, loadOptions, loadPaperOptions, loadRadar, pageTime } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Radar" };
@@ -39,14 +39,16 @@ export const metadata = { title: "Radar" };
 export default async function RadarPage({ searchParams }: { searchParams: Promise<{ d?: string | string[] }> }) {
   const raw = (await searchParams).d;
   const date = typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : undefined;
-  const [result, dates, now, journal] = await Promise.all([loadRadar(date), listRadarDates(), pageTime(), loadJournal()]);
+  const [result, dates, now, journal, paper] = await Promise.all([loadRadar(date), listRadarDates(), pageTime(), loadJournal(), loadPaperOptions()]);
+  // The host's Radar → Options shadow status (paper-options `select`); null when the host has sent none.
+  const shadow = paper.status === "ok" ? (paper.doc.select ?? null) : null;
   // One small summary the 10-minute cron writes; with none, the card draws the schedule alone.
   const pipeline = await loadRadarPipeline(now);
   if (result.status !== "ok") {
     return (
       <>
         <PageHeading title="Radar" intro="Your pre-market brief: the day, where SPY opens against your levels, and the names you trade." />
-        <RadarSchedulePanel file={pipeline.file} now={pipeline.now} />
+        <RadarSchedulePanel file={pipeline.file} now={pipeline.now} shadow={shadow} />
         <NoRadar status={result.status} date={date} />
       </>
     );
@@ -63,7 +65,7 @@ export default async function RadarPage({ searchParams }: { searchParams: Promis
         title="Radar"
         intro="Your pre-market brief: the day, where SPY opens against your levels, and the names you trade. Research only; nothing here is an order."
       />
-      <RadarSchedulePanel file={pipeline.file} now={pipeline.now} />
+      <RadarSchedulePanel file={pipeline.file} now={pipeline.now} shadow={shadow} />
       <EditionPicker dates={dates} current={r.edition_date} />
       <RadarEditionNotice editionDate={r.edition_date} now={now} live={!date} />
       <PaneBoundary name="The brief">
