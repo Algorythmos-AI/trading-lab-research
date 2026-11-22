@@ -83,3 +83,34 @@ def test_a_stage_whose_scan_had_no_data_says_so():
     assert "universe" in pr.scan_note(NS(universe=0, snapshot_symbols=0))["scan_failed"]
     assert "pre-market bar" in pr.scan_note(NS(universe=4300, snapshot_symbols=0))["scan_failed"]
     assert pr.scan_note(NS(universe=4300, snapshot_symbols=800, kept=0)) == {}       # nothing gapped: a real morning
+
+
+# ---- Gap Hunter's pool of the morning (DEC-0068): built at 09:25 and saved where the stock desk reads it ----------------
+def test_the_live_pool_is_saved_where_the_desk_reads_it(tmp_path, monkeypatch):
+    import datetime as dt
+
+    from wt.live import runner_s
+    from wt.scanner import pool as P
+    assert runner_s.POOL_DIR == P.LIVE_POOL_DIR != P.POOL_DIR          # never the forward test's after-close pool
+    assert runner_s.PM_BARS_DIR == P.LIVE_PM_BARS_DIR != P.PM_BARS_DIR
+    assert pr.LIVE_POOL_AT == "09:25" and P.PoolConfig().snapshot == ("09:00", "09:25")
+    monkeypatch.setattr(pr, "LIVE_POOL_DIR", tmp_path / "candidates_live")
+    monkeypatch.setattr(pr, "LIVE_PM_BARS_DIR", tmp_path / "pm_bars_live")
+    d = dt.date(2026, 11, 23)
+    pmb = pd.DataFrame({"symbol": ["ABC"], "t": [pd.Timestamp("2026-11-23 14:00", tz="UTC")], "o": [5.0], "h": [5.1],
+                        "l": [4.9], "c": [5.0], "v": [1000]})
+    assert pr.live_pool(d, lambda: (pd.DataFrame({"date": [str(d)], "symbol": ["ABC"]}), pmb, P.PoolStats()))
+    assert list(pd.read_parquet(tmp_path / "candidates_live" / f"{d}.parquet").symbol) == ["ABC"]
+    assert (tmp_path / "pm_bars_live" / f"{d}.parquet").exists()
+
+
+def test_a_live_pool_that_cannot_be_built_says_so_and_never_raises(tmp_path, monkeypatch):
+    import datetime as dt
+    monkeypatch.setattr(pr, "LIVE_POOL_DIR", tmp_path / "candidates_live")
+
+    def broken():
+        raise TimeoutError("no data")
+    assert pr.live_pool(dt.date(2026, 11, 23), broken) is False
+    assert not (tmp_path / "candidates_live").exists()
+    src = Path(pr.__file__).read_text()                               # and the routine pages when it is False
+    assert 'if not live_pool(' in src and '"routine:live-pool"' in src

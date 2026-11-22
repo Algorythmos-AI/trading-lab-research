@@ -1,7 +1,7 @@
 # EXP-0053: Gap Hunter, the stock desk's funnel rule on paper (DEC-0068).
 # A forward paper experiment: no development-span or holdout data is read to produce its result.
 experiment: EXP-0053
-status: registered              # runs from the first session after HYP-0071 is switched on by a dated note in DEC-0066
+status: registered              # HYP-0071 switched on by DEC-0066's note of 2026-11-22; trades count from the first session after that release reaches the host
 decision: DEC-0068
 hypotheses: [HYP-0071]
 trials: 1                       # family S; the global count stays at 87
@@ -23,6 +23,6 @@ measures:
   execution:
     - fill minus trigger, and fill against the NBBO journaled at the decision, in cents and in R
     - signals blocked, by blocker
-before_switch_on: DEC-0068 "What must be true before it is switched on"
+before_switch_on: DEC-0068 "What must be true before it is switched on"   # met 2026-11-22; the counts: before_switch_on_counts.json
 reports:
   never: [a setup name, a headline, a catalyst category]   # AGENTS.md data classes; trials are named by id

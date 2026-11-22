@@ -49,6 +49,8 @@ UNITS = (
     "data/pm",
     "data/pm_bars",
     "data/candidates",
+    "data/candidates_live",                      # Gap Hunter's 09:25 pools (and their pre-market bars)
+    "data/pm_bars_live",
     "data/minute",
     "data/signal_spreads.json",
     "data/intraday_volume_curve_2019.npy",       # without it the jobs try to rebuild it from research data

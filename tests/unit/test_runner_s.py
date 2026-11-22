@@ -968,12 +968,12 @@ def test_a_rule_that_is_not_switched_on_orders_nothing(env, monkeypatch):
     assert b.placed == []
 
 
-def test_the_committed_config_switches_nothing_on_and_an_unreadable_one_is_empty(tmp_path):
+def test_the_committed_config_switches_on_gap_hunter_only_and_an_unreadable_one_is_empty(tmp_path):
     import importlib
     real = importlib.import_module("wt.live.runner_s")
     assert real.switched_on.__module__ == "wt.live.runner_s"
     from wt.core.config import CONFIG_DIR
-    assert runner_s.switched_on(CONFIG_DIR / "risk.yaml") == frozenset()      # paused by the owner on 2026-11-20
+    assert runner_s.switched_on(CONFIG_DIR / "risk.yaml") == frozenset({"HYP-0071"})   # DEC-0066, 2026-11-22
     good = tmp_path / "risk.yaml"
     good.write_text("S:\n  switched_on: [HYP-0070, HYP-0099]\n")
     assert runner_s.switched_on(good) == frozenset({"HYP-0070", "HYP-0099"})

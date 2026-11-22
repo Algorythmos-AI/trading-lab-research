@@ -193,6 +193,7 @@ site("scripts/forward_test.py::Context.ensure_pool::'forward:scan-thin' | 'Forwa
 site("scripts/premarket_routine.py::run::'routine:scan-failed' | 'Dry run: the scan had no data'",
      {"d": T, "hhmm": T, "failed": {"scan_failed": T}})
 site("scripts/premarket_routine.py::run::'routine:sip-fallback' | 'Dry run: no consolidated bars'", {"d": T, "hhmm": T})
+site("scripts/premarket_routine.py::run::'routine:live-pool' | 'Gap Hunter: no morning pool'", {})
 RB = "src/wt/live/runner_b.py::_session"
 site(f"{RB}.adopt_orphan::'paper-b:orphan' | 'Paper B adopted a position it did not open'", {"qty": N})
 site(f"{RB}.check_positions::f'paper-b:out-of-mandate:{{sym}}' | \"Position outside strategy B's mandate\"",

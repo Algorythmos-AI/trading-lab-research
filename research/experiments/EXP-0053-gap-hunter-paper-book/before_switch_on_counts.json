@@ -1,0 +1,41 @@
+{
+ "experiment": "EXP-0053",
+ "what": "scripts/gap_hunter_counts.py on the host pools, 2026-09-01 to 2026-11-20, run 2026-11-21 on the host at 7aed8dc2 (counts only: no R, no price, no symbol)",
+ "owner_saw": "2026-11-22",
+ "totals": {
+  "sessions": 40,
+  "primary": 39,
+  "no_primary": {
+   "no_name_passed": 1
+  },
+  "day_code": {
+   "e2": 2,
+   "e4": 3
+  },
+  "e1": {
+   "order": 10,
+   "reached": 0,
+   "fill": 0
+  },
+  "e2": {
+   "order": 4,
+   "reached": 2,
+   "fill": 2
+  },
+  "e3": {
+   "order": 0,
+   "reached": 0,
+   "fill": 0
+  },
+  "e4": {
+   "order": 7,
+   "reached": 5,
+   "fill": 3
+  },
+  "day": {
+   "reached": 5,
+   "fill": 3
+  }
+ },
+ "spread_must": "not checked (minute bars carry no quotes)"
+}
