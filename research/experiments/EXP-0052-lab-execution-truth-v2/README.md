@@ -26,6 +26,8 @@ day, and calm or fast tape; a cell with fewer than 8 sessions or 30 entries is b
 
 - OPRA condition codes left out: EXP-0041's list of 2026-11-19, unchanged.
 - Accepted: 2026-11-20 (owner, in chat), before the session of 2026-11-20.
-- First v2 session: the first session whose manifest says `"recorder": 2` and that was recorded after the
-  acceptance pull request reached the host (its `code` names a commit that contains it); dated here once it exists.
+- First v2 session: 2026-11-20 (manifest `"recorder": 2`, code `2139452b`, the acceptance on the host from 05:32 UTC).
+  Shadow session 1 of 5. Every name fresh from 09:30:10; no stale run; tick 0 was skipped as a late start because the
+  run woke 3 ms after 09:30:00, so the session is partial by one tick (the recorder runs a tick it wakes within 1 s
+  of, from the release after it).
 - Counting starts: (none yet)

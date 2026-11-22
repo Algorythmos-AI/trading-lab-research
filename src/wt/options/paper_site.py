@@ -38,10 +38,11 @@ import yaml
 
 from wt.core.config import CONFIG_DIR, DATA_DIR, ROOT, STATE_DIR
 from wt.ops import publish, safeio
+from wt.options import lab_tape_status
 from wt.options import arms_verdict, paper_manual, review
 
 SCHEMA_ID = "stocksdelta/paper-options"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2                # 2 adds `lab`; a site that takes only 1 is sent 1 without it
 SCHEMA_PATH = ROOT / "dashboard" / "src" / "lib" / "paper-options.schema.json"
 JOURNAL = DATA_DIR / "live" / "options_journal.jsonl"
 OPT = STATE_DIR / "options"
@@ -308,7 +309,20 @@ def build(now: dt.datetime, run_id: str, journal: Path = JOURNAL, state: Path = 
     arms = arms_block(state, fee)
     if arms is not None:
         doc["arms"] = arms
+    try:
+        lab = lab_tape_status.block(e)
+    except Exception:  # noqa: BLE001 (the lab's status line must never stop the paper history)
+        lab = None
+    if lab is not None:
+        doc["lab"] = lab
     return doc
+
+
+def as_version(doc: Mapping[str, Any], version: int) -> dict[str, Any]:
+    """The document in the newest format the site takes: version 1 has no `lab`."""
+    if version >= SCHEMA_VERSION:
+        return dict(doc)
+    return {**{k: v for k, v in doc.items() if k != "lab"}, "schema_version": 1}
 
 
 def body(doc: Mapping[str, Any]) -> bytes:
@@ -382,8 +396,12 @@ def _run(now: dt.datetime, dry_run: bool, env: Mapping[str, str], journal: Path,
     if not due(doc, now, out / "sent.json"):
         return 0, f"{said}; unchanged, not sent"
     bypass = env.get("VERCEL_AUTOMATION_BYPASS_SECRET")
-    if site_accepts(url, bypass, now, out / "site_accepts.json") < SCHEMA_VERSION:
+    takes = site_accepts(url, bypass, now, out / "site_accepts.json")
+    if takes < 1:
         return 0, f"{said}; the dashboard does not take the document yet, not sent"
+    if takes < SCHEMA_VERSION:
+        data = body(as_version(doc, takes))
+        said += f"; sent as version {takes} (the site does not take the lab block yet)"
     ok, detail = publish.send(data, url, secret, bypass, tries=SEND_TRIES, key_id=env.get("DASHBOARD_KEY_ID"))
     if not ok:
         return 1, f"{said}; sent: False ({publish.error_code(detail)})"

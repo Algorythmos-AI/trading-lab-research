@@ -463,7 +463,7 @@ export const loadPaperOptions = cache(async (): Promise<PaperOptionsResult> => {
     const flags = await fixtureFlags();
     if (flags.has("paper-off") || flags.has("empty")) return { status: "missing" };
     if (flags.has("error")) return { status: "error" };
-    const mod = await import("../../test/fixtures/paper-options.v1.json");
+    const mod = await import("../../test/fixtures/paper-options.v2.json");
     return { status: "ok", doc: fixturePaperOptions((mod.default ?? mod) as unknown as PaperOptions, flags), source: "fixture" };
   }
   try {

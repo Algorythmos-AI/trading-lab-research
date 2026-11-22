@@ -589,3 +589,17 @@ def test_a_skipped_pull_still_removes_an_interrupted_ones_parts(tmp_path: Path) 
     out = recorder.after_close(rec, api, {}, START, close, clock)
     assert out["skipped"].startswith("past close") and out["redone_parts_removed"] == 1
     assert not list(rec.folder.glob("print-*.parquet"))
+
+
+def test_a_run_that_wakes_a_few_milliseconds_late_still_runs_tick_zero(tmp_path: Path) -> None:
+    """2026-11-20: the sleep to 09:30 returned 3 ms late and tick 0 was written off as a late start."""
+    clock = Clock(START + dt.timedelta(milliseconds=3))
+    rec = make(tmp_path, clock, Alpaca(clock))
+    rec.run(START, START + dt.timedelta(minutes=2))
+    doc = rec.finish({})
+    assert doc["ticks_down"] == 0 and doc["ticks_run"] == doc["ticks_scheduled"] == 24
+    assert not any(r["reason"].startswith("not running") for r in rows(rec.folder, "gap"))
+    late = Clock(START + dt.timedelta(seconds=3))                       # truly late for tick 0: it is down
+    rec2 = make(tmp_path / "b", late, Alpaca(late))
+    rec2.run(START, START + dt.timedelta(minutes=2))
+    assert rec2.finish({})["ticks_down"] == 1

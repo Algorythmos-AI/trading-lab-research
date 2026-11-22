@@ -5,6 +5,7 @@ import { sign } from "@/lib/hmac";
 import type { PaperOptions } from "@/lib/paper-options.types";
 import { isPaperOptions, PAPER_OPTIONS_SCHEMA, validatePaperOptions } from "@/lib/validate";
 import paperJson from "./fixtures/paper-options.v1.json";
+import paperV2 from "./fixtures/paper-options.v2.json";
 
 // The paper options history (DEC-0057): every closed paper option trade, sent by the trading host as a SAFE document
 // the Paper options page draws.
@@ -203,6 +204,27 @@ describe("the health report", () => {
     const h = paperOptionsHealth({ status: "ok", doc: d, source: "blob" });
     expect(h).toEqual({ status: "ok", accepts: PAPER_OPTIONS_ACCEPTS, run_id: d.run_id, as_of: d.as_of, schema_version: 1 });
     expect(JSON.stringify(h)).not.toMatch(/SPY|HYP|usd|trades/);
-    expect(paperOptionsHealth({ status: "missing" })).toMatchObject({ status: "missing", accepts: 1, run_id: null });
+    expect(paperOptionsHealth({ status: "missing" })).toMatchObject({ status: "missing", accepts: 2, run_id: null });
+  });
+});
+
+
+describe("version 2: the options lab's tape status (DEC-0067)", () => {
+  it("takes version 1 without the block and version 2 with it", () => {
+    expect(validatePaperOptions(structuredClone(paperJson)).ok).toBe(true);
+    expect(validatePaperOptions(structuredClone(paperV2)).ok).toBe(true);
+  });
+
+  it("refuses a name, a contract or an unknown field in the block", () => {
+    const bad = (mutate: (d: Record<string, any>) => void) => {      // eslint-disable-line @typescript-eslint/no-explicit-any
+      const d = structuredClone(paperV2) as Record<string, any>;     // eslint-disable-line @typescript-eslint/no-explicit-any
+      mutate(d);
+      return validatePaperOptions(d).ok;
+    };
+    expect(bad((d) => (d.lab.sessions[0].symbol = "AAA"))).toBe(false);
+    expect(bad((d) => (d.lab.names = ["AAA"]))).toBe(false);
+    expect(bad((d) => (d.lab.sessions[0].why_not = ["because"]))).toBe(false);
+    expect(bad((d) => (d.lab.sessions[0].coverage = 1.5))).toBe(false);
+    expect(bad((d) => (d.schema_version = 3))).toBe(false);
   });
 });

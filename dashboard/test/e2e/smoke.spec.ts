@@ -211,11 +211,13 @@ test("the stock robot's old address lands on the Gap Hunter page, which shows th
   expect(errors).toEqual([]);
 });
 
-test("the Paper page shows two books and nothing of the closed hand-traded account", async ({ page }) => {
+test("the Paper page shows two books, the lab's tape, and nothing of the closed hand-traded account", async ({ page }) => {
   await page.goto("/paper");
   const bar = page.getByRole("navigation", { name: "On this page" });
-  await expect(bar.getByRole("link")).toHaveCount(2);
+  await expect(bar.getByRole("link")).toHaveCount(3);
   await expect(page.getByRole("heading", { level: 2, name: "Clone bot" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Options lab", exact: true })).toBeVisible();
+  await expect(page.locator("[data-lab-session]").first()).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: "Research arms" })).toBeVisible();
   await expect(page.getByText("Two separate books.")).toBeVisible();
   await expect(page.getByText(/My paper trades|hand-placed/i)).toHaveCount(0);
