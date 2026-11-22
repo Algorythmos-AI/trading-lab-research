@@ -93,10 +93,10 @@ def test_the_paper_document_carries_it_and_a_version_1_site_gets_it_without(tmp_
     doc = paper_site.build(paper_site.dt.datetime(2026, 11, 21, tzinfo=paper_site.dt.UTC), "r", tmp_path / "j.jsonl",
                            tmp_path / "state", {"costs": {"fee_per_contract_each_way": 0.65}},
                            {"WT_LAB_TAPE": str(tmp_path / "tape")})
-    assert doc["schema_version"] == 3 and len(doc["lab"]["sessions"]) == 2 and paper_site.validate(doc) == []
+    assert doc["schema_version"] == 4 and len(doc["lab"]["sessions"]) == 2 and paper_site.validate(doc) == []
     old = paper_site.as_version(doc, 1)
     assert old["schema_version"] == 1 and "lab" not in old and paper_site.validate(old) == []
-    assert paper_site.as_version(doc, 3) == doc
+    assert paper_site.as_version(doc, 4) == doc
 
 
 def test_a_broken_tape_never_stops_the_paper_history(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

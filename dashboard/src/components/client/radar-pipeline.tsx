@@ -32,6 +32,7 @@ import {
   type StageState,
   type Who,
 } from "@/lib/radar-pipeline";
+import { RADAR_STATUS_WORDS, type SelectBlock, shadowView, type ShadowView, topRejects } from "@/lib/select-shadow";
 import { cn } from "@/lib/utils";
 
 const SYD = "Australia/Sydney";
@@ -293,6 +294,89 @@ function FunnelCard({ session, radarMorning, funnel }: { session: string; radarM
   );
 }
 
+const SHADOW_STATE: Record<ShadowView["state"], { tone: Tone; words: string }> = {
+  ran: { tone: "good", words: "Ran" },
+  not_due: { tone: "neutral", words: "Not due yet" },
+  running: { tone: "neutral", words: "Running" },
+  overdue: { tone: "bad", words: "No run recorded" },
+  off: { tone: "neutral", words: "Switched off on the host" },
+  no_record: { tone: "neutral", words: "No record" },
+};
+
+const n = (v: number | null | undefined) => (typeof v === "number" ? String(v) : "—");
+
+/**
+ * The Radar → Options shadow (DEC-0070): the same session's Radar candidates through the gate into the desk's frozen
+ * Stage 1 rules, run on the host at 06:45 New York. Counts and codes only, never a name, and never the published focus:
+ * it is drawn apart from the stages above and changes neither the headline nor the on-time record.
+ */
+function ShadowCard({ view }: { view: ShadowView }) {
+  const r = view.run;
+  const st = SHADOW_STATE[view.state];
+  return (
+    <section aria-label="Shadow selection" data-shadow-card data-shadow-state={view.state} className="border-border grid gap-2 rounded-lg border border-dashed p-3">
+      <h3 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+        Shadow selection for {weekDate(view.session)} · not the published focus
+      </h3>
+      {r ? (
+        <>
+          <ul className="grid gap-1.5 sm:grid-cols-3" aria-label="Shadow stages">
+            <li data-shadow-stage="candidates" className="border-border rounded-lg border px-2 py-2">
+              <div className="text-sm">
+                Candidates <span className="font-mono text-lg font-semibold tabular-nums">{n(r.candidates.discovered)}</span>
+              </div>
+              <div className="text-muted-foreground text-xs leading-tight">
+                {`new to the desk, of ${n(r.candidates.in_scope_symbols)} on the Radar's options lists`}
+              </div>
+            </li>
+            <li data-shadow-stage="universe" className="border-border rounded-lg border px-2 py-2">
+              <div className="text-sm">
+                Gate <span className="font-mono text-lg font-semibold tabular-nums">{n(r.universe.admitted)}</span> of{" "}
+                <span className="font-mono tabular-nums">{n(r.universe.candidates_gated)}</span> kept
+              </div>
+              <div className="text-muted-foreground text-xs leading-tight">
+                {topRejects(r.universe.rejected).map((x) => `${x.code.replaceAll("_", " ")} ${x.count}`).join(" · ") || "nothing rejected"}
+              </div>
+            </li>
+            <li data-shadow-stage="stage1" className="border-border rounded-lg border px-2 py-2">
+              <div className="text-sm">
+                Stage 1 <span className="font-mono text-lg font-semibold tabular-nums">{n(r.stage1.ranked)}</span> →{" "}
+                <span className="font-mono text-lg font-semibold tabular-nums">{n(r.stage1.picked)}</span> picked
+              </div>
+              <div className="text-muted-foreground text-xs leading-tight">
+                {r.picks_from_radar > 0 ? `${r.picks_from_radar} from the Radar` : "all from the desk's 12"}
+              </div>
+            </li>
+          </ul>
+          <div className="flex flex-wrap gap-1.5">
+            <Chip tone={r.radar_status === "ok" ? "good" : "neutral"}>{RADAR_STATUS_WORDS[r.radar_status ?? ""] ?? "Radar: no status"}</Chip>
+            {r.gate_unset ? <Chip tone="neutral">Gate thresholds not set: no Radar name can join yet</Chip> : null}
+            {r.late ? <Chip tone="bad">Late: after 08:40 New York</Chip> : null}
+            {!r.radar_bars_ok ? <Chip tone="bad">The candidates&apos; bars could not be fetched</Chip> : null}
+            {r.finished_at ? <Chip tone="neutral">Finished {both(Date.parse(r.finished_at))}</Chip> : null}
+          </div>
+        </>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <Chip tone={st.tone}>{st.words}</Chip>
+          <span className="text-muted-foreground text-xs">
+            {view.state === "not_due" && view.startsAt !== null
+              ? `It runs on the trading host at ${both(view.startsAt)}.`
+              : view.state === "no_record"
+                ? "The trading host has not sent a shadow record for this session."
+                : view.state === "off"
+                  ? "The host's off switch is set; it runs nothing until it is removed."
+                  : view.state === "running"
+                    ? "It reads the Radar until 07:45 New York, then runs once."
+                    : "The host sent no run for this session."}
+          </span>
+        </div>
+      )}
+      <p className="text-muted-foreground text-xs">A shadow run: it publishes nothing. The Options page&apos;s four names are still the after-close pick.</p>
+    </section>
+  );
+}
+
 function StageList({ rows }: { rows: readonly StageRow[] }) {
   return (
     <details className="group">
@@ -329,7 +413,7 @@ export function pipelineView(file: PipelineFile | null, nowMs: number) {
   return { days, obs, rows, headline, text: headlineText(headline, days, rows, nowMs), reliability: reliabilityOf(days, file, nowMs), stale: pipelineStale(file, nowMs), mark: nowBefore(rows, nowMs) };
 }
 
-export function RadarPipelineView({ file, nowMs }: { file: PipelineFile | null; nowMs: number }) {
+export function RadarPipelineView({ file, nowMs, shadow }: { file: PipelineFile | null; nowMs: number; shadow?: SelectBlock | null }) {
   const v = pipelineView(file, nowMs);
   return (
     <div className="grid gap-4" data-radar-pipeline data-headline={v.headline.kind}>
@@ -353,13 +437,14 @@ export function RadarPipelineView({ file, nowMs }: { file: PipelineFile | null; 
         <ReliabilityStrip r={v.reliability} />
         <FunnelCard session={v.days.focus} radarMorning={v.days.previous} funnel={v.obs?.funnel ?? null} />
       </div>
+      {shadow !== undefined ? <ShadowCard view={shadowView(shadow, v.days.focus, nowMs)} /> : null}
     </div>
   );
 }
 
 /** The pipeline on the Radar page. `serverNow` is the server render's clock (ms). */
-export function RadarPipelineLive({ file, serverNow }: { file: PipelineFile | null; serverNow: number }) {
+export function RadarPipelineLive({ file, serverNow, shadow }: { file: PipelineFile | null; serverNow: number; shadow?: SelectBlock | null }) {
   // Null in the server render and through hydration: the server's own time, so both draw the same thing.
   const now = useSyncExternalStore(everyTick, () => pipelineClock(serverNow), () => null) ?? serverNow;
-  return <RadarPipelineView file={file} nowMs={now} />;
+  return <RadarPipelineView file={file} nowMs={now} shadow={shadow} />;
 }
