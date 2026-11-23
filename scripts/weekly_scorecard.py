@@ -13,6 +13,9 @@ Compares FORWARD evidence with what the frozen backtests predict, and checks pap
   * Sleeve S (data/live/smallcap_journal.jsonl) against the forward test's record of the same rule (EXP-0051,
     measures.agreement): trades on each side, the same name on the same session, and the difference in entry, exit
     class and R for those pairs. Counts and differences only; the trials are named by id.
+  * The stock desk's stops (DEC-0066, DEC-0073) and Gap Hunter's paper R beside its cost haircut (DEC-0074): the
+    trade count, mean paper R, H1 R and H2 R with session-resampled 95% intervals, and the haircut in US$ against
+    the realised US$. Counts, R and US$ totals only.
 Writes var/scorecards/scorecard_<date>.md (and prints it), dated by the US/Eastern session date: the job fires on
 Saturday morning in Sydney, which is still Friday's session in New York. Usage: python scripts/weekly_scorecard.py
 """
@@ -29,7 +32,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from wt.analytics import b_replay, funnel_agreement, g2, s_agreement  # noqa: E402
-from wt.risk import execution_stops, stop_rule  # noqa: E402
+from wt.risk import cost_haircut, execution_stops, stop_rule  # noqa: E402
 from wt.core.clock import ET  # noqa: E402
 from wt.core.config import DATA_DIR, FORWARD_LEDGER, ROOT, ROUTINE_DIR, SCORECARD_DIR, STATE_DIR  # noqa: E402
 
@@ -227,6 +230,15 @@ def s_stop_lines(today: dt.date) -> list[str]:
         return [f"- The stock desk's stops: not available this week ({e.__class__.__name__})."]
 
 
+def s_haircut_lines() -> list[str]:
+    """Gap Hunter's paper R beside the cost haircut DEC-0074 fixed before its first trade, on the stock desk's own
+    journal. A report that gates nothing; a failure costs these lines only."""
+    try:
+        return cost_haircut.lines(cost_haircut.summary(s_agreement.read_rows(JOURNAL_S)))
+    except Exception as e:  # noqa: BLE001
+        return [f"- Gap Hunter's cost haircut: not available this week ({e.__class__.__name__})."]
+
+
 def sleeve_s(fwd: list[dict]) -> list[str]:
     """Section 5: sleeve S against the forward test's record of the same rule (EXP-0051, measures.agreement).
     A description in counts and differences: any failure here costs the scorecard this section and nothing else."""
@@ -344,6 +356,7 @@ def main(now: dt.datetime | None = None) -> str:
           *agreement(),
           *sleeve_s(fwd),
           *s_stop_lines(today),
+          *s_haircut_lines(),
           "", "_Rules are frozen; any change requires a new decision record (research/decisions)._"]
     md = "\n".join(L) + "\n"
     out = SCORECARD_DIR / f"scorecard_{today}.md"

@@ -569,3 +569,17 @@ blind editor kept each, changed it, or put it to the owner, as marked:
   with their reason).
 - If the read does not support both HYP-0051 and HYP-0053, or the experiment ends early or is unreadable, the
   selection's scoring is replaced by the fixed rule, as section 9 says.
+
+## Note on DEC-0070 (added 2026-11-23)
+
+DEC-0070, accepted on 2026-11-23 before the first counted session, amends sections 1, 2 and 6 and EXP-0032's
+`config.yaml`. No outcome of any selection was viewed to choose the changes.
+- **Section 1:** two early ends are added: a change to `config/options_universe.yaml` after the first counted session,
+  and a change to `radar_candidates.py` or `universe.py` not named as a non-change.
+- **Section 2:** "each of the twelve names" reads "each name of S's universe". Picked and the rest are taken over S's
+  whole universe (the owner's choice).
+- **HYP-0053's fixed set** stays over the desk's 12 (the owner's choice).
+- **Sessions on the 12 alone** are counted like any other.
+- **Section 6:** the switch (DEC-0048) must publish card fields for every universe name.
+
+The blind rule (section 8) covers Radar names.

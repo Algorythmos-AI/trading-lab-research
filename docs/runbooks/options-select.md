@@ -49,6 +49,28 @@ A **clean session** for DEC-0046 section 7's five has all four of these:
 It is an operational gate, not evidence of skill. A session on the 12 alone (the Radar missing or stale) is still
 clean, and says so.
 
+## Setting the gate's thresholds (DEC-0070 section 3)
+
+Each run records every candidate's gate facts in `universe.json` (version 2), whether the thresholds are set or not:
+- the edition's avoid and risk flags;
+- Stage 1's validity;
+- D's close and the median dollar volume;
+- the chain facts;
+- whether the next report is known, and whether a report falls in the hold.
+
+After the shadow sessions, the counts for the dated amendment come from:
+
+```
+.venv/bin/python scripts/options_universe_frequencies.py
+```
+```
+.venv/bin/python scripts/options_universe_frequencies.py --price-min 10 --dollar-volume-min 5e7 --ntm-strikes-min 6 --volume-min 1000 --spread-max-pct 0.15
+```
+
+The first prints how many candidate-sessions each threshold value keeps on its own. The second prints, for one full
+set of values, how many names each session would admit before the cap. Choose the values from those counts only,
+never from how any name did afterwards. The output holds counts only, no symbols.
+
 ## When something goes wrong
 
 | Seen | Meaning | Do |

@@ -478,3 +478,12 @@ While a rule above, or a threshold, leaves a name's deciding check undetermined,
 `unclassified`, with the checks and limits that left it open, and every measured value is still reported, so the
 frequencies the thresholds will be frozen from can be counted. Reserves are not classified while the thresholds are
 not set.
+
+## Note on DEC-0070 (added 2026-11-23)
+
+DEC-0070, accepted on 2026-11-23, amends section 1 and section 3's timing:
+- **The universe for S** is the desk's 12 followed by at most 8 Radar names that pass its gate. While the gate's
+  thresholds are unset, it is the 12.
+- **Stage 1 for S runs at 06:45 New York on S**, after the Radar's build, on the bundle for D.
+
+Every Stage 1 rule, weight, tie-break and frozen value, `config/options_select.yaml` and its params_sha are unchanged.

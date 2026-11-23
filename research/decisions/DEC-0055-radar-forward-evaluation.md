@@ -242,3 +242,15 @@ If they are not all met by 2027-02-28, the registration lapses with no session c
 - trading-options-funnel adds the skill bundle's hash and the symbol directory to the radar seal, seals the daily
   receipt listing and builds the analysis code; the dashboard keeps radar edition copies and lists them to the research
   key (preconditions 2, 3 and 5).
+
+## Note on DEC-0070 (added 2026-11-23, before this record is accepted)
+
+DEC-0070, accepted on 2026-11-23, makes three changes here:
+- **HYP-0067 (RADAR-SMALL-1D) is withdrawn.** The Radar is for options only, and SMALL CAP MOMENTUM is a stock list,
+  Gap Hunter's ground (DEC-0068).
+- **Family R totals 2:** HYP-0065 and HYP-0066. How HYP-0066 is read without HYP-0067 (the Holm step it shared) is for this record's accepting change to state.
+- **Section 7's order is replaced:** the Radar supplies names beyond the 12 through DEC-0070's gate, not only after
+  HYP-0065 is supported.
+
+This record's other sections stand as proposed. Its accepting change rewrites the trials table and EXP-0038's config
+without HYP-0067.

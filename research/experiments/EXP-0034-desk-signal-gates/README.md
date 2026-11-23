@@ -228,3 +228,20 @@ DEC-0052's rule as written; everything DEC-0052 lists as seen (DEC-0053, "What h
   experiment's window starts.
 - No `dry` session and no window had started on 2026-11-23, so it ends nothing.
 - A row it pauses never reaches `enter_zone`, so it never enters this experiment's unit.
+- **Accepted on 2026-11-23** (#603). Its code merged in #601 and reached production in release #605/#607.
+  `config.yaml`'s `code_read.engine` pin moves to `e-8591f874008c` (section 6), before the window starts.
+- **The identity check on the fixtures: no row differs, in state or in any byte.** Old engine: integration 5cf8997,
+  `e-593cd517f8d5`. Over every fixture input:
+  - **Board:** 0 of 2,205 rows differ (735 cases).
+  - **Evaluation:** 0 of 420 rows differ (84 slots).
+  - **Retest vectors:** 0 of 312 bar states differ (15 sessions).
+  - **The new branch:** the same entry-zone rows under a symbol off the desk read paused, with no prompt.
+- **The identity check on the logged sessions (2026-11-23, after release): no, no row differs.**
+  - 7 sessions were collected (2026-11-12 to 2026-11-20); the server log holds no earlier one, so 7, not 10.
+  - 1,358 slots replayed, none skipped. 0 of 5,372 names differ (a side's state 0, `brokeAt` 0, card numbers 0).
+  - 0 of 10,744 evaluation rows differ; the evaluation's status differs in no slot.
+  - Inputs check: `e-593cd517f8d5` rebuilt the rows it logged in 774 of its 775 ok slots.
+  - Not exercised: the journal's day flags, the bad-data guards' pauses (no slot had a guard on), the snapshot's own
+    high and low.
+  - **Run after the label reached production, not before as DEC-0072 section 4 asks.** The release that carried it
+    (#605/#607) merged before this run. The answer is the expected one, so nothing changes, but the order was missed.
