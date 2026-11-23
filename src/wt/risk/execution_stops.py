@@ -9,8 +9,9 @@ Read from the desk's own journal, so a restart, a later session and the scorecar
                        polls in a row (a DEC-0071 hold is not counted);
   * X4 off-rule entry: on a Gap Hunter day (one with a `gap_primary` row), an entry filled in another name, or with no
                        primary at all, or a second entry that day;
-  * X5 stop slippage:  `stop_slips` stop exits, each filled more than `stop_slip_r` R under its stop price (the stop
-                       order's own fill, `stop_fill` and `stop_price` on `trade_closed`).
+  * X5 stop slippage:  `stop_slips` stop exits, each filled under its stop price by more than the larger of
+                       `stop_slip_r` R and `stop_slip_min_usd` a share (the stop order's own fill, `stop_fill` and
+                       `stop_price` on `trade_closed`).
 
 Only rows after the last reset of a DEC-0073 latch count: a reset needs a new decision record (the latch reason
 starts with STOP_RULE_PREFIX), and that record is what closed the fault. A latch reason never names a symbol.
@@ -39,6 +40,7 @@ class Rules:
     decision: str
     unprotected_polls: int
     stop_slip_r: float
+    stop_slip_min_usd: float
     stop_slips: int
 
 
@@ -58,9 +60,11 @@ def load(strategy: str = "S", path: Path | None = None) -> Rules | None:
     if not DECISION_ID.fullmatch(decision):
         raise ValueError(f"execution_stops.decision must be a decision record id, not {decision!r}")
     rules = Rules(decision=decision, unprotected_polls=int(raw["unprotected_polls"]),
-                  stop_slip_r=float(raw["stop_slip_r"]), stop_slips=int(raw["stop_slips"]))
-    if rules.unprotected_polls < 1 or rules.stop_slips < 1 or rules.stop_slip_r <= 0:
-        raise ValueError("execution_stops: polls and slips must be at least 1, and the slip in R above zero")
+                  stop_slip_r=float(raw["stop_slip_r"]), stop_slip_min_usd=float(raw["stop_slip_min_usd"]),
+                  stop_slips=int(raw["stop_slips"]))
+    if rules.unprotected_polls < 1 or rules.stop_slips < 1 or rules.stop_slip_r <= 0 or rules.stop_slip_min_usd < 0:
+        raise ValueError("execution_stops: polls and slips must be at least 1, the slip in R above zero, and the "
+                         "floor in US$ not negative")
     return rules
 
 
@@ -95,7 +99,8 @@ def _num(x: Any) -> float | None:
 
 
 def slips(rows: Iterable[Mapping[str, Any]], rules: Rules) -> int:
-    """Stop exits filled more than `stop_slip_r` R under their stop price, once per trade."""
+    """Stop exits filled under their stop price by more than the larger of `stop_slip_r` R and `stop_slip_min_usd`
+    a share, once per trade."""
     n, seen = 0, set()
     for r in rows:
         if r.get("event") != "trade_closed" or r.get("origin", "entry") != "entry":
@@ -105,7 +110,7 @@ def slips(rows: Iterable[Mapping[str, Any]], rules: Rules) -> int:
         if tid in seen or fill is None or price is None or entry is None or stop0 is None or entry <= stop0:
             continue
         seen.add(tid)
-        n += (price - fill) / (entry - stop0) > rules.stop_slip_r + 1e-9
+        n += price - fill > max(rules.stop_slip_r * (entry - stop0), rules.stop_slip_min_usd) + 1e-9
     return n
 
 
@@ -152,7 +157,8 @@ def evaluate(rules: Rules, rows: Iterable[Mapping[str, Any]], since: str = "") -
         return XStop("X4", why)
     n = slips(rs, rules)
     if n >= rules.stop_slips:
-        return XStop("X5", f"{n} stop exits filled more than {rules.stop_slip_r:.2f}R under their stop")
+        return XStop("X5", f"{n} stop exits filled more than {rules.stop_slip_r:.2f}R (at least "
+                           f"US${rules.stop_slip_min_usd:.2f}) under their stop")
     return None
 
 
@@ -167,6 +173,7 @@ def state_line(rules: Rules, rows: Iterable[Mapping[str, Any]], since: str = "")
     most = max((int(_num(r.get("polls")) or 0) for r in rs if r.get("event") == "unprotected"), default=0)
     fired = evaluate(rules, rs)
     return (f"- Execution stops ({rules.decision}): unprotected polls in a row, most {most} of "
-            f"{rules.unprotected_polls} · stop exits over {rules.stop_slip_r:.2f}R slip {slips(rs, rules)} of "
+            f"{rules.unprotected_polls} · stop exits over {rules.stop_slip_r:.2f}R (at least "
+            f"US${rules.stop_slip_min_usd:.2f}) slip {slips(rs, rules)} of "
             f"{rules.stop_slips}" + (f" · since the reset of {since[:10]}" if since else "")
             + (f" · **FIRED: {fired.code}, {fired.detail}**" if fired else ""))
