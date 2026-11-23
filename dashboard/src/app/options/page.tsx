@@ -241,7 +241,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
               </PaneBoundary>
               <div data-cockpit-hide className="contents">
                 <PaneBoundary name="Today's focus">
-                  <FocusStrip e={full} />
+                  <FocusStrip e={full} now={now} live={!date} />
                 </PaneBoundary>
                 <PaneBoundary name="Rules strip">
                   <RulesStrip session={full.session} halfDay={halfDay} />

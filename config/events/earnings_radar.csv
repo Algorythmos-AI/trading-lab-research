@@ -1,0 +1,5 @@
+# Earnings dates for Radar-sourced names outside the Options desk's 12 (DEC-0070), kept like earnings.csv: same
+# columns, a row only from the company's own announcement or a source named in `source`. Not read by the market
+# calendar build (scripts/build_market_calendar.py reads earnings.csv only), so a row here moves no dashboard hash.
+# A Radar name with no row here or in earnings.csv is rejected by the universe gate (earnings_unknown).
+symbol,date,when,source,quality

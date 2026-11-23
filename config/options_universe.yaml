@@ -1,0 +1,42 @@
+# The Options desk's selection universe: the desk's 12 names plus the Radar's candidates that pass this gate
+# (DEC-0070, PROPOSED). Read by src/wt/options/universe.py and src/wt/options/radar_candidates.py, which refuse a file
+# holding anything they do not implement.
+#
+# Not frozen yet. The gate's numeric thresholds are null: they are set by a dated amendment to DEC-0070 from status
+# frequencies on saved data only (how many Radar names each threshold would keep), never from outcomes, the method
+# DEC-0046 used for Stage 2. While any of them is null the gate rejects every Radar name `gate_unset` and the universe
+# is the desk's 12, so no discovered name can enter a selection before the owner has accepted the numbers.
+# universe_sha = SHA-256 of the parsed content as canonical JSON (wt.options.select.canonical_json), like options_select.yaml's params_sha.
+version: 1
+
+radar:
+  # The Radar edition's lists that may supply candidates. The Radar is for options only (owner, 2026-11-22): every
+  # other list, and any list name not written here (a renamed list shows as a drop, never a silent pass), is
+  # recorded as out_of_scope and supplies nothing.
+  lists_in_scope: ["DAILY RADAR", "MEGA CAP OPTIONS", "BREAKOUT WATCH"]
+  max_candidates_in: 60      # the edition's own ticker limit; more distinct in-scope symbols than this: radar_invalid
+  # Freshness, against the session S being selected for. The edition must be S's (edition_date == S) and stamped
+  # after the close of the session before S and before the run.
+  prices_max_age_minutes: 240  # prices_as_of no older than this at the run; absent prices_as_of: radar_stale
+  aliases: {GOOG: GOOGL}     # one class per company: an alias folds into its target before deduplication
+
+gate:
+  # The checks a Radar-sourced name passes, in this order (first: not in the edition's avoid section, not tagged
+  # risk); the first that fails names the reject. The desk's 12 names never pass through the gate.
+  max_additions: 8           # at most this many Radar names join the 12; more survivors keep the first by
+                             # (best list priority, higher evidence grade, symbol A to Z)
+  price_min: null            # the finished session's close, dollars
+  median_dollar_volume_min: null   # the median of close x volume over the last 20 daily bars, dollars
+  chain_expiry_max_days: 7   # the nearest listed expiry on or after S must be within this many calendar days
+  chain_ntm_strikes_min: null      # contracts of that expiry with a strike within ntm_pct of the close
+  chain_ntm_pct: 0.05
+  chain_volume_min: null     # the prior session's summed volume of those contracts
+  chain_spread_max_pct: null # the median (ask - bid) / mid of those contracts with a two-sided quote
+  # Earnings: a single name is admitted only when its next report is known (a future row) or its last report is
+  # recent, from config/events/earnings.csv or config/events/earnings_radar.csv (same columns, rows from the
+  # company's own announcement or a named source). The rule is wt.risk.events.earnings_gaps with
+  # options_select.yaml's earnings_unknown_after_days: Stage 1's caution earnings_date_unknown, promoted to a reject.
+  # A Radar calendar row of kind earnings naming the symbol on S or the session after it rejects the name too; the
+  # calendar never admits one (its labels are free text, and a name missing from a 7-day calendar proves nothing).
+
+list_priority: ["DAILY RADAR", "MEGA CAP OPTIONS", "BREAKOUT WATCH"]   # for the max_additions cut only

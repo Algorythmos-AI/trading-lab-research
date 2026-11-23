@@ -377,7 +377,7 @@ export function evaluateSlotStates(input: EvalInput): { evaluation: Evaluation; 
       half_day: halfDay,
       gap: degraded.some((d) => d.reason !== "snapshot-missing"),
       broke_earlier: states.some((s) => s.call.brokeEarlier || s.put.brokeEarlier),
-      stale: states.some((s) => s.state === "paused" && !s.guards),
+      stale: states.some((s) => s.state === "paused" && !s.guards && !s.offDesk),
     },
   };
   return { evaluation, states };

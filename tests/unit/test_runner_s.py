@@ -120,7 +120,10 @@ def session(tape: Tape, start=(9, 25), crash_at=None, broker=None, hook=None, **
 def journal(env, allow_errors: bool = False) -> list[dict]:
     f = env / "live" / "smallcap_journal.jsonl"
     rows = [json.loads(x) for x in f.read_text().splitlines()] if f.exists() else []
-    errors = [r for r in rows if r["event"] in ("loop_error", "held_error", "data_timeout", "scan_failed")]
+    # an execution stop (DEC-0073) or a poll without a stop is a fault too: a replay that means one says so
+    errors = [r for r in rows if r["event"] in ("loop_error", "held_error", "data_timeout", "scan_failed",
+                                                 "execution_stop", "unprotected", "unprotected_unread",
+                                                 "overnight_stop_failed")]
     assert allow_errors or not errors, errors[:3]
     return rows
 
@@ -662,7 +665,8 @@ def test_a_short_pages_in_the_session_and_again_at_the_close_and_is_never_covere
     assert rec.page("paper-s:short", "once_per_day")[2] == 5 and "7 share(s)" in rec.page("paper-s:short")[4]
     assert rec.page("paper-s:short-at-close", "fire")[2] == 5
     assert [(p.symbol, p.qty) for p in b.positions()] == [("ABC", -7)] and b.placed == []
-    assert one(journal(env), "short_position")["qty"] == -7
+    rows = journal(env, allow_errors=True)                           # the short is an execution stop (DEC-0073)
+    assert one(rows, "short_position")["qty"] == -7 and one(rows, "execution_stop")["code"] == "X1"
     clean(rec, "ABC")
 
 

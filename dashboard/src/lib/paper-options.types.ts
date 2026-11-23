@@ -12,6 +12,7 @@ export type Hyp = string;
 export type Occ = string;
 export type Stamp = string;
 export type Price = number;
+export type CountOrNull = null | number;
 
 /**
  * Every closed paper option trade, for the Paper options page (DEC-0057): the options clone's trades from its journal, the hand-placed trades of the manual paper account matched first in, first out, and the research arms' virtual trades. Three sources, never added together. The whole history is in every document, so only the latest is kept. SAFE data only: ids, dates, times, contract symbols, trade prices, results, counts and codes. No balance, no account number, no order id, no free text, no setup name (a trade carries its hypothesis id). Paper only.
@@ -19,9 +20,9 @@ export type Price = number;
 export interface PaperOptions {
   schema: "stocksdelta/paper-options";
   /**
-   * 2 adds `lab`, the options lab's tape status; 1 is still taken.
+   * 4 adds `select`, the Radar → Options shadow's status; 3 adds each lab session's upload delay and rate-limit headroom; 2 adds `lab`, the options lab's tape status; 1 to 3 are still taken.
    */
-  schema_version: 1 | 2;
+  schema_version: 1 | 2 | 3 | 4;
   run_id: string;
   /**
    * When the host built it: an ISO time with its zone.
@@ -117,6 +118,21 @@ export interface PaperOptions {
      * @maxItems 20
      */
     sessions: LabSession[];
+    /**
+     * Sessions (from 2026-11-23) verified past close plus 110 minutes (DEC-0060 point 4).
+     */
+    uploads_late?: number;
+  };
+  /**
+   * The Radar → Options shadow selection (DEC-0070): each recent session it ran for, in codes, counts, times and flags. A shadow: these are not the published focus names. No symbol, no pick, no free text. Null or absent until the host sends it (version 4).
+   */
+  select?: null | {
+    mode: "shadow";
+    off: boolean;
+    /**
+     * @maxItems 10
+     */
+    sessions: SelectSession[];
   };
 }
 export interface CloneTrade {
@@ -269,4 +285,63 @@ export interface LabSession {
   after_close_ok: boolean;
   oi_null_share: null | number;
   archived: boolean;
+  /**
+   * Minutes from the close to the verified upload; null until archived.
+   */
+  upload_after_close_min?: null | number;
+  /**
+   * Verified past close plus 110 minutes (DEC-0060 point 4); sessions before 2026-11-23 predate the archive and are never late.
+   */
+  upload_late?: boolean;
+  /**
+   * The lowest share of Alpaca's per-minute request limit left that the session saw; null before the recorder saved it.
+   */
+  rate_limit_min_share?: null | number;
+  /**
+   * Readings under the recorder's back-off share. Null before the recorder saved it.
+   */
+  rate_limit_low?: null | number;
+  /**
+   * Requests Alpaca refused as over its limit. Null before the recorder saved it.
+   */
+  rate_limit_429?: null | number;
+  /**
+   * Sweep batches (up to 100 contracts each) the lab's own request budget skipped. Null before the recorder saved it.
+   */
+  budget_refused?: null | number;
+}
+export interface SelectSession {
+  session: Ymd;
+  radar_status: null | "ok" | "radar_missing" | "radar_stale" | "radar_invalid";
+  run_at: null | Stamp;
+  finished_at: null | Stamp;
+  late: boolean | null;
+  gate_unset: boolean | null;
+  radar_bars_ok: boolean;
+  candidates: {
+    in_scope_symbols: CountOrNull;
+    out_of_scope_symbols: CountOrNull;
+    unknown_lists: CountOrNull;
+    candidates: CountOrNull;
+    core: CountOrNull;
+    discovered: CountOrNull;
+    rejected: CodeCounts;
+  };
+  universe: {
+    core: CountOrNull;
+    candidates_gated: CountOrNull;
+    admitted: CountOrNull;
+    rejected: CodeCounts;
+  };
+  stage1: {
+    names: CountOrNull;
+    data_valid: CountOrNull;
+    ranked: CountOrNull;
+    eligible: CountOrNull;
+    picked: CountOrNull;
+  };
+  picks_from_radar: number;
+}
+export interface CodeCounts {
+  [k: string]: number | undefined;
 }

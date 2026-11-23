@@ -251,7 +251,7 @@ def test_a_run_sends_once_then_only_when_the_trades_change_or_half_a_day_has_pas
     assert run(tmp_path, NOW + dt.timedelta(minutes=10)) == 0 and len(sends) == 2                     # a new trade
     assert run(tmp_path, NOW + dt.timedelta(hours=11)) == 0 and len(sends) == 2
     assert run(tmp_path, NOW + dt.timedelta(hours=13)) == 0 and len(sends) == 3                       # the heartbeat
-    assert json.loads((tmp_path / "out" / "document.json").read_text())["schema_version"] == 2      # built: v2
+    assert json.loads((tmp_path / "out" / "document.json").read_text())["schema_version"] == 4      # built: v4
     assert json.loads(sends[-1])["schema_version"] == 1 and "lab" not in json.loads(sends[-1])  # a v1 site: sent v1
 
 

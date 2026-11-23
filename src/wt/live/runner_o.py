@@ -39,7 +39,7 @@ from wt.oms.options import OptionPlan, OptionsOMS, PlanStore, book
 from wt.ops import hc, locks
 from wt.ops import alerts as pg
 from wt.ops.alerts import Alerts, Pager
-from wt.options import chain, clone_site, regime, session, setups, shadow
+from wt.options import chain, clone_names, clone_site, regime, session, setups, shadow
 from wt.options import levels as lv
 from wt.options.intraday import daily_raw
 from wt.options.regime import NEW_YORK
@@ -538,7 +538,10 @@ class Runner:
         focus, edition = self.feeds.focus()
         cfg_n = self.cfg["names"]
         cap = int(cfg_n["max_names"])
+        # Only the desk's names (DEC-0070 section 8); an unreadable desk file leaves none, and the fallback trades.
+        focus, off_desk = clone_names.on_desk(focus, clone_names.read_desk())
         wanted, source = session.names(focus, edition, self.session, cfg_n["fallback"], cap)
+        off_desk = off_desk if edition == self.session else []
         standing = [r for r in dict.fromkeys(str(x).upper() for x in cfg_n.get("standing", [])) if r not in wanted]
         wanted = [*wanted, *standing]                # outside the cap: a standing name never displaces a focus name
         top_up = [r for r in cfg_n.get("top_up", []) if r not in wanted]
@@ -603,7 +606,7 @@ class Runner:
         if topped:
             source = f"{source}+top-up"
         self.names_source = source
-        self.write("names", source=source, names=sorted(self.names), dropped=dropped, topped_up=topped,
+        self.write("names", source=source, names=sorted(self.names), dropped=dropped, topped_up=topped, off_desk=off_desk,
                    standing=[r for r in standing if r in self.names],
                    policy=self.policy, expiries=expiries,
                    level_source=level_source, level_diffs={k: v for k, v in level_diffs.items() if v})

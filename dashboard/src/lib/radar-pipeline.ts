@@ -559,7 +559,9 @@ export interface Reliability {
   by_hand: number;
   missed: number;
   no_record: number;
-  /** on_time over the sessions with a record (on time, late, by hand, missed); null when there are none. */
+  /** The sessions the rate is worked out over: on time, late, by hand and missed. "No record" sessions are left out. */
+  counted: number;
+  /** on_time over `counted`; null when there are none. */
   rate: number | null;
 }
 
@@ -568,5 +570,5 @@ export function reliabilityOf(days: PipelineDays, file: PipelineFile | null, now
   const marks = days.sessions.slice(0, -1).map((session) => ({ session, mark: sessionMark(session, by.get(session) ?? null, nowMs) }));
   const n = (m: SessionMark) => marks.filter((x) => x.mark === m).length;
   const counted = n("on_time") + n("late") + n("by_hand") + n("missed");
-  return { marks, on_time: n("on_time"), late: n("late"), by_hand: n("by_hand"), missed: n("missed"), no_record: n("no_record"), rate: counted === 0 ? null : n("on_time") / counted };
+  return { marks, on_time: n("on_time"), late: n("late"), by_hand: n("by_hand"), missed: n("missed"), no_record: n("no_record"), counted, rate: counted === 0 ? null : n("on_time") / counted };
 }

@@ -237,6 +237,8 @@ site(f"{RS}::_session::'paper-s:short-at-close' | 'Sleeve S is SHORT at the clos
 site(f"{RS}::_session::'paper-s:short-at-close' | 'Sleeve S: no short position after the close'", {})
 site(f"{RS}::_session::'paper-s:stop-rule' | f'paper-s stopped by its stop rule ({{page.record(r",
      {"rule": NS(decision=T), "fired": NS(kind=T, detail=T)})
+site(f"{RS}::_session.x_check::'paper-s:execution-stop' | f'Gap Hunter stopped: execution stop {{x.code}} ({{pa",
+     {"x": NS(code="X3", detail=T), "xrules": NS(decision=T)})          # a code from the closed set X1 to X5
 RO = "src/wt/live/runner_o.py::Runner"
 site(f"{RO}.give_up_arm::'arm-broker' | 'Options clone: broker unreachable at arm'", {"e": E})
 site(f"{RO}.connect_at_arm::'flatten-required' | 'Options clone: a position no plan knows'", {})
@@ -565,7 +567,7 @@ RECORDS = [
     ("src/wt/live/runner_s.py", "_session.sweep_positions", "'Sleeve S is SHORT'", "log('short_position'"),
     ("src/wt/live/runner_s.py", "_session.consider", "clock check failed", "log('clock_skew'"),
     ("src/wt/live/runner_s.py", "_session", "NOT FLAT at the close",
-     "log('END_OF_DAY_NOT_FLAT', symbol=pos.symbol, qty=pos.qty)"),
+     "log('END_OF_DAY_NOT_FLAT', symbol=pos.symbol, qty=pos.qty, protected=protected)"),
     ("src/wt/live/runner_s.py", "_session", "SHORT at the close",
      "log('END_OF_DAY_NOT_FLAT', symbol=pos.symbol, qty=pos.qty, short=True"),
     ("src/wt/live/runner_s.py", "_session", "could not verify flat", "log('END_OF_DAY_NOT_FLAT', error="),

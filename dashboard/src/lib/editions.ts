@@ -12,7 +12,7 @@ export const RADAR_ACCEPTS = 1;
 export const OPTIONS_LIVE_ACCEPTS = 3;
 export const OPTIONS_CLONE_ACCEPTS = 1;
 /** The paper options history (DEC-0057): the newest format this build validates. */
-export const PAPER_OPTIONS_ACCEPTS = 2;                     // 2: the options lab's tape status (`lab`)
+export const PAPER_OPTIONS_ACCEPTS = 4;                     // 2: the options lab's tape status (`lab`); 3: upload delay and rate-limit headroom; 4: the Radar → Options shadow (`select`)
 /** 2 adds `money`: deposits, withdrawals and the account value. */
 export const JOURNAL_ACCEPTS = 2;
 export const LEDGER_ACCEPTS = 1;

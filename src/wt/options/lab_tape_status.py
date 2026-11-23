@@ -10,8 +10,10 @@ session written by the v1 recorder, or before DEC-0067's first v2 session, never
 """
 from __future__ import annotations
 
+import datetime as dt
 import json
 import os
+import zoneinfo
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -21,6 +23,10 @@ from wt.core.config import ROOT
 FIRST_V2 = "2026-11-20"            # EXP-0052's first v2 session (DEC-0067 accepted and on the host that morning)
 SHADOW = 5                         # EXP-0052 counting.shadow_sessions
 MAX_SESSIONS = 20                  # the schema's cap: the newest are kept
+UPLOAD_WITHIN_MIN = 110           # DEC-0060 point 4: the upload is finished by close plus 110 minutes
+LATE_FROM = "2026-11-23"          # the first session recorded with the archive's bucket in place (made 2026-11-22):
+                                  # 2026-11-19 and 2026-11-20 were uploaded that day, two days after their close
+NY = zoneinfo.ZoneInfo("America/New_York")
 STOPS = {"off switch": "off_switch", "sigterm": "stopped", "memory limit": "memory"}
 
 
@@ -69,7 +75,34 @@ def why_not(m: Mapping[str, Any]) -> list[str]:
     return out
 
 
-def session(m: Mapping[str, Any], archived: bool) -> dict[str, Any]:
+def _when(v: Any) -> dt.datetime | None:
+    try:
+        t = dt.datetime.fromisoformat(str(v))
+    except ValueError:
+        return None
+    return t if t.tzinfo is not None else None
+
+
+def upload_after_close_min(m: Mapping[str, Any], receipt: Mapping[str, Any] | None) -> float | None:
+    """Minutes from the session's close to its verified upload; None without a verified receipt. Sessions recorded
+    before the manifest carried `close` are taken to close at 16:00 New York."""
+    if not receipt or not receipt.get("verified"):
+        return None
+    up = _when(receipt.get("uploaded_at"))
+    close = _when(m.get("close"))
+    if close is None:
+        try:
+            close = dt.datetime.combine(dt.date.fromisoformat(str(m.get("session"))), dt.time(16), NY)
+        except ValueError:
+            return None
+    return None if up is None else round((up - close).total_seconds() / 60, 1)
+
+
+def _int(m: Mapping[str, Any], k: str) -> int | None:
+    return int(_num(m.get(k)) or 0) if k in m else None
+
+
+def session(m: Mapping[str, Any], archived: bool, receipt: Mapping[str, Any] | None = None) -> dict[str, Any]:
     ac = m.get("after_close") if isinstance(m.get("after_close"), Mapping) else {}
     prints = ac.get("prints") if isinstance(ac.get("prints"), Mapping) else {}
     oi = ac.get("open_interest") if isinstance(ac.get("open_interest"), Mapping) else {}
@@ -100,15 +133,21 @@ def session(m: Mapping[str, Any], archived: bool) -> dict[str, Any]:
         "after_close_ok": recorded and not ac.get("error") and not ac.get("skipped") and not prints.get("failed"),
         "oi_null_share": round(nulls / listed, 4) if nulls is not None and listed else None,
         "archived": archived,
+        "upload_after_close_min": (up := upload_after_close_min(m, receipt)),
+        "upload_late": up is not None and up > UPLOAD_WITHIN_MIN and str(m.get("session")) >= LATE_FROM,
+        "rate_limit_min_share": _num(m.get("rate_limit_min_remaining_share")),
+        "rate_limit_low": _int(m, "rate_limit_low_readings"),
+        "rate_limit_429": _int(m, "rate_limit_429"),
+        "budget_refused": _int(m, "budget_refused_batches"),
     }
 
 
-def _receipt_ok(root: Path, day: str) -> bool:
+def _receipt(root: Path, day: str) -> dict[str, Any] | None:
     try:
         doc = json.loads((root / "receipts" / f"{day}.json").read_text())
     except (OSError, ValueError):
-        return False
-    return isinstance(doc, dict) and bool(doc.get("verified"))
+        return None
+    return doc if isinstance(doc, dict) else None
 
 
 def block(env: Mapping[str, str] | None = None, root: Path | None = None) -> dict[str, Any] | None:
@@ -123,7 +162,8 @@ def block(env: Mapping[str, str] | None = None, root: Path | None = None) -> dic
         except (OSError, ValueError):
             continue                                     # unfinished (no manifest yet) or unreadable: not listed
         if isinstance(m, dict):
-            rows.append(session({**m, "session": m.get("session", f.name)}, _receipt_ok(r, f.name)))
+            rc = _receipt(r, f.name)
+            rows.append(session({**m, "session": m.get("session", f.name)}, bool(rc and rc.get("verified")), rc))
     if not rows:
         return None
     v2 = [s for s in rows if s["recorder"] == 2 and s["date"] >= FIRST_V2 and s["recorded"]]
@@ -138,5 +178,6 @@ def block(env: Mapping[str, str] | None = None, root: Path | None = None) -> dic
         "counted": sum(1 for s in after if s["counts"]),
         "recorded": sum(1 for s in rows if s["recorded"]),
         "archived": sum(1 for s in rows if s["recorded"] and s["archived"]),
+        "uploads_late": sum(1 for s in rows if s["upload_late"]),
         "sessions": rows[-MAX_SESSIONS:],
     }

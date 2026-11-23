@@ -38,7 +38,7 @@ from wt.data.feeds import FeedNotNamed, require_feed
 from wt.ops import alerts as pg
 from wt.ops import publish
 from wt.options import levels as lv
-from wt.options import session
+from wt.options import clone_names, session
 from wt.options.intraday import daily_raw
 from wt.risk import events as ev
 
@@ -170,14 +170,20 @@ def tradeable(sym: str, target: str, expiries: Mapping[str, Sequence[str]], poli
     return target in listed if policy == "same_day" else any(str(e) >= target for e in listed)
 
 
+def clone_desk() -> list[str]:
+    """The desk's names as the clone's runner reads them (`wt.options.clone_names.read_desk`)."""
+    return clone_names.read_desk()
+
+
 def eligible(options: Mapping[str, Any] | None, target: str, expiries: Mapping[str, Sequence[str]],
-             max_names: int = MAX_NAMES, policy: str = EXPIRY) -> set[str]:
+             max_names: int = MAX_NAMES, policy: str = EXPIRY, desk: Sequence[str] | None = None) -> set[str]:
     """The names the clone can trade on `target`, chosen as its runner chooses them: `wt.options.session.names` (the
     focus names by rank, upper-cased, de-duplicated, capped at `max_names`, or the fallback without a focus for that
-    session), then the standing names (DEC-0058), kept when it has an expiry the policy allows (DEC-0034), then topped
+    session; only the desk's names, DEC-0070 section 8), then the standing names (DEC-0058), kept when it has an expiry the policy allows (DEC-0034), then topped
     up in order from SPY and QQQ to two (DEC-0032).
     Only a difference on one of these fails; elsewhere it warns."""
     focus = (options or {}).get("focus") if options else None
+    focus, _ = clone_names.on_desk(focus, clone_desk() if desk is None else desk)
     wanted, _ = session.names(focus, (options or {}).get("session"), target, list(TOP_UP), max_names)
     wanted = [*wanted, *(s for s in STANDING if s not in wanted)]
     out = [s for s in wanted if tradeable(s, target, expiries, policy)]

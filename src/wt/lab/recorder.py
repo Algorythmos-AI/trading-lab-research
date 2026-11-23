@@ -165,7 +165,9 @@ class Recorder:
         self.reading: tuple[float, float] | None = None           # (remaining share, clock seconds)
         self.counts = {"requests": 0, "taken": 0, "taken_fresh": 0, "expected": 0, "ticks_run": 0, "restarts": 0,
                        "errors": 0, "stale_ticks": 0, "longest_stale_ticks": 0, "ticks_down": 0,
-                       "tier1_rows": 0, "tier1_crossed_rows": 0}
+                       "tier1_rows": 0, "tier1_crossed_rows": 0, "low_readings": 0, "refused_429": 0,
+                       "budget_refused": 0}
+        self.min_share: float | None = None                        # lowest remaining-requests share Alpaca reported
         self.stopped: str | None = None
         self.errors_in_a_row = 0
         self.minute: cf.Future[None] | None = None
@@ -203,6 +205,8 @@ class Recorder:
         self.stale_by_name = {str(k): int(v) for k, v in (s.get("stale_by_name") or {}).items()}
         self.first_fresh = {str(k): int(v) for k, v in (s.get("first_fresh") or {}).items()}
         self.name_newest = {str(k): int(v) for k, v in (s.get("name_newest") or {}).items()}
+        ms = s.get("min_share")
+        self.min_share = float(ms) if isinstance(ms, (int, float)) and not isinstance(ms, bool) else None
         self.counts.update({k: int(v) for k, v in (s.get("counts") or {}).items() if k in self.counts})
         self.counts["restarts"] += 1
 
@@ -214,7 +218,7 @@ class Recorder:
                    "opening_missing": self.opening_missing, "freeze_tick": self.freeze_tick, "counts": self.counts,
                    "last_tick": self.last_tick, "refused": sorted(self.refused), "scheduled": self.scheduled,
                    "stale_from": self.stale_from, "stale_by_name": self.stale_by_name, "first_fresh": self.first_fresh,
-                   "name_newest": self.name_newest}
+                   "name_newest": self.name_newest, "min_share": self.min_share}
             manifest.atomic(self.folder / STATE, json.dumps(doc))
 
     # ------------------------------------------------------------ requests, within the budget
@@ -259,10 +263,16 @@ class Recorder:
             self.counts["requests"] += 1
         a = self.get(url, params, headers, timeout)
         hl = {k.lower(): v for k, v in a.headers.items()}
+        if a.status == 429:
+            with self.lock:
+                self.counts["refused_429"] += 1
         try:
             share = int(hl["x-ratelimit-remaining"]) / max(1, int(hl["x-ratelimit-limit"]))
             with self.lock:
                 self.reading = (share, self._t())
+                self.min_share = share if self.min_share is None else min(self.min_share, share)
+                if share < self.settings.back_off_share:
+                    self.counts["low_readings"] += 1
         except (KeyError, ValueError):
             pass
         return a
@@ -291,6 +301,8 @@ class Recorder:
     def _sample(self, tick: int, tier: int, batch: int, syms: Sequence[str], answered: int, changed: int,
                 status: int, newest: int | None, result: str, missing: Sequence[str]) -> None:
         with self.lock:
+            if result == "budget":
+                self.counts["budget_refused"] += 1
             key, now = (tier, batch), tuple(syms)
             listed = None if self.batch_syms.get(key) == now else ",".join(now)
             self.batch_syms[key] = now
@@ -351,6 +363,8 @@ class Recorder:
             try:
                 c = chain(self.guarded, self.headers, name, mid, self.day, self.rules)
             except Stop:
+                with self.lock:
+                    self.counts["budget_refused"] += 1
                 self._gap(tick, "select", f"budget {name}")
                 continue
             if c["status"] != 200:
@@ -638,6 +652,16 @@ class Recorder:
         since = min(self.freeze_tick, self.settings.freeze_by_ticks) if strict else self.freeze_tick
         return len(self.opening) * max(0, self.scheduled - since - 1)
 
+    def headroom(self) -> dict[str, Any]:
+        """Rate-limit headroom over the session (DEC-0060 data checks), read at the close so the after-close pull is
+        not in it: the lowest share of Alpaca's minute left, how often it fell under the back-off share, answers
+        refused with 429, and chain reads or sweep batches the lab's own budget skipped."""
+        with self.lock:
+            c = self.counts
+            return {"rate_limit_min_remaining_share": None if self.min_share is None else round(self.min_share, 4),
+                    "rate_limit_low_readings": c["low_readings"], "rate_limit_429": c["refused_429"],
+                    "budget_refused_batches": c["budget_refused"]}
+
     def finish(self, info: Mapping[str, Any]) -> dict[str, Any]:
         tail = self.scheduled - 1 - (self.last_tick if self.last_tick is not None else -1)
         if tail > 0 and not self.tail_counted:          # a stop, a crash past the close, a day never finished
@@ -878,7 +902,7 @@ def _record(e: Mapping[str, str], ck: Clock, today: dt.date, root: Path, get: Ge
         limit = int(e.get("WT_LAB_RATE_LIMIT", "1000"))                      # the probe's measured limit
         budget = min(int(e.get("WT_LAB_BUDGET_PER_MIN", str(int(limit * 0.4)))), int(limit * 0.4))
         info = {**meta, "recorder": RECORDER_VERSION, "clock_offset_ms": clock_offset_ms(), "budget_per_min": budget,
-                "code": code_version()}
+                "code": code_version(), "close": close.isoformat()}
         main_thread = threading.current_thread() is threading.main_thread()
         old = signal.signal(signal.SIGTERM, _sigterm) if main_thread else None
         try:
@@ -899,6 +923,7 @@ def _record(e: Mapping[str, str], ck: Clock, today: dt.date, root: Path, get: Ge
                     rec.flush()
                     if ck.now() < close:
                         raise                         # systemd restarts it and it resumes
+                info.update(rec.headroom())           # the session's, before the after-close pull adds to it
                 info["after_close"] = after_close(rec, get or http_get(s), headers, at(dt.time(9, 30)), close, ck)
                 info["clock_offset_ms_end"] = clock_offset_ms()
                 doc = rec.finish(info)

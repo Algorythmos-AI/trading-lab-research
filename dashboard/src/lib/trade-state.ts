@@ -27,6 +27,7 @@ import {
   TRADE_STALE_MS,
 } from "./entry-checks";
 import type { SidePlan } from "./focus-plan";
+import calendar from "./market-calendar.json";
 import type { Tone } from "./labels";
 import { closeMinute, type LiveQuote, nyClock, nyInstant, OPEN_MIN, type OptionsTicker, type TrailPoint } from "./options";
 import { activeGuards, type GuardReason, guardLine, quoteGuards } from "./quote-guards";
@@ -581,6 +582,8 @@ export interface NameState {
   why?: NoTradeWhy;
   /** The bad-data guards that paused the row (quote-guards.ts), on a row a switched-on guard paused only. */
   guards?: GuardReason[];
+  /** DEC-0072: the row is paused because its symbol is not one of the desk's names; on such a row only. */
+  offDesk?: true;
 }
 
 /**
@@ -739,6 +742,10 @@ const dist = (x: SideState) => (x.distAtr !== null ? ` (${x.distAtr.toFixed(1)} 
  * on the row whichever side it leads with: "Failed at <time>: no <side> until <time>", the earlier failure first, after
  * the locked side's alternative trigger when it has one.
  */
+/** DEC-0072: the desk's names, the only ones the board may act on (market-calendar.json `options_names`). */
+const DESK_NAMES: ReadonlySet<string> = new Set((calendar.options_names as string[]).map((x) => x.toUpperCase()));
+const OFF_DESK_LINE = "Not one of the desk's names: its earnings and expiry facts are not on file";
+
 export function nameState(n: NameInput): NameState {
   const call = sideState(n.call, n.atr, n.bars, n.quote, n.now, n.sweepAtr ?? null, n.halfDay);
   const put = sideState(n.put, n.atr, n.bars, n.quote, n.now, n.sweepAtr ?? null, n.halfDay);
@@ -792,6 +799,10 @@ export function nameState(n: NameInput): NameState {
     };
   };
 
+  // 0. DEC-0072: a name that is not one of the desk's (the calendar's options_names, built from
+  // config/options_desk.yaml) is paused, always and first: its earnings and expiry facts are not on file, so no state
+  // that could suggest an entry is ever reached for it. No switch turns this off.
+  if (!DESK_NAMES.has(n.symbol.toUpperCase())) return { ...row("paused", OFF_DESK_LINE, null), offDesk: true };
   // 1. a stale feed in the session
   if (inSession) {
     const feedAge = n.receivedAt !== null ? t - n.receivedAt : Infinity;

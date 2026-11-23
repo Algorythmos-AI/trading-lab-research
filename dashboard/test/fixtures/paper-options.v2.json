@@ -1,6 +1,6 @@
 {
   "schema": "stocksdelta/paper-options",
-  "schema_version": 2,
+  "schema_version": 4,
   "run_id": "paper-options-2026-10-12-201000000000",
   "as_of": "2026-10-12T20:10:00+00:00",
   "paper": true,
@@ -3020,7 +3020,13 @@
         "after_close_ok": true,
         "oi_null_share": 0.2588,
         "archived": true,
-        "shadow": true
+        "shadow": true,
+        "upload_after_close_min": 95.0,
+        "upload_late": false,
+        "rate_limit_min_share": 0.62,
+        "rate_limit_low": 0,
+        "rate_limit_429": 0,
+        "budget_refused": 0
       },
       {
         "date": "2026-10-05",
@@ -3047,7 +3053,13 @@
         "after_close_ok": true,
         "oi_null_share": 0.2588,
         "archived": true,
-        "shadow": true
+        "shadow": true,
+        "upload_after_close_min": 240.0,
+        "upload_late": true,
+        "rate_limit_min_share": 0.41,
+        "rate_limit_low": 0,
+        "rate_limit_429": 0,
+        "budget_refused": 0
       },
       {
         "date": "2026-10-06",
@@ -3071,7 +3083,13 @@
         "after_close_ok": true,
         "oi_null_share": 0.2588,
         "archived": true,
-        "shadow": true
+        "shadow": true,
+        "upload_after_close_min": 101.5,
+        "upload_late": false,
+        "rate_limit_min_share": 0.18,
+        "rate_limit_low": 4,
+        "rate_limit_429": 2,
+        "budget_refused": 7
       },
       {
         "date": "2026-10-07",
@@ -3095,7 +3113,13 @@
         "after_close_ok": true,
         "oi_null_share": 0.2588,
         "archived": false,
-        "shadow": true
+        "shadow": true,
+        "upload_after_close_min": null,
+        "upload_late": false,
+        "rate_limit_min_share": 0.55,
+        "rate_limit_low": 0,
+        "rate_limit_429": 0,
+        "budget_refused": 0
       },
       {
         "date": "2026-10-08",
@@ -3119,7 +3143,13 @@
         "after_close_ok": true,
         "oi_null_share": 0.2588,
         "archived": false,
-        "shadow": true
+        "shadow": true,
+        "upload_after_close_min": null,
+        "upload_late": false,
+        "rate_limit_min_share": 0.55,
+        "rate_limit_low": 0,
+        "rate_limit_429": 0,
+        "budget_refused": 0
       },
       {
         "date": "2026-10-09",
@@ -3143,7 +3173,13 @@
         "after_close_ok": true,
         "oi_null_share": 0.2588,
         "archived": false,
-        "shadow": false
+        "shadow": false,
+        "upload_after_close_min": null,
+        "upload_late": false,
+        "rate_limit_min_share": 0.55,
+        "rate_limit_low": 0,
+        "rate_limit_429": 0,
+        "budget_refused": 0
       },
       {
         "date": "2026-10-12",
@@ -3169,7 +3205,86 @@
         "after_close_ok": true,
         "oi_null_share": 0.2588,
         "archived": false,
-        "shadow": false
+        "shadow": false,
+        "upload_after_close_min": null,
+        "upload_late": false,
+        "rate_limit_min_share": 0.55,
+        "rate_limit_low": 0,
+        "rate_limit_429": 0,
+        "budget_refused": 0
+      }
+    ],
+    "uploads_late": 1
+  },
+  "select": {
+    "mode": "shadow",
+    "off": false,
+    "sessions": [
+      {
+        "session": "2026-10-09",
+        "radar_status": "radar_stale",
+        "run_at": "2026-10-09T11:45:00Z",
+        "finished_at": "2026-10-09T11:46:10Z",
+        "late": false,
+        "gate_unset": true,
+        "radar_bars_ok": true,
+        "candidates": {
+          "in_scope_symbols": 0,
+          "out_of_scope_symbols": 0,
+          "unknown_lists": 0,
+          "candidates": 0,
+          "core": 0,
+          "discovered": 0,
+          "rejected": {}
+        },
+        "universe": {
+          "core": 12,
+          "candidates_gated": 0,
+          "admitted": 0,
+          "rejected": {}
+        },
+        "stage1": {
+          "names": 12,
+          "data_valid": 12,
+          "ranked": 12,
+          "eligible": 11,
+          "picked": 4
+        },
+        "picks_from_radar": 0
+      },
+      {
+        "session": "2026-10-12",
+        "radar_status": "ok",
+        "run_at": "2026-10-12T10:45:00Z",
+        "finished_at": "2026-10-12T10:45:40Z",
+        "late": false,
+        "gate_unset": true,
+        "radar_bars_ok": true,
+        "candidates": {
+          "in_scope_symbols": 21,
+          "out_of_scope_symbols": 9,
+          "unknown_lists": 0,
+          "candidates": 21,
+          "core": 7,
+          "discovered": 14,
+          "rejected": {}
+        },
+        "universe": {
+          "core": 12,
+          "candidates_gated": 14,
+          "admitted": 0,
+          "rejected": {
+            "gate_unset": 14
+          }
+        },
+        "stage1": {
+          "names": 12,
+          "data_valid": 12,
+          "ranked": 12,
+          "eligible": 11,
+          "picked": 4
+        },
+        "picks_from_radar": 0
       }
     ]
   }

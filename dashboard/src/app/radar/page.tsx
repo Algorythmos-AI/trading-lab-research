@@ -13,10 +13,10 @@ import {
   WatchlistPanel,
 } from "@/components/radar";
 import { MoversPanel, OpenMapPanel, SessionPanel, VerdictPanel, WeekPanel, YourNamesPanel } from "@/components/radar-brief";
+import { RadarEditionNotice } from "@/components/radar-edition-notice";
 import { RadarSchedulePanel } from "@/components/radar-schedule";
-import { Notice } from "@/components/ui/notice";
 import { sydney, weekDate } from "@/lib/format";
-import { radarStale, type Radar } from "@/lib/radar";
+import type { Radar } from "@/lib/radar";
 import {
   briefWeek,
   dayVerdict,
@@ -31,7 +31,7 @@ import {
 import type { OptionsEdition } from "@/lib/options.types";
 import type { Trade } from "@/lib/journal";
 import { loadRadarPipeline } from "@/lib/radar-pipeline-run";
-import { listRadarDates, loadJournal, loadOptions, loadRadar, pageTime } from "@/lib/snapshot";
+import { listRadarDates, loadJournal, loadOptions, loadPaperOptions, loadRadar, pageTime } from "@/lib/snapshot";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Radar" };
@@ -39,14 +39,16 @@ export const metadata = { title: "Radar" };
 export default async function RadarPage({ searchParams }: { searchParams: Promise<{ d?: string | string[] }> }) {
   const raw = (await searchParams).d;
   const date = typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : undefined;
-  const [result, dates, now, journal] = await Promise.all([loadRadar(date), listRadarDates(), pageTime(), loadJournal()]);
+  const [result, dates, now, journal, paper] = await Promise.all([loadRadar(date), listRadarDates(), pageTime(), loadJournal(), loadPaperOptions()]);
+  // The host's Radar → Options shadow status (paper-options `select`); null when the host has sent none.
+  const shadow = paper.status === "ok" ? (paper.doc.select ?? null) : null;
   // One small summary the 10-minute cron writes; with none, the card draws the schedule alone.
   const pipeline = await loadRadarPipeline(now);
   if (result.status !== "ok") {
     return (
       <>
         <PageHeading title="Radar" intro="Your pre-market brief: the day, where SPY opens against your levels, and the names you trade." />
-        <RadarSchedulePanel file={pipeline.file} now={pipeline.now} />
+        <RadarSchedulePanel file={pipeline.file} now={pipeline.now} shadow={shadow} />
         <NoRadar status={result.status} date={date} />
       </>
     );
@@ -63,14 +65,9 @@ export default async function RadarPage({ searchParams }: { searchParams: Promis
         title="Radar"
         intro="Your pre-market brief: the day, where SPY opens against your levels, and the names you trade. Research only; nothing here is an order."
       />
-      <RadarSchedulePanel file={pipeline.file} now={pipeline.now} />
+      <RadarSchedulePanel file={pipeline.file} now={pipeline.now} shadow={shadow} />
       <EditionPicker dates={dates} current={r.edition_date} />
-      {!date && radarStale(r.edition_date, now) ? (
-        <Notice tone="bad" size="sm" role="alert">
-          This radar is from {weekDate(r.edition_date)}. Today&apos;s session has opened and no newer edition has published (or the
-          market is shut for a holiday), so its levels and notes may be out of date.
-        </Notice>
-      ) : null}
+      <RadarEditionNotice editionDate={r.edition_date} now={now} live={!date} />
       <PaneBoundary name="The brief">
         <Brief r={r} options={options} trades={trades} />
       </PaneBoundary>

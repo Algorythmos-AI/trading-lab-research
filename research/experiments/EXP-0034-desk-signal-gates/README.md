@@ -221,3 +221,10 @@ day it ships. The text above is otherwise unchanged.
 Viewed before this note: the owner trade DEC-0052 names, entered on a side the board had re-armed after a failed break
 at the same level, and its result; that session's 2-minute bars and the board's recorded states; that session read by
 DEC-0052's rule as written; everything DEC-0052 lists as seen (DEC-0053, "What has already been seen").
+
+## DEC-0072 (proposed 2026-11-23)
+
+- Once it is accepted and its code is merged, the engine pin is replaced by that release's label, before this
+  experiment's window starts.
+- No `dry` session and no window had started on 2026-11-23, so it ends nothing.
+- A row it pauses never reaches `enter_zone`, so it never enters this experiment's unit.

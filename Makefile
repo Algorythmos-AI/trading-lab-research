@@ -11,7 +11,7 @@ export PYTHONDONTWRITEBYTECODE := 1
 TYPED_MODULES := src/wt/research/b_audit.py src/wt/research/b_exec_audit.py src/wt/lab/__init__.py src/wt/lab/focus.py src/wt/lab/tiers.py src/wt/lab/probe.py src/wt/lab/tape.py src/wt/lab/manifest.py src/wt/lab/recorder.py src/wt/lab/archive.py src/wt/lab/afterclose.py src/wt/lab/read.py src/wt/webull/__init__.py src/wt/webull/client.py src/wt/webull/pull.py src/wt/webull/journal.py src/wt/webull/publish.py src/wt/webull/treehash.py \
                  src/wt/ops/alerts.py src/wt/ops/schedule.py src/wt/ops/locks.py src/wt/ops/window.py \
                  src/wt/ops/heartbeat.py src/wt/ops/preflight.py src/wt/ops/jobs.py src/wt/ops/migrate.py \
-                 src/wt/ops/agents.py src/wt/ops/deploy.py src/wt/ops/ci.py src/wt/risk/stop_rule.py src/wt/core/safety.py src/wt/core/ids.py \
+                 src/wt/ops/agents.py src/wt/ops/deploy.py src/wt/ops/ci.py src/wt/risk/stop_rule.py src/wt/risk/execution_stops.py src/wt/core/safety.py src/wt/core/ids.py \
                  src/wt/brokers/base.py src/wt/brokers/sim.py src/wt/brokers/alpaca_paper.py src/wt/risk/pretrade.py \
                  src/wt/oms/manager.py src/wt/oms/multi.py src/wt/risk/virtual_account.py src/wt/ops/publish.py src/wt/brokers/alpaca_read.py src/wt/ops/evidence.py src/wt/ops/visibility.py \
                  src/wt/research/manifest.py src/wt/research/method.py src/wt/research/trials.py \
@@ -31,14 +31,16 @@ TYPED_MODULES := src/wt/research/b_audit.py src/wt/research/b_exec_audit.py src/
                  src/wt/options/pipeline_check.py src/wt/research/external_posts.py \
                  src/wt/options/shadow.py src/wt/options/arms_verdict.py \
                  src/wt/owner/positions.py src/wt/data/feeds.py src/wt/ops/keys_check.py \
-                 src/wt/options/select.py src/wt/options/select_stage2.py src/wt/options/select_fetch.py
+                 src/wt/options/select.py src/wt/options/select_stage2.py src/wt/options/select_fetch.py \
+                 src/wt/options/radar_candidates.py src/wt/options/universe.py src/wt/options/radar_select.py \
+                 src/wt/options/select_status.py src/wt/options/clone_names.py
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
 .PHONY: seed-vm help bootstrap research-index lint typecheck restricted test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
         uninstall-agents lease-break \
         watchdog-drill feed-watch-drill feed-agreement feed-agreement-recheck feed-agreement-summary feed-agreement-edition dashboard-deploy vm-deploy \
-        agents-diff install-trading-agents install-dashboard-agent publish schema kill unkill reset-latch evidence visibility keys-check
+        agents-diff install-trading-agents install-dashboard-agent publish schema kill unkill reset-latch reset-latch-s evidence visibility keys-check
 
 help: ## List the tasks
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/:.*## /\t/' | sort
@@ -194,6 +196,9 @@ reset-options-latch: ## OWNER: clear an options clone latch: make reset-options-
 
 reset-latch: ## OWNER: clear the retired QQQ rule's virtual-account latch (DEC-0069: nothing trades it now): make reset-latch REASON="why"
 	@$(PY) -m wt.ops.control reset-latch "$(REASON)"
+
+reset-latch-s: ## OWNER: clear Gap Hunter's latch (stop rule or execution stop: name the new record): make reset-latch-s REASON="DEC-NNNN: why"
+	@$(PY) -m wt.ops.control reset-latch-s "$(REASON)"
 
 evidence: ## Show what the weekly evidence PR would commit (DRY_RUN is the default here)
 	$(PY) -m wt.ops.evidence --dry-run

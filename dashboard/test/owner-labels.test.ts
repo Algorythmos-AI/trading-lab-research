@@ -64,7 +64,7 @@ const bar = (k: number, [o, h, l, c]: OHLC, day = S, vol: number | null = 1000):
 const flat = (p: number): OHLC => [p, p, p, p];
 
 /**
- * ABC: flat at 95, levels 100 (call) and 90 (put), ATR 2. The call plan: entry 100.02, stop 99.80, target 1 100.46.
+ * AMD: flat at 95, levels 100 (call) and 90 (put), ATR 2. The call plan: entry 100.02, stop 99.80, target 1 100.46.
  * The put plan: entry 89.98, stop 90.20, target 1 89.54. From bar `k` (default 14, 09:58 to 10:00) a break above 100,
  * a dip to 100.10 in bar k + 1 (the touch), bar k + 2 closing above the dip bar's close (the retest confirms: enter zone
  * for two slots, DEC-0052), target 1 reached by bar k + 4 (missed), and a close back at 95 (plan off). From bar `kPut`
@@ -105,11 +105,11 @@ const smhBars = (day = S, n = 195): LabelBar[] => Array.from({ length: n }, (_, 
 
 type Item = NonNullable<Options["focus"]>["items"][number];
 type Ticker = Options["tickers"][number];
-const ABC_ITEM: Item = { symbol: "ABC", rank: 1, bias: "breakout", atr: 2, breakout_above: 100, hold_above: 90 };
+const AMD_ITEM: Item = { symbol: "AMD", rank: 1, bias: "breakout", atr: 2, breakout_above: 100, hold_above: 90 };
 const QQQ_ITEM: Item = { symbol: "QQQ", rank: 2, bias: "breakout", atr: 2, breakout_above: 500, hold_above: 480 };
 const ticker = (symbol: string, halfDay = false) => ({ symbol, half_day: halfDay, levels: [], bars: [], expected_move: null });
 /** An edition for `day`, built at 00:00 New York that day (before the open). */
-function edition(day = S, items: Item[] = [ABC_ITEM, QQQ_ITEM], halfDay = false, tickers?: Partial<Ticker>[]): Options {
+function edition(day = S, items: Item[] = [AMD_ITEM, QQQ_ITEM], halfDay = false, tickers?: Partial<Ticker>[]): Options {
   return {
     schema: "stocksdelta/options",
     session: day,
@@ -125,10 +125,10 @@ const levels = (hi: number, lo: number) => [
   { name: "PDH", price: hi },
   { name: "PDL", price: lo },
 ];
-/** ABC: PDH 110, PDL 80 (the middle third is 90 to 100); QQQ: PDH 505, PDL 440 (461.67 to 483.33). IVs given. */
+/** AMD: PDH 110, PDL 80 (the middle third is 90 to 100); QQQ: PDH 505, PDL 440 (461.67 to 483.33). IVs given. */
 function richEdition(abcIv = 0.3, qqqIv = 0.2): Options {
-  return edition(S, [ABC_ITEM, QQQ_ITEM], false, [
-    { symbol: "ABC", half_day: false, levels: levels(110, 80), bars: daily(110, 80), expected_move: { annual_iv: abcIv } },
+  return edition(S, [AMD_ITEM, QQQ_ITEM], false, [
+    { symbol: "AMD", half_day: false, levels: levels(110, 80), bars: daily(110, 80), expected_move: { annual_iv: abcIv } },
     { symbol: "QQQ", half_day: false, levels: levels(505, 440), bars: daily(505, 440), expected_move: { annual_iv: qqqIv } },
   ] as unknown as Partial<Ticker>[]);
 }
@@ -162,7 +162,7 @@ function input(over: In = {}): ReplayInput {
   return {
     session,
     editions,
-    bars: { ABC: abcBars(), QQQ: qqqBars(), SMH: smhBars() },
+    bars: { AMD: abcBars(), QQQ: qqqBars(), SMH: smhBars() },
     requests: [{ complete: true }],
     barsFeed: "iex",
     barsFetchedAt: `${session}T21:30:00.000Z`,
@@ -229,7 +229,7 @@ describe("the replay", () => {
   const r = replaySession(input(), LIVE);
 
   it("evaluates once per 2-minute bar at the bar's end + 5 s, 09:32:05 to 16:00:05, from evaluationTimes", () => {
-    const steps = r.names.ABC!.steps;
+    const steps = r.names.AMD!.steps;
     expect(steps).toHaveLength(195);
     expect(steps.map((s) => s.now)).toEqual(evaluationTimes(labelSessionBounds(S)!, LIVE, R31));
     expect(steps[0]!.now).toBe(at("09:32:05"));
@@ -237,8 +237,8 @@ describe("the replay", () => {
     expect(steps.at(-1)!.until).toBe(Infinity);
   });
 
-  it("gives the call side of ABC: get ready 10:00:05, enter zone 10:04:05 to 10:08:05 (two slots), missed, then plan off", () => {
-    const st = (t: string) => r.names.ABC!.sides.call.find((x) => x.from <= at(t) && at(t) < x.until)!.state;
+  it("gives the call side of AMD: get ready 10:00:05, enter zone 10:04:05 to 10:08:05 (two slots), missed, then plan off", () => {
+    const st = (t: string) => r.names.AMD!.sides.call.find((x) => x.from <= at(t) && at(t) < x.until)!.state;
     expect(st("10:00:05")).toBe("get_ready");
     expect(st("10:02:05")).toBe("get_ready"); // touched, waiting for the confirming close
     expect(st("10:04:04")).toBe("get_ready");
@@ -248,8 +248,8 @@ describe("the replay", () => {
     expect(st("10:12:05")).toBe("plan_off");
   });
 
-  it("gives the put side of ABC enter zone 13:34:05 to 13:36:05 (target 1 in the next slot)", () => {
-    const st = (t: string) => r.names.ABC!.sides.put.find((x) => x.from <= at(t) && at(t) < x.until)!.state;
+  it("gives the put side of AMD enter zone 13:34:05 to 13:36:05 (target 1 in the next slot)", () => {
+    const st = (t: string) => r.names.AMD!.sides.put.find((x) => x.from <= at(t) && at(t) < x.until)!.state;
     expect(st("13:32:05")).toBe("get_ready");
     expect(st("13:34:05")).toBe("enter_zone");
     expect(st("13:36:04")).toBe("enter_zone");
@@ -257,8 +257,8 @@ describe("the replay", () => {
   });
 
   it("reads a side as no_trade while its row is no_trade or paused (before 09:35, lunch, after 15:10)", () => {
-    const st = (t: string) => r.names.ABC!.sides.call.find((x) => x.from <= at(t) && at(t) < x.until)!.state;
-    expect(stepAt(r.names.ABC!, at("09:34:00"))!.state.state).toBe("no_trade");
+    const st = (t: string) => r.names.AMD!.sides.call.find((x) => x.from <= at(t) && at(t) < x.until)!.state;
+    expect(stepAt(r.names.AMD!, at("09:34:00"))!.state.state).toBe("no_trade");
     expect(st("09:34:00")).toBe("no_trade");
     expect(st("12:00:00")).toBe("no_trade");
     expect(st("15:20:00")).toBe("no_trade");
@@ -273,32 +273,32 @@ describe("the replay", () => {
   });
 
   it("evaluates over a slot with no bar: the evaluation is there, its bars carry the gap", () => {
-    const g = replaySession(input({ bars: { ABC: without(abcBars(), 30), QQQ: qqqBars(), SMH: smhBars() } }), LIVE);
-    expect(stepAt(g.names.ABC!, at("10:32:05"))).toMatchObject({ now: at("10:32:05"), bars: { complete: true, gaps: 1 } });
+    const g = replaySession(input({ bars: { AMD: without(abcBars(), 30), QQQ: qqqBars(), SMH: smhBars() } }), LIVE);
+    expect(stepAt(g.names.AMD!, at("10:32:05"))).toMatchObject({ now: at("10:32:05"), bars: { complete: true, gaps: 1 } });
     // 10:31: the evaluation of 10:30:05 read bars to 10:30 only, so no gap yet (the plan is off: off_plan)
-    expect(labelAlone("ABC", "call", "10:31:00", { bars: { ABC: without(abcBars(), 30), QQQ: qqqBars(), SMH: smhBars() } })).toEqual({ label: "off_plan", reason: null });
-    expect(labelAlone("ABC", "call", "10:33:00", { bars: { ABC: without(abcBars(), 30), QQQ: qqqBars(), SMH: smhBars() } })).toEqual({ label: "no_record", reason: "bars_gap" });
+    expect(labelAlone("AMD", "call", "10:31:00", { bars: { AMD: without(abcBars(), 30), QQQ: qqqBars(), SMH: smhBars() } })).toEqual({ label: "off_plan", reason: null });
+    expect(labelAlone("AMD", "call", "10:33:00", { bars: { AMD: without(abcBars(), 30), QQQ: qqqBars(), SMH: smhBars() } })).toEqual({ label: "no_record", reason: "bars_gap" });
   });
 });
 
 // ---- the labels, each by hand ---------------------------------------------------------------------------------------
 describe("each label on the synthetic session", () => {
   it("in_zone at the first instant of the enter_zone interval (10:04:05.000)", () => {
-    expect(labelAlone("ABC", "call", "10:04:05.000")).toEqual({ label: "in_zone", reason: null });
+    expect(labelAlone("AMD", "call", "10:04:05.000")).toEqual({ label: "in_zone", reason: null });
   });
 
   it("in_zone at the last instant before until + 60 s (10:09:04.999; until is 10:08:05)", () => {
     expect(ZONE_EXTEND_MS).toBe(60_000);
-    expect(labelAlone("ABC", "call", "10:09:04.999")).toEqual({ label: "in_zone", reason: null });
+    expect(labelAlone("AMD", "call", "10:09:04.999")).toEqual({ label: "in_zone", reason: null });
   });
 
   it("not in zone exactly at until + 60 s (10:09:05.000): the side is missed then, so off_plan", () => {
-    expect(labelAlone("ABC", "call", "10:09:05.000")).toEqual({ label: "off_plan", reason: null });
+    expect(labelAlone("AMD", "call", "10:09:05.000")).toEqual({ label: "off_plan", reason: null });
   });
 
   it("early in a get_ready interval (10:03:00), and in the grace before the next evaluation (10:04:02)", () => {
-    expect(labelAlone("ABC", "call", "10:03:00")).toEqual({ label: "early", reason: null });
-    expect(labelAlone("ABC", "call", "10:04:02")).toEqual({ label: "early", reason: null });
+    expect(labelAlone("AMD", "call", "10:03:00")).toEqual({ label: "early", reason: null });
+    expect(labelAlone("AMD", "call", "10:04:02")).toEqual({ label: "early", reason: null });
   });
 
   it("alt: a put on QQQ while the failed break (a put) is live; a call at the same t0 is off_plan", () => {
@@ -309,7 +309,7 @@ describe("each label on the synthetic session", () => {
 
   it("alt is masked like the side state: the same failed break formed in lunch is off_plan", () => {
     // bar 60 (11:30 to 11:32) breaks 500, bar 61 closes back at 499: the alternative completes at 11:34, in lunch
-    const bars = { ABC: abcBars(), QQQ: qqqBars(60), SMH: smhBars() };
+    const bars = { AMD: abcBars(), QQQ: qqqBars(60), SMH: smhBars() };
     const r = replaySession(input({ bars, journal: { trades: [] } }), LIVE);
     const s = stepAt(r.names.QQQ!, at("11:35:00"))!.state;
     expect(s.state).toBe("no_trade");
@@ -322,16 +322,16 @@ describe("each label on the synthetic session", () => {
     // bars with a 1.00 range, then bar 20 (10:10 to 10:12) reaches 100.50 and closes at 99.90: atr2m is 1.32, a sweep
     // needs 0.33 past the level; the alternative is a put, stop 100.50, live while the price stays near 100
     const swept = Array.from({ length: 195 }, (_, i) => bar(i, i < 20 ? [95, 95.5, 94.5, 95] : i === 20 ? [95, 100.5, 95, 99.9] : [99.9, 99.95, 99.85, 99.9]));
-    const bars = { ABC: swept, QQQ: qqqBars(), SMH: smhBars() };
-    expect(labelAlone("ABC", "put", "10:13:00", { bars })).toEqual({ label: "alt", reason: null });
-    const tr = piece("ABC", "put", "10:13:00", "10:30:00");
+    const bars = { AMD: swept, QQQ: qqqBars(), SMH: smhBars() };
+    expect(labelAlone("AMD", "put", "10:13:00", { bars })).toEqual({ label: "alt", reason: null });
+    const tr = piece("AMD", "put", "10:13:00", "10:30:00");
     const noAtr: LabelEngine = { ...LIVE, atr2m: () => null };
     const r = replaySession(input({ bars, journal: { trades: [tr] } }), noAtr);
-    expect(labelPosition({ symbol: "ABC", kind: "put", t0: tr.opened_at }, r)).toEqual({ label: "off_plan", reason: null });
+    expect(labelPosition({ symbol: "AMD", kind: "put", t0: tr.opened_at }, r)).toEqual({ label: "off_plan", reason: null });
   });
 
   it("off_plan after the plan went off (10:30)", () => {
-    expect(labelAlone("ABC", "call", "10:30:00")).toEqual({ label: "off_plan", reason: null });
+    expect(labelAlone("AMD", "call", "10:30:00")).toEqual({ label: "off_plan", reason: null });
   });
 
   it("not_focus for a symbol not in the edition", () => {
@@ -339,18 +339,18 @@ describe("each label on the synthetic session", () => {
   });
 
   it("reads a call on the call side and a put on the put side", () => {
-    expect(labelAlone("ABC", "call", "10:05:00").label).toBe("in_zone");
-    expect(labelAlone("ABC", "put", "10:05:00").label).toBe("off_plan");
-    expect(labelAlone("ABC", "put", "13:35:00").label).toBe("in_zone");
-    expect(labelAlone("ABC", "call", "13:35:00").label).toBe("off_plan");
+    expect(labelAlone("AMD", "call", "10:05:00").label).toBe("in_zone");
+    expect(labelAlone("AMD", "put", "10:05:00").label).toBe("off_plan");
+    expect(labelAlone("AMD", "put", "13:35:00").label).toBe("in_zone");
+    expect(labelAlone("AMD", "call", "13:35:00").label).toBe("off_plan");
   });
 });
 
 describe("the day's inputs from the journal", () => {
-  const mine = () => piece("ABC", "call", "10:05:00", "10:20:00");
+  const mine = () => piece("AMD", "call", "10:05:00", "10:20:00");
   const label = (trades: Trade[], open: Lot[] = []) => {
     const m = trades.at(-1)!;
-    return labelPosition({ symbol: "ABC", kind: "call", t0: m.opened_at }, replaySession(input({ journal: { trades, open } }), LIVE)).label;
+    return labelPosition({ symbol: "AMD", kind: "call", t0: m.opened_at }, replaySession(input({ journal: { trades, open } }), LIVE)).label;
   };
 
   it("five earlier entries make the board say no trade; a buy sold in two parts is one entry", () => {
@@ -379,7 +379,7 @@ describe("the day's inputs from the journal", () => {
     expect(dayInputsAt({ trades: [won] }, S, at("10:04:05")).wonToday).toBe(true);
     const tr = mine();
     const a = labelSession(input({ edition: richEdition(), journal: { trades: [tr] } }), LIVE, META).rows[0]!;
-    const b = labelSession(input({ edition: richEdition(), journal: { trades: [won, tr] } }), LIVE, META).rows.find((x) => x.symbol === "ABC")!;
+    const b = labelSession(input({ edition: richEdition(), journal: { trades: [won, tr] } }), LIVE, META).rows.find((x) => x.symbol === "AMD")!;
     expect(a).toMatchObject({ label: "in_zone", cautions: [] });
     expect(b).toMatchObject({ label: "in_zone", cautions: ["winner"] });
   });
@@ -388,68 +388,68 @@ describe("the day's inputs from the journal", () => {
 // ---- every no_record cause ------------------------------------------------------------------------------------------
 describe("no_record, each cause on its own", () => {
   it("the edition is missing (none, or one for another session)", () => {
-    expect(labelAlone("ABC", "call", "10:05:00", { edition: null })).toEqual({ label: "no_record", reason: "edition_missing" });
-    expect(labelAlone("ABC", "call", "10:05:00", { edition: edition("2026-11-11") })).toEqual({ label: "no_record", reason: "edition_missing" });
+    expect(labelAlone("AMD", "call", "10:05:00", { edition: null })).toEqual({ label: "no_record", reason: "edition_missing" });
+    expect(labelAlone("AMD", "call", "10:05:00", { edition: edition("2026-11-11") })).toEqual({ label: "no_record", reason: "edition_missing" });
   });
 
   it("the edition was published after t0; t0 equal to its as_of is allowed", () => {
     const e = { ...edition(), as_of: iso("10:05:00") } as Options;
-    expect(labelAlone("ABC", "call", "10:04:59.999", { edition: e })).toEqual({ label: "no_record", reason: "edition_after_t0" });
-    expect(labelAlone("ABC", "call", "10:05:00.000", { edition: e })).toEqual({ label: "in_zone", reason: null });
-    expect(labelAlone("ABC", "call", "10:05:00", { edition: { ...edition(), as_of: null } as Options })).toEqual({ label: "no_record", reason: "edition_time_unknown" });
+    expect(labelAlone("AMD", "call", "10:04:59.999", { edition: e })).toEqual({ label: "no_record", reason: "edition_after_t0" });
+    expect(labelAlone("AMD", "call", "10:05:00.000", { edition: e })).toEqual({ label: "in_zone", reason: null });
+    expect(labelAlone("AMD", "call", "10:05:00", { edition: { ...edition(), as_of: null } as Options })).toEqual({ label: "no_record", reason: "edition_time_unknown" });
   });
 
   it("the calendar and the edition disagree on a half day: every row of the session, focus or not", () => {
-    const e = edition(S, [ABC_ITEM, QQQ_ITEM], true);
-    expect(labelAlone("ABC", "call", "10:05:00", { edition: e })).toEqual({ label: "no_record", reason: "half_day_mismatch" });
+    const e = edition(S, [AMD_ITEM, QQQ_ITEM], true);
+    expect(labelAlone("AMD", "call", "10:05:00", { edition: e })).toEqual({ label: "no_record", reason: "half_day_mismatch" });
     expect(labelAlone("XYZ", "call", "10:05:00", { edition: e })).toEqual({ label: "no_record", reason: "half_day_mismatch" });
-    const half = { ABC: abcBars(15, null, H, 105), QQQ: [], SMH: [] };
-    expect(labelAlone("ABC", "call", "10:05:00", { edition: edition(H), bars: half }, H)).toEqual({ label: "no_record", reason: "half_day_mismatch" });
+    const half = { AMD: abcBars(15, null, H, 105), QQQ: [], SMH: [] };
+    expect(labelAlone("AMD", "call", "10:05:00", { edition: edition(H), bars: half }, H)).toEqual({ label: "no_record", reason: "half_day_mismatch" });
   });
 
   it("the session's bars could not be had (DEC-0049 point 1)", () => {
-    expect(labelAlone("ABC", "call", "10:05:00", { bars: null })).toEqual({ label: "no_record", reason: "bars_unavailable" });
+    expect(labelAlone("AMD", "call", "10:05:00", { bars: null })).toEqual({ label: "no_record", reason: "bars_unavailable" });
   });
 
   it("the symbol's bars start after the open", () => {
-    const bars = { ABC: without(abcBars(), 0), QQQ: qqqBars(), SMH: smhBars() };
-    expect(labelAlone("ABC", "call", "10:05:00", { bars })).toEqual({ label: "no_record", reason: "bars_start_late" });
+    const bars = { AMD: without(abcBars(), 0), QQQ: qqqBars(), SMH: smhBars() };
+    expect(labelAlone("AMD", "call", "10:05:00", { bars })).toEqual({ label: "no_record", reason: "bars_start_late" });
   });
 
   it("a gap before t0 (bar 10, 09:50 to 09:52)", () => {
-    const bars = { ABC: without(abcBars(), 10), QQQ: qqqBars(), SMH: smhBars() };
-    expect(labelAlone("ABC", "call", "10:05:00", { bars })).toEqual({ label: "no_record", reason: "bars_gap" });
+    const bars = { AMD: without(abcBars(), 10), QQQ: qqqBars(), SMH: smhBars() };
+    expect(labelAlone("AMD", "call", "10:05:00", { bars })).toEqual({ label: "no_record", reason: "bars_gap" });
   });
 
   it("a gap after the bar holding t0 does not cause it, nor does a missing bar holding t0 itself", () => {
-    const bars = { ABC: without(abcBars(), 30), QQQ: qqqBars(), SMH: smhBars() };
-    expect(labelAlone("ABC", "call", "10:05:00", { bars })).toEqual({ label: "in_zone", reason: null });
-    const bars2 = { ABC: without(abcBars(), 17), QQQ: qqqBars(), SMH: smhBars() };
-    expect(labelAlone("ABC", "call", "10:05:00", { bars: bars2 })).toEqual({ label: "in_zone", reason: null });
+    const bars = { AMD: without(abcBars(), 30), QQQ: qqqBars(), SMH: smhBars() };
+    expect(labelAlone("AMD", "call", "10:05:00", { bars })).toEqual({ label: "in_zone", reason: null });
+    const bars2 = { AMD: without(abcBars(), 17), QQQ: qqqBars(), SMH: smhBars() };
+    expect(labelAlone("AMD", "call", "10:05:00", { bars: bars2 })).toEqual({ label: "in_zone", reason: null });
   });
 
-  it("SMH's bars incomplete when the leader check needs them (QQQ), and not otherwise (ABC)", () => {
-    const gap = { ABC: abcBars(), QQQ: qqqBars(), SMH: without(smhBars(), 5) };
+  it("SMH's bars incomplete when the leader check needs them (QQQ), and not otherwise (AMD)", () => {
+    const gap = { AMD: abcBars(), QQQ: qqqBars(), SMH: without(smhBars(), 5) };
     expect(labelAlone("QQQ", "put", "10:45:00", { bars: gap })).toEqual({ label: "no_record", reason: "leader_bars_gap" });
-    expect(labelAlone("ABC", "call", "10:05:00", { bars: gap })).toEqual({ label: "in_zone", reason: null });
-    const late = { ABC: abcBars(), QQQ: qqqBars(), SMH: without(smhBars(), 0) };
+    expect(labelAlone("AMD", "call", "10:05:00", { bars: gap })).toEqual({ label: "in_zone", reason: null });
+    const late = { AMD: abcBars(), QQQ: qqqBars(), SMH: without(smhBars(), 0) };
     expect(labelAlone("QQQ", "put", "10:45:00", { bars: late })).toEqual({ label: "no_record", reason: "leader_bars_start_late" });
   });
 
   it("the side carries brokeEarlier at t0 (the session opened above a call level of 94)", () => {
-    const e = edition(S, [{ ...ABC_ITEM, breakout_above: 94 }, QQQ_ITEM]);
-    expect(labelAlone("ABC", "call", "09:50:00", { edition: e })).toEqual({ label: "no_record", reason: "side_broke_earlier" });
+    const e = edition(S, [{ ...AMD_ITEM, breakout_above: 94 }, QQQ_ITEM]);
+    expect(labelAlone("AMD", "call", "09:50:00", { edition: e })).toEqual({ label: "no_record", reason: "side_broke_earlier" });
   });
 
   it("the side carries gap at t0 (an engine whose side says gap: unreachable with complete bars, so stubbed)", () => {
     const eng: LabelEngine = { ...LIVE, nameState: (n) => script(n.now.getTime(), nameState(n), { [at("10:04:05")]: { call: { gap: true } } }) };
-    const tr = piece("ABC", "call", "10:05:00", "10:20:00");
+    const tr = piece("AMD", "call", "10:05:00", "10:20:00");
     const r = replaySession(input({ journal: { trades: [tr] } }), eng);
-    expect(labelPosition({ symbol: "ABC", kind: "call", t0: tr.opened_at }, r)).toEqual({ label: "no_record", reason: "side_gap" });
+    expect(labelPosition({ symbol: "AMD", kind: "call", t0: tr.opened_at }, r)).toEqual({ label: "no_record", reason: "side_gap" });
   });
 
   it("not a session in the calendar (a Saturday)", () => {
-    expect(labelAlone("ABC", "call", "10:05:00", { edition: edition("2026-11-14") }, "2026-11-14")).toEqual({ label: "no_record", reason: "not_a_session" });
+    expect(labelAlone("AMD", "call", "10:05:00", { edition: edition("2026-11-14") }, "2026-11-14")).toEqual({ label: "no_record", reason: "not_a_session" });
   });
 });
 
@@ -473,14 +473,14 @@ describe("the registered order: a fill satisfying two labels gets the earlier", 
   });
 
   it("no_record before in_zone: a gap before a t0 that is otherwise in zone", () => {
-    const bars = { ABC: without(abcBars(), 10), QQQ: qqqBars(), SMH: smhBars() };
-    expect(labelAlone("ABC", "call", "10:05:00", { bars }).label).toBe("no_record");
+    const bars = { AMD: without(abcBars(), 10), QQQ: qqqBars(), SMH: smhBars() };
+    expect(labelAlone("AMD", "call", "10:05:00", { bars }).label).toBe("no_record");
   });
 
-  it("not_focus before in_zone: ABC dropped from the focus items, its bars and ticker kept", () => {
-    const e = edition(S, [ABC_ITEM, QQQ_ITEM]);
+  it("not_focus before in_zone: AMD dropped from the focus items, its bars and ticker kept", () => {
+    const e = edition(S, [AMD_ITEM, QQQ_ITEM]);
     (e.focus as { items: Item[] }).items = [QQQ_ITEM];
-    expect(labelAlone("ABC", "call", "10:05:00", { edition: e })).toEqual({ label: "not_focus", reason: null });
+    expect(labelAlone("AMD", "call", "10:05:00", { edition: e })).toEqual({ label: "not_focus", reason: null });
   });
 
   it("in_zone before early: t0 in an enter_zone's 60 s extension and in the get_ready interval after it", () => {
@@ -488,17 +488,17 @@ describe("the registered order: a fill satisfying two labels gets the earlier", 
       ...LIVE,
       nameState: (n) => script(n.now.getTime(), nameState(n), { [at("10:20:05")]: { call: { state: "enter_zone" } }, [at("10:22:05")]: { call: { state: "get_ready" } } }),
     };
-    const tr = piece("ABC", "call", "10:22:30", "10:40:00");
+    const tr = piece("AMD", "call", "10:22:30", "10:40:00");
     const r = replaySession(input({ journal: { trades: [tr] } }), eng);
-    expect(labelPosition({ symbol: "ABC", kind: "call", t0: tr.opened_at }, r).label).toBe("in_zone");
-    expect(labelPosition({ symbol: "ABC", kind: "call", t0: iso("10:23:05.000") }, r).label).toBe("early");
+    expect(labelPosition({ symbol: "AMD", kind: "call", t0: tr.opened_at }, r).label).toBe("in_zone");
+    expect(labelPosition({ symbol: "AMD", kind: "call", t0: iso("10:23:05.000") }, r).label).toBe("early");
   });
 
   it("early before alt: t0 in a get_ready interval with an alternative of its own kind live", () => {
     const eng: LabelEngine = { ...LIVE, nameState: (n) => script(n.now.getTime(), nameState(n), { [at("10:22:05")]: { call: { state: "get_ready" }, put: { alt: ALT_CALL } } }) };
-    const tr = piece("ABC", "call", "10:23:00", "10:40:00");
+    const tr = piece("AMD", "call", "10:23:00", "10:40:00");
     const r = replaySession(input({ journal: { trades: [tr] } }), eng);
-    expect(labelPosition({ symbol: "ABC", kind: "call", t0: tr.opened_at }, r).label).toBe("early");
+    expect(labelPosition({ symbol: "AMD", kind: "call", t0: tr.opened_at }, r).label).toBe("early");
   });
 
   it("alt before off_plan: the QQQ failed break (real bars, above)", () => {
@@ -509,17 +509,17 @@ describe("the registered order: a fill satisfying two labels gets the earlier", 
 // ---- the clock ------------------------------------------------------------------------------------------------------
 describe("t0 at the edges of the day", () => {
   it("before the first evaluation (09:31): no state holds t0, so off_plan (\"off_plan: none of the above\")", () => {
-    expect(labelAlone("ABC", "call", "09:31:00")).toEqual({ label: "off_plan", reason: null });
+    expect(labelAlone("AMD", "call", "09:31:00")).toEqual({ label: "off_plan", reason: null });
   });
 
   it("before the first evaluation the edition checks still come first", () => {
-    expect(labelAlone("ABC", "call", "09:31:00", { edition: null })).toEqual({ label: "no_record", reason: "edition_missing" });
-    expect(labelAlone("ABC", "call", "09:31:00", { edition: edition("2026-11-11") })).toEqual({ label: "no_record", reason: "edition_missing" });
-    expect(labelAlone("ABC", "call", "09:31:00", { edition: { ...edition(), as_of: iso("09:31:30") } as Options })).toEqual({ label: "no_record", reason: "edition_after_t0" });
+    expect(labelAlone("AMD", "call", "09:31:00", { edition: null })).toEqual({ label: "no_record", reason: "edition_missing" });
+    expect(labelAlone("AMD", "call", "09:31:00", { edition: edition("2026-11-11") })).toEqual({ label: "no_record", reason: "edition_missing" });
+    expect(labelAlone("AMD", "call", "09:31:00", { edition: { ...edition(), as_of: iso("09:31:30") } as Options })).toEqual({ label: "no_record", reason: "edition_after_t0" });
   });
 
   it("before 09:35 (09:34): the row is no_trade, so the side is no_trade (labels.side_state), so off_plan", () => {
-    expect(labelAlone("ABC", "call", "09:34:00")).toEqual({ label: "off_plan", reason: null });
+    expect(labelAlone("AMD", "call", "09:34:00")).toEqual({ label: "off_plan", reason: null });
   });
 
   it("grid consequence: a t0 at 09:35:30 after a breakout in the first minutes is off_plan (no evaluation at 09:35:00)", () => {
@@ -527,40 +527,40 @@ describe("t0 at the edges of the day", () => {
     // (09:32 to 09:34) and the dip that holds in bar 2 (09:34 to 09:36). The evaluation at 09:34:05 is before 09:35, so
     // its row is no_trade, and it holds until 09:36:05: at 09:35:30 the label is off_plan; from 09:36:05, early (the dip
     // touched; DEC-0052's retest cannot confirm before the 2-minute ATR has its 15 bars, about 10:00).
-    const bars = { ABC: abcBars(1, null), QQQ: qqqBars(), SMH: smhBars() };
+    const bars = { AMD: abcBars(1, null), QQQ: qqqBars(), SMH: smhBars() };
     const times = evaluationTimes(labelSessionBounds(S)!, LIVE, R31);
     expect(times.slice(0, 3)).toEqual([at("09:32:05"), at("09:34:05"), at("09:36:05")]);
     expect(times).not.toContain(at("09:35:00"));
-    expect(labelAlone("ABC", "call", "09:35:30", { bars })).toEqual({ label: "off_plan", reason: null });
-    expect(labelAlone("ABC", "call", "09:36:05", { bars })).toEqual({ label: "early", reason: null });
+    expect(labelAlone("AMD", "call", "09:35:30", { bars })).toEqual({ label: "off_plan", reason: null });
+    expect(labelAlone("AMD", "call", "09:36:05", { bars })).toEqual({ label: "early", reason: null });
   });
 
   it("in lunch on a full day: the same break at 11:40 that is in zone on a half day is off_plan (side_state)", () => {
     // the retest confirms at the 11:46 close: in zone from 11:46:05 on the half day
-    const bars = { ABC: abcBars(65, null), QQQ: qqqBars(), SMH: smhBars() };
-    expect(labelAlone("ABC", "call", "11:47:00", { bars })).toEqual({ label: "off_plan", reason: null });
-    const half = { ABC: abcBars(65, null, H, 105), QQQ: Array.from({ length: 105 }, (_, i) => bar(i, flat(490), H)), SMH: smhBars(H, 105) };
+    const bars = { AMD: abcBars(65, null), QQQ: qqqBars(), SMH: smhBars() };
+    expect(labelAlone("AMD", "call", "11:47:00", { bars })).toEqual({ label: "off_plan", reason: null });
+    const half = { AMD: abcBars(65, null, H, 105), QQQ: Array.from({ length: 105 }, (_, i) => bar(i, flat(490), H)), SMH: smhBars(H, 105) };
     expect(labelSessionBounds(H)).toMatchObject({ halfDay: true, close: at("13:00:00", H) });
-    expect(labelAlone("ABC", "call", "11:47:00", { bars: half, edition: edition(H, [ABC_ITEM, QQQ_ITEM], true) }, H)).toEqual({ label: "in_zone", reason: null });
+    expect(labelAlone("AMD", "call", "11:47:00", { bars: half, edition: edition(H, [AMD_ITEM, QQQ_ITEM], true) }, H)).toEqual({ label: "in_zone", reason: null });
   });
 
   it("after 15:10 on a full day, and after 12:10 on a half day: no_trade rows, so off_plan", () => {
-    expect(labelAlone("ABC", "call", "15:20:00")).toEqual({ label: "off_plan", reason: null });
-    const half = { ABC: abcBars(82, null, H, 105), QQQ: Array.from({ length: 105 }, (_, i) => bar(i, flat(490), H)), SMH: smhBars(H, 105) };
-    expect(labelAlone("ABC", "call", "12:20:00", { bars: half, edition: edition(H, [ABC_ITEM, QQQ_ITEM], true) }, H)).toEqual({ label: "off_plan", reason: null });
+    expect(labelAlone("AMD", "call", "15:20:00")).toEqual({ label: "off_plan", reason: null });
+    const half = { AMD: abcBars(82, null, H, 105), QQQ: Array.from({ length: 105 }, (_, i) => bar(i, flat(490), H)), SMH: smhBars(H, 105) };
+    expect(labelAlone("AMD", "call", "12:20:00", { bars: half, edition: edition(H, [AMD_ITEM, QQQ_ITEM], true) }, H)).toEqual({ label: "off_plan", reason: null });
   });
 
   it("a half day's replay ends at 13:00:05 and reads its completeness against the 13:00 close", () => {
-    const half = { ABC: abcBars(65, null, H, 105), QQQ: Array.from({ length: 105 }, (_, i) => bar(i, flat(490), H)), SMH: smhBars(H, 105) };
-    const r = replaySession(input({ session: H, edition: edition(H, [ABC_ITEM, QQQ_ITEM], true), bars: half }), LIVE);
-    expect(r.names.ABC!.steps).toHaveLength(105);
-    expect(r.names.ABC!.steps.at(-1)!.now).toBe(at("13:00:05", H));
-    expect(r.names.ABC!.steps.at(-1)!.bars).toEqual({ complete: true, gaps: 0 });
+    const half = { AMD: abcBars(65, null, H, 105), QQQ: Array.from({ length: 105 }, (_, i) => bar(i, flat(490), H)), SMH: smhBars(H, 105) };
+    const r = replaySession(input({ session: H, edition: edition(H, [AMD_ITEM, QQQ_ITEM], true), bars: half }), LIVE);
+    expect(r.names.AMD!.steps).toHaveLength(105);
+    expect(r.names.AMD!.steps.at(-1)!.now).toBe(at("13:00:05", H));
+    expect(r.names.AMD!.steps.at(-1)!.bars).toEqual({ complete: true, gaps: 0 });
   });
 
   it("refuses a fill whose t0 is not on the replay's day", () => {
     const r = replaySession(input(), LIVE);
-    expect(() => labelPosition({ symbol: "ABC", kind: "call", t0: iso("10:05:00", "2026-11-13") }, r)).toThrow(RangeError);
+    expect(() => labelPosition({ symbol: "AMD", kind: "call", t0: iso("10:05:00", "2026-11-13") }, r)).toThrow(RangeError);
   });
 });
 
@@ -570,43 +570,43 @@ describe("one row per buy fill, keyed by contract and t0", () => {
   const keys = (r: ReturnType<typeof rows>) => r.rows.map((x) => [x.symbol, x.kind, x.strike, x.t0, x.label]);
 
   it("a lot bought at 10:05 and still held: one row on its session", () => {
-    expect(keys(rows([], [lot("ABC", "call", "10:05:00")]))).toEqual([["ABC", "call", 102.5, iso("10:05:00"), "in_zone"]]);
+    expect(keys(rows([], [lot("AMD", "call", "10:05:00")]))).toEqual([["AMD", "call", 102.5, iso("10:05:00"), "in_zone"]]);
   });
 
   it("buy A at 10:00 still held and buy B at 14:00 sold at 14:30, one contract: two rows, 10:00 and 14:00", () => {
-    const r = rows([piece("ABC", "call", "14:00:00", "14:30:00")], [lot("ABC", "call", "10:00:00")]);
+    const r = rows([piece("AMD", "call", "14:00:00", "14:30:00")], [lot("AMD", "call", "10:00:00")]);
     expect(keys(r)).toEqual([
-      ["ABC", "call", 102.5, iso("10:00:00"), "off_plan"],
-      ["ABC", "call", 102.5, iso("14:00:00"), "off_plan"],
+      ["AMD", "call", 102.5, iso("10:00:00"), "off_plan"],
+      ["AMD", "call", 102.5, iso("14:00:00"), "off_plan"],
     ]);
   });
 
   it("a buy sold in parts is one row, and so is one partly sold and partly held", () => {
-    const sold = [piece("ABC", "call", "10:05:00", "10:20:00"), piece("ABC", "call", "10:05:00", "10:30:00")];
-    expect(keys(rows(sold))).toEqual([["ABC", "call", 102.5, iso("10:05:00"), "in_zone"]]);
-    expect(keys(rows(sold.slice(0, 1), [lot("ABC", "call", "10:05:00")]))).toHaveLength(1);
+    const sold = [piece("AMD", "call", "10:05:00", "10:20:00"), piece("AMD", "call", "10:05:00", "10:30:00")];
+    expect(keys(rows(sold))).toEqual([["AMD", "call", 102.5, iso("10:05:00"), "in_zone"]]);
+    expect(keys(rows(sold.slice(0, 1), [lot("AMD", "call", "10:05:00")]))).toHaveLength(1);
   });
 
   it("two buys at different times are two rows", () => {
-    const r = rows([piece("ABC", "put", "10:03:00", "10:04:30"), piece("ABC", "put", "13:35:00", "13:50:00")]);
+    const r = rows([piece("AMD", "put", "10:03:00", "10:04:30"), piece("AMD", "put", "13:35:00", "13:50:00")]);
     expect(keys(r)).toEqual([
-      ["ABC", "put", 87.5, iso("10:03:00"), "off_plan"],
-      ["ABC", "put", 87.5, iso("13:35:00"), "in_zone"],
+      ["AMD", "put", 87.5, iso("10:03:00"), "off_plan"],
+      ["AMD", "put", 87.5, iso("13:35:00"), "in_zone"],
     ]);
   });
 
   it("a short piece and a stock piece have no row", () => {
-    expect(rows([piece("ABC", "call", "10:05:00", "10:20:00", { side: "short" }), piece("ABC", "stock", "10:05:00", "10:20:00", { strike: null, multiplier: 1 })]).rows).toEqual([]);
+    expect(rows([piece("AMD", "call", "10:05:00", "10:20:00", { side: "short" }), piece("AMD", "stock", "10:05:00", "10:20:00", { strike: null, multiplier: 1 })]).rows).toEqual([]);
   });
 
   it("a lot with no opened_at has no row and is counted; a fill of another day has none", () => {
-    const r = rows([piece("ABC", "call", "10:05:00", "10:20:00", {}, "2026-11-13")], [lot("ABC", "call", null), lot("ABC", "put", "10:05:00", { side: "short" })]);
+    const r = rows([piece("AMD", "call", "10:05:00", "10:20:00", {}, "2026-11-13")], [lot("AMD", "call", null), lot("AMD", "put", "10:05:00", { side: "short" })]);
     expect(r).toEqual({ state: "labelled", rows: [], summary: { fills: 0, lotsWithoutTime: 1 } });
   });
 
   it("a fill the verdict will later leave out (cost 0, a gap day) still gets a row", () => {
-    const zero = piece("ABC", "call", "10:05:00", "10:20:00", { entry: 0, pnl: 161 });
-    const r = labelSession(input({ journal: { trades: [zero], open: [], gaps: [{ date: S, kind: "close-without-open", symbol: "ABC" }] } as ReplayInput["journal"] }), LIVE, META);
+    const zero = piece("AMD", "call", "10:05:00", "10:20:00", { entry: 0, pnl: 161 });
+    const r = labelSession(input({ journal: { trades: [zero], open: [], gaps: [{ date: S, kind: "close-without-open", symbol: "AMD" }] } as ReplayInput["journal"] }), LIVE, META);
     expect(r.rows.map((x) => x.label)).toEqual(["in_zone"]);
     expect(sessionFills({ trades: [zero] }, S).fills).toHaveLength(1);
   });
@@ -619,26 +619,26 @@ describe("the cautions at t0 (HYP-0049), in the row", () => {
   });
 
   it("two known cautions: a put in zone at 13:35 on a name with IV 90% (iv, late), sorted", () => {
-    expect(rowAlone("ABC", "put", "13:35:00", { edition: richEdition(0.9) })).toMatchObject({ label: "in_zone", cautions: ["iv", "late"], unknown: 0 });
+    expect(rowAlone("AMD", "put", "13:35:00", { edition: richEdition(0.9) })).toMatchObject({ label: "in_zone", cautions: ["iv", "late"], unknown: 0 });
   });
 
   it("none: a call in zone at 10:05, every check decided", () => {
-    expect(rowAlone("ABC", "call", "10:05:00", { edition: richEdition() })).toMatchObject({ label: "in_zone", cautions: [], unknown: 0 });
+    expect(rowAlone("AMD", "call", "10:05:00", { edition: richEdition() })).toMatchObject({ label: "in_zone", cautions: [], unknown: 0 });
   });
 
   it("an unknown leader check: SMH bars without volume (QQQ, alt at 10:45)", () => {
-    const novol = { ABC: abcBars(), QQQ: qqqBars(), SMH: smhBars().map((b) => ({ ...b, v: null })) };
+    const novol = { AMD: abcBars(), QQQ: qqqBars(), SMH: smhBars().map((b) => ({ ...b, v: null })) };
     expect(rowAlone("QQQ", "put", "10:45:00", { edition: richEdition(), bars: novol })).toMatchObject({ label: "alt", cautions: [], unknown: 1 });
     expect(rowAlone("QQQ", "put", "10:45:00", { edition: richEdition() })).toMatchObject({ label: "alt", cautions: [], unknown: 0 });
   });
 
   it("are null on a no_record or not_focus row", () => {
     expect(rowAlone("XYZ", "call", "10:05:00")).toMatchObject({ label: "not_focus", cautions: null, unknown: null });
-    expect(rowAlone("ABC", "call", "10:05:00", { edition: null })).toMatchObject({ label: "no_record", cautions: null, unknown: null });
+    expect(rowAlone("AMD", "call", "10:05:00", { edition: null })).toMatchObject({ label: "no_record", cautions: null, unknown: null });
   });
 
   it("never include the desk-only before10 caution", () => {
-    const c = cautionsAt({ symbol: "ABC", kind: "call", t0: iso("09:40:00") }, input({ edition: richEdition() }), LIVE)!;
+    const c = cautionsAt({ symbol: "AMD", kind: "call", t0: iso("09:40:00") }, input({ edition: richEdition() }), LIVE)!;
     expect(c.cautions).not.toContain("before10" as never);
   });
 });
@@ -671,7 +671,7 @@ describe("no look-ahead", () => {
     const positions: LabelPosition[] = Array.from({ length: 240 }, (_, i) => {
       const [from, to] = i % 3 === 0 ? (["09:30:00", "16:00:00"] as const) : windows[i % windows.length]!;
       const t = at(from) + Math.floor(rand() * (at(to) - at(from)));
-      return { symbol: rand() < 0.5 ? "ABC" : "QQQ", kind: rand() < 0.5 ? "call" : "put", t0: new Date(t).toISOString() };
+      return { symbol: rand() < 0.5 ? "AMD" : "QQQ", kind: rand() < 0.5 ? "call" : "put", t0: new Date(t).toISOString() };
     });
     const baseLabels = positions.map((p) => labelPosition(p, baseReplay));
     const baseCautions = positions.map((p) => cautionsAt(p, base, LIVE, rules));
@@ -681,7 +681,7 @@ describe("no look-ahead", () => {
     let labels = 0;
     let cautions = 0;
     for (let trial = 0; trial < 24; trial++) {
-      const cut = baseReplay.names.ABC!.steps[Math.floor(rand() * 195)]!.now + Math.floor(rand() * BAR);
+      const cut = baseReplay.names.AMD!.steps[Math.floor(rand() * 195)]!.now + Math.floor(rand() * BAR);
       const mutate = (bars: readonly LabelBar[]) =>
         bars.flatMap((b) => {
           if (b.end <= cut) return [b];
@@ -693,7 +693,7 @@ describe("no look-ahead", () => {
           }
           return [b];
         });
-      const changedInput = { ...base, bars: { ABC: mutate(base.bars!.ABC!), QQQ: mutate(base.bars!.QQQ!), SMH: mutate(base.bars!.SMH!) } };
+      const changedInput = { ...base, bars: { AMD: mutate(base.bars!.AMD!), QQQ: mutate(base.bars!.QQQ!), SMH: mutate(base.bars!.SMH!) } };
       const changed = replaySession(changedInput, LIVE, rules);
       positions.forEach((p, i) => {
         const why = `${p.symbol} ${p.kind} ${p.t0} cut ${new Date(cut).toISOString()}`;
@@ -715,7 +715,7 @@ describe("no look-ahead", () => {
 // ---- the row --------------------------------------------------------------------------------------------------------
 describe("the label row", () => {
   const trades = [
-    piece("ABC", "call", "10:05:00", "10:20:00", { entry: 1.37, exit: 1.61, pnl: 24 }),
+    piece("AMD", "call", "10:05:00", "10:20:00", { entry: 1.37, exit: 1.61, pnl: 24 }),
     piece("QQQ", "put", "10:45:00", "11:00:00", { strike: 475, entry: 2.13, exit: 1.79, pnl: -34 }),
     piece("XYZ", "call", "13:00:00", "13:10:00", { strike: 33, entry: 0.71, exit: 0.93, pnl: 22 }),
   ];
@@ -737,7 +737,7 @@ describe("the label row", () => {
     expect(rows[0]).toEqual({
       format: 1,
       experiment: "EXP-0031",
-      symbol: "ABC",
+      symbol: "AMD",
       kind: "call",
       strike: 102.5,
       expiry: "2026-11-20",
@@ -759,7 +759,7 @@ describe("the label row", () => {
     const rows = run();
     const forbidden = new Set<number>();
     for (const list of Object.values(input().bars!)) for (const b of list) for (const v of [b.o, b.h, b.l, b.c, b.v, b.vw]) if (typeof v === "number") forbidden.add(v);
-    for (const it of [ABC_ITEM, QQQ_ITEM]) {
+    for (const it of [AMD_ITEM, QQQ_ITEM]) {
       const p = focusPlan(it);
       for (const sp of [p.call, p.put]) for (const v of [sp?.level, sp?.entry, sp?.stop, sp?.target1]) if (typeof v === "number") forbidden.add(v);
       forbidden.add(it.atr!);
@@ -784,7 +784,7 @@ describe("the label row", () => {
   it("under EXP-0033 carries the copy's receipt time and the key of the stamp that covered t0", () => {
     const rows = run(R33);
     expect(rows.map((r) => [r.symbol, r.edition_copy_received_at, r.covering_stamp_key])).toEqual([
-      ["ABC", "2026-11-12T05:00:00.000Z", "desk/feeds/board/2026-11-12/1005.json"],
+      ["AMD", "2026-11-12T05:00:00.000Z", "desk/feeds/board/2026-11-12/1005.json"],
       ["QQQ", "2026-11-12T05:00:00.000Z", "desk/feeds/board/2026-11-12/1045.json"],
       ["XYZ", "2026-11-12T05:00:00.000Z", "desk/feeds/board/2026-11-12/1300.json"],
     ]);
@@ -820,7 +820,7 @@ describe("the rules objects", () => {
     expect(R31).toEqual({ experiment: "EXP-0031", feed: "iex", extraInstants: "none", edition: "stored", barsMissing: "no_record", boardFeed: "none" });
     expect(R33).toEqual({ experiment: "EXP-0033", feed: "sip", extraInstants: "board_boundaries", edition: "received_by_t0", barsMissing: "retry", boardFeed: "stamps" });
     const inp = input();
-    const pos = { symbol: "ABC", kind: "call" as const, t0: iso("10:05:00") };
+    const pos = { symbol: "AMD", kind: "call" as const, t0: iso("10:05:00") };
     for (const bad of [undefined, null, {}, { ...R31 }, { ...R33 }] as unknown as LabelRules[]) {
       expect(() => labelRules(bad)).toThrow(TypeError);
       expect(() => evaluationTimes(labelSessionBounds(S)!, LIVE, bad)).toThrow(TypeError);
@@ -853,11 +853,11 @@ describe("EXP-0033: the extra instants", () => {
 
   it("just after 12:10:00 on a half day: a get_ready from 12:08:05 is early under EXP-0031 and off_plan (flat) under EXP-0033", () => {
     // bar 78 (12:06 to 12:08) breaks 100; the half day's flat minute is 12:10 (50 minutes before the 13:00 close)
-    const half = { ABC: abcBars(78, null, H, 105), QQQ: Array.from({ length: 105 }, (_, i) => bar(i, flat(490), H)), SMH: smhBars(H, 105) };
+    const half = { AMD: abcBars(78, null, H, 105), QQQ: Array.from({ length: 105 }, (_, i) => bar(i, flat(490), H)), SMH: smhBars(H, 105) };
     const go = (rules: LabelRules) => {
-      const tr = piece("ABC", "call", "12:10:02", "12:40:00", {}, H);
-      const inp = input({ session: H, edition: edition(H, [ABC_ITEM, QQQ_ITEM], true), bars: half, stamps: sipStamps(H), journal: { trades: [tr] } });
-      return new SessionLabeller(inp, LIVE, rules).label({ symbol: "ABC", kind: "call", t0: tr.opened_at });
+      const tr = piece("AMD", "call", "12:10:02", "12:40:00", {}, H);
+      const inp = input({ session: H, edition: edition(H, [AMD_ITEM, QQQ_ITEM], true), bars: half, stamps: sipStamps(H), journal: { trades: [tr] } });
+      return new SessionLabeller(inp, LIVE, rules).label({ symbol: "AMD", kind: "call", t0: tr.opened_at });
     };
     expect(go(R31)).toEqual({ label: "early", reason: null });
     expect(go(R33)).toEqual({ label: "off_plan", reason: null });
@@ -867,56 +867,56 @@ describe("EXP-0033: the extra instants", () => {
     // The 09:35:00 instant reads bars ended by then: bar 1 (09:32 to 09:34) closed above 100 after a close at 95, and the
     // dip of bar 2 has not ended, so the call side is get_ready, and the row is live from 09:35: early. Under EXP-0031
     // the 09:34:05 evaluation (row no_trade, before 09:35) holds to 09:36:05.
-    const bars = { ABC: abcBars(1, null), QQQ: qqqBars(), SMH: smhBars() };
-    expect(labelUnder(R33, "ABC", "call", "09:35:30", { bars })).toEqual({ label: "early", reason: null });
-    expect(labelUnder(R31, "ABC", "call", "09:35:30", { bars })).toEqual({ label: "off_plan", reason: null });
-    expect(labelUnder(R33, "ABC", "call", "09:34:59", { bars })).toEqual({ label: "off_plan", reason: null });
+    const bars = { AMD: abcBars(1, null), QQQ: qqqBars(), SMH: smhBars() };
+    expect(labelUnder(R33, "AMD", "call", "09:35:30", { bars })).toEqual({ label: "early", reason: null });
+    expect(labelUnder(R31, "AMD", "call", "09:35:30", { bars })).toEqual({ label: "off_plan", reason: null });
+    expect(labelUnder(R33, "AMD", "call", "09:34:59", { bars })).toEqual({ label: "off_plan", reason: null });
   });
 
   it("just after 11:30:00: a get_ready from 11:28:05 is early under EXP-0031 and off_plan (lunch) under EXP-0033", () => {
-    const bars = { ABC: abcBars(58, null), QQQ: qqqBars(), SMH: smhBars() };
-    expect(labelUnder(R31, "ABC", "call", "11:30:02", { bars })).toEqual({ label: "early", reason: null });
-    expect(labelUnder(R33, "ABC", "call", "11:30:02", { bars })).toEqual({ label: "off_plan", reason: null });
-    expect(labelUnder(R33, "ABC", "call", "11:29:59", { bars })).toEqual({ label: "early", reason: null });
+    const bars = { AMD: abcBars(58, null), QQQ: qqqBars(), SMH: smhBars() };
+    expect(labelUnder(R31, "AMD", "call", "11:30:02", { bars })).toEqual({ label: "early", reason: null });
+    expect(labelUnder(R33, "AMD", "call", "11:30:02", { bars })).toEqual({ label: "off_plan", reason: null });
+    expect(labelUnder(R33, "AMD", "call", "11:29:59", { bars })).toEqual({ label: "early", reason: null });
   });
 
   it("just after 13:00:00: a break and dip in lunch are in zone from 13:00:00 under EXP-0033, off_plan under EXP-0031", () => {
     // bar 102 (12:54 to 12:56) breaks 100, bar 103 (12:56 to 12:58) dips to 100.10, and bar 104 (12:58 to 13:00)
     // closes above the dip bar's close: the retest confirms at 13:00 (DEC-0052)
-    const bars = { ABC: abcBars(102, null), QQQ: qqqBars(), SMH: smhBars() };
-    expect(labelUnder(R33, "ABC", "call", "13:00:02", { bars })).toEqual({ label: "in_zone", reason: null });
-    expect(labelUnder(R31, "ABC", "call", "13:00:02", { bars })).toEqual({ label: "off_plan", reason: null });
+    const bars = { AMD: abcBars(102, null), QQQ: qqqBars(), SMH: smhBars() };
+    expect(labelUnder(R33, "AMD", "call", "13:00:02", { bars })).toEqual({ label: "in_zone", reason: null });
+    expect(labelUnder(R31, "AMD", "call", "13:00:02", { bars })).toEqual({ label: "off_plan", reason: null });
   });
 
   it("just after 15:10:00: a get_ready from 15:08:05 is early under EXP-0031 and off_plan (flat) under EXP-0033", () => {
-    const bars = { ABC: abcBars(168, null), QQQ: qqqBars(), SMH: smhBars() };
-    expect(labelUnder(R31, "ABC", "call", "15:10:02", { bars })).toEqual({ label: "early", reason: null });
-    expect(labelUnder(R33, "ABC", "call", "15:10:02", { bars })).toEqual({ label: "off_plan", reason: null });
+    const bars = { AMD: abcBars(168, null), QQQ: qqqBars(), SMH: smhBars() };
+    expect(labelUnder(R31, "AMD", "call", "15:10:02", { bars })).toEqual({ label: "early", reason: null });
+    expect(labelUnder(R33, "AMD", "call", "15:10:02", { bars })).toEqual({ label: "off_plan", reason: null });
   });
 });
 
 describe("EXP-0033: the edition in force at t0, by the store's receipt time", () => {
   // copy A received 08:55 (levels 100 / 90); copy B received 10:20 with the call level at 94, below the whole session
   const A = edition();
-  const B = edition(S, [{ ...ABC_ITEM, breakout_above: 94 }, QQQ_ITEM]);
+  const B = edition(S, [{ ...AMD_ITEM, breakout_above: 94 }, QQQ_ITEM]);
   const editions = [nyCopy(A, "08:55:00"), nyCopy(B, "10:20:00")];
 
   it("labels each fill against the copy received last by t0", () => {
-    expect(labelUnder(R33, "ABC", "call", "10:03:00", { editions })).toEqual({ label: "early", reason: null }); // A
-    expect(labelUnder(R33, "ABC", "call", "10:30:00", { editions })).toEqual({ label: "no_record", reason: "side_broke_earlier" }); // B
-    expect(labelUnder(R33, "ABC", "call", "10:19:59.999", { editions })).toEqual({ label: "off_plan", reason: null }); // A, plan off
+    expect(labelUnder(R33, "AMD", "call", "10:03:00", { editions })).toEqual({ label: "early", reason: null }); // A
+    expect(labelUnder(R33, "AMD", "call", "10:30:00", { editions })).toEqual({ label: "no_record", reason: "side_broke_earlier" }); // B
+    expect(labelUnder(R33, "AMD", "call", "10:19:59.999", { editions })).toEqual({ label: "off_plan", reason: null }); // A, plan off
   });
 
   it("a receipt time equal to t0 is in force", () => {
-    expect(labelUnder(R33, "ABC", "call", "10:20:00.000", { editions })).toEqual({ label: "no_record", reason: "side_broke_earlier" });
+    expect(labelUnder(R33, "AMD", "call", "10:20:00.000", { editions })).toEqual({ label: "no_record", reason: "side_broke_earlier" });
     expect(editionAt(input({ editions }), at("10:20:00"), R33)).toEqual({ copy: editions[1] });
   });
 
   it("no copy received by t0 inside the session is no_edition; a fill before the open is not_a_session", () => {
     const onlyLate = [nyCopy(B, "10:20:00")];
-    expect(labelUnder(R33, "ABC", "call", "10:00:00", { editions: onlyLate })).toEqual({ label: "no_record", reason: "no_edition" });
+    expect(labelUnder(R33, "AMD", "call", "10:00:00", { editions: onlyLate })).toEqual({ label: "no_record", reason: "no_edition" });
     // the pre-market fill: no copy received yet and no stamp; t0 is not inside the regular session
-    const inp = input({ editions: onlyLate, barsFeed: "sip", stamps: sipStamps(), journal: { trades: [piece("ABC", "call", "08:50:00", "09:40:00")] } });
+    const inp = input({ editions: onlyLate, barsFeed: "sip", stamps: sipStamps(), journal: { trades: [piece("AMD", "call", "08:50:00", "09:40:00")] } });
     const run = libLabelSession(inp, LIVE, R33, META);
     expect(run.state === "labelled" && run.rows.map((r) => [r.label, r.reason, r.edition_copy_received_at, r.covering_stamp_key])).toEqual([["no_record", "not_a_session", null, null]]);
   });
@@ -924,8 +924,8 @@ describe("EXP-0033: the edition in force at t0, by the store's receipt time", ()
   it("ignores as_of: a copy published (as_of) after t0 but received before it is in force; EXP-0031 reads as_of", () => {
     const late = { ...B, as_of: iso("11:00:00") } as Options;
     const eds = [nyCopy(A, "08:55:00"), nyCopy(late, "10:20:00")];
-    expect(labelUnder(R33, "ABC", "call", "10:30:00", { editions: eds })).toEqual({ label: "no_record", reason: "side_broke_earlier" });
-    expect(labelUnder(R31, "ABC", "call", "10:30:00", { editions: eds })).toEqual({ label: "no_record", reason: "edition_after_t0" });
+    expect(labelUnder(R33, "AMD", "call", "10:30:00", { editions: eds })).toEqual({ label: "no_record", reason: "side_broke_earlier" });
+    expect(labelUnder(R31, "AMD", "call", "10:30:00", { editions: eds })).toEqual({ label: "no_record", reason: "edition_after_t0" });
   });
 
   it("replays each copy once and keeps the replays apart", () => {
@@ -935,7 +935,7 @@ describe("EXP-0033: the edition in force at t0, by the store's receipt time", ()
   });
 
   it("a half-day disagreement with the copy in force is no_record", () => {
-    expect(labelUnder(R33, "ABC", "call", "10:05:00", { edition: edition(S, [ABC_ITEM, QQQ_ITEM], true) })).toEqual({ label: "no_record", reason: "half_day_mismatch" });
+    expect(labelUnder(R33, "AMD", "call", "10:05:00", { edition: edition(S, [AMD_ITEM, QQQ_ITEM], true) })).toEqual({ label: "no_record", reason: "half_day_mismatch" });
   });
 });
 
@@ -970,9 +970,9 @@ describe("EXP-0033: the board-feed stamps at t0", () => {
 
   it("feed_unknown before the session's first stamp and after its last", () => {
     const stamps = [st("10:00:00"), st("10:01:00")];
-    expect(labelUnder(R33, "ABC", "call", "09:59:00", { stamps })).toEqual({ label: "no_record", reason: "feed_unknown" });
-    expect(labelUnder(R33, "ABC", "call", "10:04:05", { stamps })).toEqual({ label: "no_record", reason: "feed_unknown" });
-    expect(labelUnder(R33, "ABC", "call", "10:03:00", { stamps })).toEqual({ label: "early", reason: null });
+    expect(labelUnder(R33, "AMD", "call", "09:59:00", { stamps })).toEqual({ label: "no_record", reason: "feed_unknown" });
+    expect(labelUnder(R33, "AMD", "call", "10:04:05", { stamps })).toEqual({ label: "no_record", reason: "feed_unknown" });
+    expect(labelUnder(R33, "AMD", "call", "10:03:00", { stamps })).toEqual({ label: "early", reason: null });
   });
 
   it("board_off after a run of 10 minutes or more without an ok answer whose last stamp is in [t0 − 2 min, t0]", () => {
@@ -984,8 +984,8 @@ describe("EXP-0033: the board-feed stamps at t0", () => {
     expect(boardFeedAt(run("10:00:00"), at("10:09:59")).boardOff).toBe(false); // the run so far is under 10 minutes
     // in the labeller: a fill otherwise early
     const stamps = [...run("10:00:00"), st("10:12:00")];
-    expect(labelUnder(R33, "ABC", "call", "10:03:00", { stamps })).toEqual({ label: "early", reason: null });
-    expect(labelUnder(R33, "ABC", "call", "10:11:00", { stamps })).toEqual({ label: "no_record", reason: "board_off" });
+    expect(labelUnder(R33, "AMD", "call", "10:03:00", { stamps })).toEqual({ label: "early", reason: null });
+    expect(labelUnder(R33, "AMD", "call", "10:11:00", { stamps })).toEqual({ label: "no_record", reason: "board_off" });
   });
 
   it("stamps after t0 never change a board_off decision", () => {
@@ -1001,7 +1001,7 @@ describe("EXP-0033: the board-feed stamps at t0", () => {
 });
 
 describe("EXP-0033: bars not had or short are fetched again, not labelled", () => {
-  const tr = () => piece("ABC", "call", "10:05:00", "10:20:00");
+  const tr = () => piece("AMD", "call", "10:05:00", "10:20:00");
   const run = (bars: ReplayInput["bars"], rules: LabelRules = R33) => libLabelSession(input({ bars, barsFetchedAt: bars === null ? null : "2026-11-12T21:30:00.000Z", barsFeed: rules.feed, stamps: sipStamps(), journal: { trades: [tr()] } }), LIVE, rules, META);
 
   it("no bars: retry under EXP-0033, no_record bars_unavailable under EXP-0031", () => {
@@ -1011,21 +1011,21 @@ describe("EXP-0033: bars not had or short are fetched again, not labelled", () =
   });
 
   it("full means every request finished paging and SMH has a bar ending at the close; a thin focus name is still full", () => {
-    // ABC with no bar in its last three slots: labelled, not retried
-    const thin = run({ ABC: without(abcBars(), 192, 193, 194), QQQ: qqqBars(), SMH: smhBars() });
+    // AMD with no bar in its last three slots: labelled, not retried
+    const thin = run({ AMD: without(abcBars(), 192, 193, 194), QQQ: qqqBars(), SMH: smhBars() });
     expect(thin.state === "labelled" && thin.rows.map((x) => [x.label, x.reason])).toEqual([["in_zone", null]]);
     // a request that hit the page cap
     const capped = libLabelSession(input({ requests: [{ complete: false }], barsFeed: "sip", stamps: sipStamps(), journal: { trades: [tr()] } }), LIVE, R33, META);
     expect(capped).toEqual({ state: "retry", why: "bars_not_full" });
     // SMH without a bar ending at the close
-    expect(run({ ABC: abcBars(), QQQ: qqqBars(), SMH: without(smhBars(), 194) })).toEqual({ state: "retry", why: "bars_not_full" });
+    expect(run({ AMD: abcBars(), QQQ: qqqBars(), SMH: without(smhBars(), 194) })).toEqual({ state: "retry", why: "bars_not_full" });
     // under EXP-0031 a capped request is bars that could not be had
     const r31 = libLabelSession(input({ requests: [{ complete: false }], journal: { trades: [tr()] } }), LIVE, R31, META);
     expect(r31.state === "labelled" && r31.rows.map((x) => x.reason)).toEqual(["bars_unavailable"]);
   });
 
   it("an empty slot inside a full answer is final: bars_incomplete for that name's later fills", () => {
-    const r = run({ ABC: without(abcBars(), 10), QQQ: qqqBars(), SMH: smhBars() });
+    const r = run({ AMD: without(abcBars(), 10), QQQ: qqqBars(), SMH: smhBars() });
     expect(r.state === "labelled" && r.rows.map((x) => [x.experiment, x.feed, x.label, x.reason])).toEqual([["EXP-0033", "sip", "no_record", "bars_incomplete"]]);
   });
 });
@@ -1036,43 +1036,43 @@ describe("EXP-0033: one stored reason, the first in labeller_rules.no_record_rea
     expect(NO_RECORD_ORDER["EXP-0031"]).toEqual(["edition_missing", "edition_time_unknown", "edition_after_t0", "not_a_session", "half_day_mismatch", "bars_unavailable", "bars_start_late", "bars_gap", "leader_bars_start_late", "leader_bars_gap", "side_gap", "side_broke_earlier"]);
   });
 
-  const mismatch = edition(S, [ABC_ITEM, QQQ_ITEM], true);
+  const mismatch = edition(S, [AMD_ITEM, QQQ_ITEM], true);
   const offRun = sipStamps(S, (m) => (m >= 20 && m <= 34 ? { answered: "error" as const } : {})); // 09:50 to 10:04 not ok
-  const gapBars = { ABC: without(abcBars(), 10), QQQ: qqqBars(), SMH: smhBars() };
+  const gapBars = { AMD: without(abcBars(), 10), QQQ: qqqBars(), SMH: smhBars() };
   const both = (sides: Partial<SideState>) => ({ ...LIVE, nameState: (n: Parameters<typeof nameState>[0]) => script(n.now.getTime(), nameState(n), { [at("10:04:05")]: { call: sides } }) });
 
   it("edition_missing before not_a_session: no copy at all, a fill before the open", () => {
-    expect(labelUnder(R33, "ABC", "call", "08:00:00", { edition: null })).toEqual({ label: "no_record", reason: "edition_missing" });
+    expect(labelUnder(R33, "AMD", "call", "08:00:00", { edition: null })).toEqual({ label: "no_record", reason: "edition_missing" });
   });
   it("not_a_session before no_edition: the only copy arrives at 10:20, the fill is at 08:50, with no stamp yet", () => {
-    expect(labelUnder(R33, "ABC", "call", "08:50:00", { editions: [nyCopy(edition(), "10:20:00")] })).toEqual({ label: "no_record", reason: "not_a_session" });
-    expect(labelUnder(R33, "ABC", "call", "16:00:00", {})).toEqual({ label: "no_record", reason: "not_a_session" }); // the close is outside [open, close)
+    expect(labelUnder(R33, "AMD", "call", "08:50:00", { editions: [nyCopy(edition(), "10:20:00")] })).toEqual({ label: "no_record", reason: "not_a_session" });
+    expect(labelUnder(R33, "AMD", "call", "16:00:00", {})).toEqual({ label: "no_record", reason: "not_a_session" }); // the close is outside [open, close)
   });
   it("no_edition before half_day_mismatch: the only copy (a half-day one) arrives after t0", () => {
-    expect(labelUnder(R33, "ABC", "call", "10:05:00", { editions: [nyCopy(mismatch, "10:20:00")] })).toEqual({ label: "no_record", reason: "no_edition" });
+    expect(labelUnder(R33, "AMD", "call", "10:05:00", { editions: [nyCopy(mismatch, "10:20:00")] })).toEqual({ label: "no_record", reason: "no_edition" });
   });
   it("half_day_mismatch before feed_unknown: a half-day copy on a full day, and no stamp", () => {
-    expect(labelUnder(R33, "ABC", "call", "10:05:00", { edition: mismatch, stamps: [] })).toEqual({ label: "no_record", reason: "half_day_mismatch" });
+    expect(labelUnder(R33, "AMD", "call", "10:05:00", { edition: mismatch, stamps: [] })).toEqual({ label: "no_record", reason: "half_day_mismatch" });
   });
   it("feed_unknown before board_off: refused stamps that also answer error for 15 minutes", () => {
     const refused = sipStamps(S, () => ({ feed: "refused" as const, answered: "error" as const }));
-    expect(labelUnder(R33, "ABC", "call", "10:05:00", { stamps: refused })).toEqual({ label: "no_record", reason: "feed_unknown" });
+    expect(labelUnder(R33, "AMD", "call", "10:05:00", { stamps: refused })).toEqual({ label: "no_record", reason: "feed_unknown" });
   });
-  it("board_off before bars_incomplete: an outage to 10:04 and a gap in ABC's bars at 09:50", () => {
-    expect(labelUnder(R33, "ABC", "call", "10:05:00", { stamps: offRun, bars: gapBars })).toEqual({ label: "no_record", reason: "board_off" });
-    expect(labelUnder(R33, "ABC", "call", "10:05:00", { stamps: offRun })).toEqual({ label: "no_record", reason: "board_off" });
+  it("board_off before bars_incomplete: an outage to 10:04 and a gap in AMD's bars at 09:50", () => {
+    expect(labelUnder(R33, "AMD", "call", "10:05:00", { stamps: offRun, bars: gapBars })).toEqual({ label: "no_record", reason: "board_off" });
+    expect(labelUnder(R33, "AMD", "call", "10:05:00", { stamps: offRun })).toEqual({ label: "no_record", reason: "board_off" });
   });
   it("bars_incomplete before side_gap, and side_gap before side_broke_earlier (stubbed sides)", () => {
     const fill = (eng: LabelEngine, bars = input().bars) => {
-      const tr = piece("ABC", "call", "10:05:00", "10:20:00");
-      return new SessionLabeller(input({ bars, stamps: sipStamps(), journal: { trades: [tr] } }), eng, R33).label({ symbol: "ABC", kind: "call", t0: tr.opened_at });
+      const tr = piece("AMD", "call", "10:05:00", "10:20:00");
+      return new SessionLabeller(input({ bars, stamps: sipStamps(), journal: { trades: [tr] } }), eng, R33).label({ symbol: "AMD", kind: "call", t0: tr.opened_at });
     };
     expect(fill(both({ gap: true }), gapBars)).toEqual({ label: "no_record", reason: "bars_incomplete" });
     expect(fill(both({ gap: true, brokeEarlier: true }))).toEqual({ label: "no_record", reason: "side_gap" });
     expect(fill(both({ brokeEarlier: true }))).toEqual({ label: "no_record", reason: "side_broke_earlier" });
   });
   it("SMH's bars incomplete are bars_incomplete too under EXP-0033 (leader_bars_gap under EXP-0031)", () => {
-    const bars = { ABC: abcBars(), QQQ: qqqBars(), SMH: without(smhBars(), 5) };
+    const bars = { AMD: abcBars(), QQQ: qqqBars(), SMH: without(smhBars(), 5) };
     expect(labelUnder(R33, "QQQ", "put", "10:45:00", { bars })).toEqual({ label: "no_record", reason: "bars_incomplete" });
     expect(labelUnder(R31, "QQQ", "put", "10:45:00", { bars })).toEqual({ label: "no_record", reason: "leader_bars_gap" });
   });
@@ -1087,7 +1087,7 @@ const rowsOf = (run: ReturnType<typeof libLabelSession>) => {
 };
 
 describe("the bars prove their own feed and fetch time", () => {
-  const tr = piece("ABC", "call", "10:05:00", "10:20:00");
+  const tr = piece("AMD", "call", "10:05:00", "10:20:00");
   it("a run whose bars came from another feed throws, under each rules object", () => {
     expect(() => libLabelSession(input({ barsFeed: "sip", journal: { trades: [tr] } }), LIVE, R31, META)).toThrow(/sip/);
     expect(() => libLabelSession(in33({ barsFeed: "iex", journal: { trades: [tr] } }), LIVE, R33, META)).toThrow(/iex/);
@@ -1110,7 +1110,7 @@ describe("the bars prove their own feed and fetch time", () => {
 describe("a focus name never fetched is not a full answer", () => {
   const DEF: Item = { symbol: "DEF", rank: 3, bias: "breakout", atr: 2, breakout_above: 100, hold_above: 90 };
   const A = edition();
-  const B = edition(S, [ABC_ITEM, QQQ_ITEM, DEF]);
+  const B = edition(S, [AMD_ITEM, QQQ_ITEM, DEF]);
   const editions = [nyCopy(A, "08:55:00"), nyCopy(B, "10:20:00")];
   const tr = piece("DEF", "call", "10:30:00", "10:40:00");
 
@@ -1118,13 +1118,13 @@ describe("a focus name never fetched is not a full answer", () => {
     expect(libLabelSession(in33({ editions, journal: { trades: [tr] } }), LIVE, R33, META)).toEqual({ state: "retry", why: "bars_not_full" });
   });
   it("a DEF key with an empty list is a full answer for a name that did not trade: bars_incomplete per fill", () => {
-    const bars = { ABC: abcBars(), QQQ: qqqBars(), SMH: smhBars(), DEF: [] };
+    const bars = { AMD: abcBars(), QQQ: qqqBars(), SMH: smhBars(), DEF: [] };
     expect(rowsOf(libLabelSession(in33({ editions, bars, journal: { trades: [tr] } }), LIVE, R33, META)).map((r) => [r.symbol, r.label, r.reason])).toEqual([["DEF", "no_record", "bars_incomplete"]]);
   });
 });
 
 describe("rows wait for a journal read after the close", () => {
-  const tr = piece("ABC", "call", "10:05:00", "10:20:00");
+  const tr = piece("AMD", "call", "10:05:00", "10:20:00");
   const close20 = at("16:20:00");
   for (const [name, rules, base] of [
     ["EXP-0033", R33, in33] as const,
@@ -1137,9 +1137,9 @@ describe("rows wait for a journal read after the close", () => {
     });
   }
   it("on a half day the close is 13:00", () => {
-    const half = { ABC: abcBars(65, null, H, 105), QQQ: Array.from({ length: 105 }, (_, i) => bar(i, flat(490), H)), SMH: smhBars(H, 105) };
-    const trH = piece("ABC", "call", "11:47:00", "11:50:00", {}, H); // in zone from the 11:46 confirming close
-    const inp = (readAt: string) => input({ session: H, edition: edition(H, [ABC_ITEM, QQQ_ITEM], true), bars: half, barsFeed: "sip", stamps: sipStamps(H), journalReadAt: readAt, journal: { trades: [trH] } });
+    const half = { AMD: abcBars(65, null, H, 105), QQQ: Array.from({ length: 105 }, (_, i) => bar(i, flat(490), H)), SMH: smhBars(H, 105) };
+    const trH = piece("AMD", "call", "11:47:00", "11:50:00", {}, H); // in zone from the 11:46 confirming close
+    const inp = (readAt: string) => input({ session: H, edition: edition(H, [AMD_ITEM, QQQ_ITEM], true), bars: half, barsFeed: "sip", stamps: sipStamps(H), journalReadAt: readAt, journal: { trades: [trH] } });
     expect(libLabelSession(inp(new Date(at("13:20:00", H) - 1).toISOString()), LIVE, R33, META)).toEqual({ state: "retry", why: "journal_not_current" });
     expect(rowsOf(libLabelSession(inp(new Date(at("13:20:00", H)).toISOString()), LIVE, R33, META)).map((r) => r.label)).toEqual(["in_zone"]);
   });
@@ -1147,27 +1147,27 @@ describe("rows wait for a journal read after the close", () => {
 
 describe("copies received at the same instant", () => {
   const A = edition();
-  const B = edition(S, [{ ...ABC_ITEM, breakout_above: 94 }, QQQ_ITEM]);
+  const B = edition(S, [{ ...AMD_ITEM, breakout_above: 94 }, QQQ_ITEM]);
   it("are chosen the same way whatever the store's order: the later as_of, then the canonical JSON", () => {
     const same = (x: Options, y: Options) => [nyCopy(x, "08:55:00"), nyCopy(y, "08:55:00")];
     const later = { ...B, as_of: iso("08:00:00") } as Options;
-    const l1 = labelUnder(R33, "ABC", "call", "10:30:00", { editions: same(A, later) });
-    const l2 = labelUnder(R33, "ABC", "call", "10:30:00", { editions: same(later, A) });
+    const l1 = labelUnder(R33, "AMD", "call", "10:30:00", { editions: same(A, later) });
+    const l2 = labelUnder(R33, "AMD", "call", "10:30:00", { editions: same(later, A) });
     expect(l1).toEqual(l2);
     expect(l1).toEqual({ label: "no_record", reason: "side_broke_earlier" }); // B's as_of is later
     // same as_of too: the copy whose canonical JSON sorts last, whatever its key order
     const keysReordered = JSON.parse(JSON.stringify({ focus: B.focus, tickers: B.tickers, as_of: B.as_of, session: B.session, schema: B.schema })) as Options;
-    const t1 = labelUnder(R33, "ABC", "call", "10:30:00", { editions: same(A, B) });
-    const t2 = labelUnder(R33, "ABC", "call", "10:30:00", { editions: same(keysReordered, A) });
+    const t1 = labelUnder(R33, "AMD", "call", "10:30:00", { editions: same(A, B) });
+    const t2 = labelUnder(R33, "AMD", "call", "10:30:00", { editions: same(keysReordered, A) });
     expect(t1).toEqual(t2);
-    expect(labelUnder(R31, "ABC", "call", "10:30:00", { editions: same(A, B) })).toEqual(labelUnder(R31, "ABC", "call", "10:30:00", { editions: same(B, A) }));
+    expect(labelUnder(R31, "AMD", "call", "10:30:00", { editions: same(A, B) })).toEqual(labelUnder(R31, "AMD", "call", "10:30:00", { editions: same(B, A) }));
   });
 });
 
 describe("a day with no regular session", () => {
   it("needs no bars: its fills are not_a_session and the run is labelled (Saturday, and Thanksgiving)", () => {
     for (const day of ["2026-11-14", "2026-11-26"]) {
-      const tr = piece("ABC", "call", "10:05:00", "10:20:00", {}, day);
+      const tr = piece("AMD", "call", "10:05:00", "10:20:00", {}, day);
       const inp = input({ session: day, edition: edition(day), bars: null, barsFetchedAt: null, barsFeed: "sip", requests: [], stamps: [], journalReadAt: `${day}T15:00:00.000Z`, journal: { trades: [tr] } });
       expect(rowsOf(libLabelSession(inp, LIVE, R33, META)).map((r) => [r.label, r.reason])).toEqual([["no_record", "not_a_session"]]);
       // with no copy stored at all, the record's order puts edition_missing first
@@ -1196,8 +1196,8 @@ describe("the day cap counts option buy fills only", () => {
 });
 
 describe("no look-ahead beyond the bars", () => {
-  const tr = piece("ABC", "call", "10:05:00", "10:30:00");
-  const pos = { symbol: "ABC", kind: "call" as const, t0: tr.opened_at };
+  const tr = piece("AMD", "call", "10:05:00", "10:30:00");
+  const pos = { symbol: "AMD", kind: "call" as const, t0: tr.opened_at };
   const t0 = Date.parse(tr.opened_at);
   const decide = (inp: ReplayInput, rules = R33) => {
     const s = new SessionLabeller(inp, LIVE, rules);
@@ -1208,7 +1208,7 @@ describe("no look-ahead beyond the bars", () => {
   it("an edition copy received after t0 changes nothing", () => {
     const base = in33({ edition: richEdition(), journal: { trades: [tr] } });
     const want = decide(base);
-    const B = edition(S, [{ ...ABC_ITEM, breakout_above: 94 }, QQQ_ITEM]);
+    const B = edition(S, [{ ...AMD_ITEM, breakout_above: 94 }, QQQ_ITEM]);
     for (const late of [new Date(t0 + 1).toISOString(), iso("15:00:00")]) expect(decide({ ...base, editions: [...base.editions, copy(B, late)] })).toEqual(want);
   });
 
@@ -1248,8 +1248,8 @@ describe("EXP-0033: fills at the extra instants, to the millisecond", () => {
   ];
   for (const [instant, k, fills] of cases)
     it(`at ${instant}`, () => {
-      const bars = { ABC: abcBars(k, null), QQQ: qqqBars(), SMH: smhBars() };
-      for (const [t, want] of fills) expect(labelUnder(R33, "ABC", "call", t, { bars }).label, t).toBe(want);
+      const bars = { AMD: abcBars(k, null), QQQ: qqqBars(), SMH: smhBars() };
+      for (const [t, want] of fills) expect(labelUnder(R33, "AMD", "call", t, { bars }).label, t).toBe(want);
     });
 });
 

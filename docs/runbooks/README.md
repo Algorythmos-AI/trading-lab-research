@@ -14,6 +14,7 @@ One page per incident. Each starts with how you'll notice it.
 | [Dashboard deploys and the watchdog drill](dashboard-deploy.md) | A dashboard deploy failed, or you want to prove paging works |
 | [Options desk: paper positions](options-positions.md) | The Paper positions pane is absent or says it is old; setting up the second paper account |
 | [Options lab tape](lab-tape.md) | The lab's recorder: what it records, the probe, the owner's setup steps, a session's manifest, a stop, an upload that failed, the off switch |
+| [Radar → Options shadow](options-select.md) | The 06:45 shadow selection (DEC-0070): what it writes, the owner's setup steps, a clean session, a replay, the off switch |
 | [Paper options page: the trade history](paper-options.md) | The Paper page has no history, says it is old, or a total looks wrong; how hand-placed trades are matched |
 | [The OCI trading host](oci-host.md) | Provisioning, access, rebuild, or the OCI account is lost |
 | [The GCP free-tier host](gcp-host.md) | Provisioning, secrets, or rebuild of the e2-micro host |

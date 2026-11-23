@@ -29,13 +29,14 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from wt.analytics import b_replay, funnel_agreement, g2, s_agreement  # noqa: E402
-from wt.risk import stop_rule  # noqa: E402
+from wt.risk import execution_stops, stop_rule  # noqa: E402
 from wt.core.clock import ET  # noqa: E402
-from wt.core.config import DATA_DIR, FORWARD_LEDGER, ROOT, ROUTINE_DIR, SCORECARD_DIR  # noqa: E402
+from wt.core.config import DATA_DIR, FORWARD_LEDGER, ROOT, ROUTINE_DIR, SCORECARD_DIR, STATE_DIR  # noqa: E402
 
 FWD = FORWARD_LEDGER
 JOURNAL = DATA_DIR / "live/journal.jsonl"
 JOURNAL_S = DATA_DIR / "live/smallcap_journal.jsonl"        # sleeve S's own journal (wt.live.runner_s.JOURNAL)
+VA_S = STATE_DIR / "smallcap" / "virtual_account.json"      # its virtual book (wt.live.runner_s.VA_PATH)
 EXPECT = {  # frozen backtest distributions (development span; walk-forward where applicable)
     "B_qqq_qqqm": ("EXP-0005b-g1-etf-dev-realcost", "B|QQQ|noise|M3"),
     "watchlist_bull_flag_atr_M1": ("EXP-0013-r2-atr-stops", "s1_bull_flag_5m_atr|M1|W3"),
@@ -201,6 +202,31 @@ def agreement() -> list[str]:
     return L
 
 
+def s_stop_lines(today: dt.date) -> list[str]:
+    """Where the stock desk's own stops stand: its stop rule (DEC-0066) and its execution stops (DEC-0073), on its
+    own journal, since the last reset of an execution-stop latch. A failure costs these lines only."""
+    try:
+        rows = s_agreement.read_rows(JOURNAL_S)
+        out = []
+        rule = stop_rule.load("S")
+        out.append(stop_rule.state_line(rule, rows, today) if rule is not None
+                   else "- Stop rule: **none in config/risk.yaml** (S.stop_rule); the desk does not arm without one")
+        xr = execution_stops.load("S")
+        if xr is None:
+            out.append("- Execution stops: **none in config/risk.yaml** (S.execution_stops); the desk does not arm "
+                       "without them")
+        else:
+            history: list[dict] = []
+            with contextlib.suppress(OSError, ValueError):
+                raw = json.loads(VA_S.read_text())
+                if isinstance(raw, dict) and isinstance(raw.get("latch_history"), list):
+                    history = raw["latch_history"]
+            out.append(execution_stops.state_line(xr, rows, execution_stops.last_reset(history, xr.decision)))
+        return out
+    except Exception as e:  # noqa: BLE001
+        return [f"- The stock desk's stops: not available this week ({e.__class__.__name__})."]
+
+
 def sleeve_s(fwd: list[dict]) -> list[str]:
     """Section 5: sleeve S against the forward test's record of the same rule (EXP-0051, measures.agreement).
     A description in counts and differences: any failure here costs the scorecard this section and nothing else."""
@@ -317,6 +343,7 @@ def main(now: dt.datetime | None = None) -> str:
           "(a KILL-on, refused or incident session does not count)",
           *agreement(),
           *sleeve_s(fwd),
+          *s_stop_lines(today),
           "", "_Rules are frozen; any change requires a new decision record (research/decisions)._"]
     md = "\n".join(L) + "\n"
     out = SCORECARD_DIR / f"scorecard_{today}.md"

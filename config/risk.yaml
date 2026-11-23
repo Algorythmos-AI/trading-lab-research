@@ -39,6 +39,11 @@ S:
     cum_r_max_loss: -6.0
     review_at_trades: 30
     stop_date: 2027-03-31
+  execution_stops:               # DEC-0073 section 1: faults that latch the desk across sessions (wt.risk.execution_stops)
+    decision: DEC-0073
+    unprotected_polls: 2          # X3: polls in a row with no resting stop
+    stop_slip_r: 0.5              # X5: a stop fill this many R under its stop price ...
+    stop_slips: 2                 # ... this many times
 
 # The crypto desk's keys (C, CT, CD, CH) left with its code (DEC-0036); git history keeps them.
 

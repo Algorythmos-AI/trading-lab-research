@@ -14,6 +14,11 @@ account's own latch history, which the dashboard's audit trail already reads. Th
 
     python -m wt.ops.control unkill
     python -m wt.ops.control reset-latch "why it is safe to resume"
+    python -m wt.ops.control reset-latch-s "DEC-NNNN: why it is safe to resume"
+
+`reset-latch-s` clears the stock desk's (Gap Hunter's) latch, on its own account file, and refuses while `paper-s` or
+its runner holds a lock. Its stop rule (DEC-0066) and its execution stops (DEC-0073) latch with a reason that only a
+new decision record clears: name that record in the reason, or nothing is changed.
 """
 from __future__ import annotations
 
@@ -22,28 +27,33 @@ import sys
 from collections.abc import Iterator
 from pathlib import Path
 
-from wt.core.config import DATA_DIR, ROOT
+from wt.core.config import DATA_DIR, ROOT, STATE_DIR
 from wt.ops import audit, locks
 
 RUNNER_JOB = "paper-b"
 VA_PATH = DATA_DIR / "live" / "virtual_account.json"
+RUNNER_JOB_S = "paper-s"
+VA_PATH_S = STATE_DIR / "smallcap" / "virtual_account.json"     # wt.live.runner_s.VA_PATH
 
 
 BUSY_UNKILL = ("paper B is running (its lock is held): removing KILL now would re-enable entries mid-session. "
                "Try again after the session ends.")
+BUSY_RESET_S = ("paper-s is running (its lock is held): its in-memory account would overwrite a reset at the next "
+                "save. Try again after the session ends.")
 BUSY_RESET = ("paper B is running (its lock is held): its in-memory account would overwrite a reset at the next "
               "save. Try again after the session ends.")
 
 
 @contextlib.contextmanager
-def _runner_idle(lock_root: Path | None) -> Iterator[bool]:
-    """Hold both paper-b's job lock and the runner process's own lock for the block; yields False if either is
-    held elsewhere (a runner orphaned by a dead wrapper holds only the second)."""
-    with locks.job_lock(RUNNER_JOB, lock_root) as job:
-        if not job:                        # the wrapper is running paper-b: don't touch the runner's lock at all
+def _runner_idle(lock_root: Path | None, job_name: str = RUNNER_JOB,
+                 runner_lock: str = locks.RUNNER_LOCK) -> Iterator[bool]:
+    """Hold both the job's lock and its runner process's own lock for the block; yields False if either is held
+    elsewhere (a runner orphaned by a dead wrapper holds only the second)."""
+    with locks.job_lock(job_name, lock_root) as job:
+        if not job:                        # the wrapper is running the job: don't touch the runner's lock at all
             yield False
             return
-        with locks.job_lock(locks.RUNNER_LOCK, lock_root) as runner:
+        with locks.job_lock(runner_lock, lock_root) as runner:
             yield runner
 
 
@@ -62,13 +72,23 @@ def unkill(root: Path = ROOT, lock_root: Path | None = None, audit_log: Path | N
 
 
 def reset_latch(reason: str, va_path: Path = VA_PATH, lock_root: Path | None = None) -> tuple[int, str]:
+    return _reset_latch(reason, va_path, lock_root, RUNNER_JOB, locks.RUNNER_LOCK, BUSY_RESET, "reset-latch")
+
+
+def reset_latch_s(reason: str, va_path: Path = VA_PATH_S, lock_root: Path | None = None) -> tuple[int, str]:
+    """The stock desk's latch (Gap Hunter): its stop rule's or an execution stop's, cleared only by a new record."""
+    return _reset_latch(reason, va_path, lock_root, RUNNER_JOB_S, locks.RUNNER_LOCK_S, BUSY_RESET_S, "reset-latch-s")
+
+
+def _reset_latch(reason: str, va_path: Path, lock_root: Path | None, job_name: str, runner_lock: str, busy: str,
+                 target: str) -> tuple[int, str]:
     from wt.risk.virtual_account import NotLatched, StateError
     from wt.risk.virtual_account import reset_latch as _reset
     if not reason.strip():
-        return 2, 'usage: make reset-latch REASON="why it is safe to resume"'
-    with _runner_idle(lock_root) as got:
+        return 2, f'usage: make {target} REASON="why it is safe to resume"'
+    with _runner_idle(lock_root, job_name, runner_lock) as got:
         if not got:
-            return 3, BUSY_RESET
+            return 3, busy
         try:
             va = _reset(va_path, reason)
         except NotLatched as e:
@@ -91,8 +111,10 @@ def main(argv: list[str] | None = None) -> int:
         code, msg = unkill()
     elif args[:1] == ["reset-latch"]:
         code, msg = reset_latch(" ".join(args[1:]))
+    elif args[:1] == ["reset-latch-s"]:
+        code, msg = reset_latch_s(" ".join(args[1:]))
     else:
-        code, msg = 2, "usage: python -m wt.ops.control {unkill | reset-latch REASON}"
+        code, msg = 2, "usage: python -m wt.ops.control {unkill | reset-latch REASON | reset-latch-s REASON}"
     print(msg, file=sys.stderr if code else sys.stdout)
     return code
 

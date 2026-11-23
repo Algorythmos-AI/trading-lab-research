@@ -6,6 +6,7 @@ import { RadarPipelineLive } from "@/components/client/radar-pipeline";
 import { Panel } from "@/components/panel";
 import { nyInstant } from "@/lib/options";
 import { pipelineDays, type PipelineFile } from "@/lib/radar-pipeline";
+import type { SelectBlock } from "@/lib/select-shadow";
 import { RADAR_ROUTINES, type RadarRoutine } from "@/lib/radar-pipeline-slots";
 
 const fmtCache = new Map<string, Intl.DateTimeFormat>();
@@ -19,7 +20,7 @@ function clock(ms: number, tz: string): string {
   return f.format(new Date(ms));
 }
 
-export function RadarSchedulePanel({ file, now }: { file: PipelineFile | null; now: Date }) {
+export function RadarSchedulePanel({ file, now, shadow }: { file: PipelineFile | null; now: Date; shadow?: SelectBlock | null }) {
   const day = pipelineDays(now.getTime()).focus;
   return (
     <Panel
@@ -27,7 +28,7 @@ export function RadarSchedulePanel({ file, now }: { file: PipelineFile | null; n
       icon={Workflow}
       means="Each stage of the morning's run, from last night's levels to the open: whether it has happened, when, and how far from its time. Read from what the site has stored; a stage nothing was stored for says so. Nothing runs at weekends or on market holidays."
     >
-      <RadarPipelineLive file={file} serverNow={now.getTime()} />
+      <RadarPipelineLive file={file} serverNow={now.getTime()} shadow={shadow} />
       <h3 className="text-muted-foreground mt-5 mb-2 text-xs font-medium tracking-wide uppercase">Who does it</h3>
       <ol className="grid gap-2 md:grid-cols-2 xl:grid-cols-4" aria-label="The cloud jobs behind the Radar, in order">
         {RADAR_ROUTINES.map((j, i) => (
