@@ -78,7 +78,7 @@ describe("SIGNAL_CODE_HASH", () => {
   // headline says the lock, trade-now.ts). DEC-0053 section 4:
   // EXP-0034 reads only dry sessions recorded under this hash. EXP-0034 README.md, "Dates and commits", 2026-11-17.
   it("is pinned: a change to the signal's code is a visible diff here", () => {
-    expect(SIGNAL_CODE_HASH).toBe("s-ed25522ded279c218690d89ce110d996e607624d1ea270abf9377dc062ce9b44");
+    expect(SIGNAL_CODE_HASH).toBe("s-f9d5b56c2e2764713cc81828753725c86fd5b44b091bf2dbaeba71f70f7a1206");
   });
 
   // Once DEC-0051 Amendment 1 sets FROZEN_CODE_HASH (signal-freeze.ts), this becomes a real assertion, and the

@@ -168,3 +168,27 @@ the desk's names, measured by EXP-0034's engine identity check (section 4)."
 - Nothing visible changes before the switch: every focus name is a desk name.
 - After the switch, a Radar name in the focus shows on the board, paused, with its reason, until its facts are on
   file.
+
+## Note on the code (added 2026-11-23, before acceptance)
+
+The code pull request found two things section 1 and section 4 did not say. Neither changes the rule.
+
+1. **`desk-eval.ts` changes too, in one line.** The server's evaluation sets the day's `stale` flag when any row is
+   paused without a bad-data guard. An off-desk pause would have read as a stale feed. The row now carries
+   `offDesk: true`, and `stale` leaves such a row out. No other line of `desk-eval.ts` changes.
+2. **One test file named a symbol off the desk.**
+   - `dashboard/test/owner-labels.test.ts` (EXP-0033's labeller, which no job runs yet) replayed a synthetic focus name
+     `ABC`. It is renamed `AMD`, a desk name, and nothing else in the file changes.
+   - In production the labeller turns any position outside the focus into `not_focus` before it reads the board
+     (`owner-labels.ts`). Every focus name so far is a desk name, so no label of a real position can change.
+   - The board fixtures and the identity check's cases name desk symbols only.
+
+Measured on 2026-11-23 against integration 5cf8997 (`engine-identity.test.ts`, which replaces DEC-0053's check):
+- no row of any fixture differs, in state or in any byte: 735 board cases, 2,205 rows; 84 evaluated slots, 420 rows;
+- no bar state of the 15 retest vector sessions differs (312 bars);
+- the same entry-zone rows under a symbol off the desk read paused, with no grid, no notice and no entry prompt;
+- such a row is paused in the evaluation, and is not counted as a stale feed.
+
+`ENGINE_VERSION` moves from `e-593cd517f8d5` to `e-8591f874008c`. `SIGNAL_CODE_HASH` moves to
+`s-f9d5b56c2e2764713cc81828753725c86fd5b44b091bf2dbaeba71f70f7a1206`, and the pin in
+`dashboard/test/signal-freeze.test.ts` moves with it.
