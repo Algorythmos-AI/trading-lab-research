@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { pipelineView, RadarPipelineView } from "@/components/client/radar-pipeline";
 import type { SelectSession } from "@/lib/paper-options.types";
 import { fixturePipeline } from "@/lib/radar-pipeline-fixture";
-import { type SelectBlock, shadowView, topRejects } from "@/lib/select-shadow";
+import { RADAR_STATUS_WORDS, type SelectBlock, shadowView, topRejects } from "@/lib/select-shadow";
 import { validatePaperOptions } from "@/lib/validate";
 import paperV2 from "./fixtures/paper-options.v2.json";
 
@@ -78,5 +78,12 @@ describe("the card", () => {
     expect(validatePaperOptions(structuredClone(paperV2)).ok).toBe(true);
     const out = html(block);
     for (const sym of ["SPY", "QQQ", "AAPL", "NVDA", "TSLA"]) expect(out).not.toContain(`>${sym}<`);
+  });
+});
+
+describe("the Radar status words", () => {
+  it("call a stale edition not fresh, whatever made it stale (date, store time or another check)", () => {
+    expect(RADAR_STATUS_WORDS.radar_stale).toBe("Radar not fresh: ran on the desk's 12");
+    expect(Object.values(RADAR_STATUS_WORDS).join(" ")).not.toContain("not this session's");
   });
 });
