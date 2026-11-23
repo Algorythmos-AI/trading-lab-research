@@ -89,11 +89,12 @@ avoids both, for a cancel the broker has reported by that poll. X3 is not change
 - the deferred price never lowers a stop, survives a restart, and lands on a stop resized for a smaller position;
 - a deferred sale is sold on the next poll with no second full-size stop;
 - a sale not asked again gets its stop back after the hold;
-- a hold still running at the close is ended by `end_hold`.
+- a hold still running at the close is ended by `end_hold`;
+- a stop fill or a close drops the deferred price.
 
 These fail with the fix switched off. These hold either way: a plan file without the new field loads, through
-`MultiPlanStore` and through the runner's `load_plan`; a later move clears the deferred price; a stop fill or a close
-drops it; a broker that cannot be read starts no hold; the hold is never extended.
+`MultiPlanStore` and through the runner's `load_plan`; a later move clears the deferred price; a broker that cannot be
+read starts no hold; the hold is never extended.
 
 `tests/unit/test_runner_s_deferred.py`, Gap Hunter's whole session replayed (the harness of `test_runner_s_gap`):
 
