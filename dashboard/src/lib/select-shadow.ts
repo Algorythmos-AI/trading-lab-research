@@ -49,7 +49,7 @@ export function shadowView(block: SelectBlock | null, session: string, nowMs: nu
 export const RADAR_STATUS_WORDS: Record<string, string> = {
   ok: "Radar edition read",
   radar_missing: "Radar missing: ran on the desk's 12",
-  radar_stale: "Radar not this session's: ran on the desk's 12",
+  radar_stale: "Radar not fresh: ran on the desk's 12",
   radar_invalid: "Radar unreadable: ran on the desk's 12",
 };
 
