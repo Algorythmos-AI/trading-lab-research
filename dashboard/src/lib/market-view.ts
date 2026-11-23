@@ -1,20 +1,23 @@
 // What the market bar (components/client/market-bar.tsx) shows for a /api/flow feed at a pair of clocks: the headline
 // state and its line, the two index readings and the footer's times. Pure and browser-safe, so every state can be
 // tested without a browser. Facts only: the readings come from context.ts, the answer's age from flow-request.ts.
-import { ageWords, direction, indexInput, type IndexReading, INDEXES, marketRead, type MarketWord, whyWords } from "./context";
+import { ageWords, direction, firstTrendAt, indexInput, type IndexReading, INDEXES, marketRead, type MarketWord, whyWords } from "./context";
 import { slotClockFromAsOf } from "./flow";
 import { type FlowFeed, judgeFlow } from "./flow-request";
 
+// context.ts is inside the signal's hash closure, so the tile's "from HH:MM" is formatted here, not there.
+const nyHhmm = (ms: number) => new Intl.DateTimeFormat("en-GB", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(ms));
 const nyTime = (ms: number) => new Intl.DateTimeFormat("en-GB", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).format(new Date(ms));
 
 export interface MarketView {
   state: MarketWord | "none" | "loading";
   line: string;
-  tiles: { symbol: string; reading: IndexReading | null }[];
+  /** `wait`: when the tile's direction will first be read, while it is too early ("10:21"); null otherwise. */
+  tiles: { symbol: string; reading: IndexReading | null; wait: string | null }[];
   footer: { asOf: string | null; checked: string | null };
 }
 
-const emptyTiles = () => INDEXES.map((symbol) => ({ symbol, reading: null }));
+const emptyTiles = () => INDEXES.map((symbol) => ({ symbol, reading: null, wait: null }));
 
 /** The bar's view of the feed at these clocks; `shownPerf` is when the tab was last shown (monotonic). */
 export function marketView(feed: FlowFeed, shownPerf: number, clocks: { perf: number; wall: number } | null): MarketView {
@@ -28,7 +31,8 @@ export function marketView(feed: FlowFeed, shownPerf: number, clocks: { perf: nu
   const [spy, qqq] = readings as [IndexReading, IndexReading];
   const read = marketRead(spy, qqq);
   const footer = { asOf: Number.isFinite(held.asOf) ? nyTime(held.asOf) : null, checked: judged.checkedMs < 10_000 ? "just now" : `${ageWords(judged.checkedMs)} ago` };
-  const tiles = readings.map((r) => ({ symbol: r.symbol, reading: r }));
+  const clock = slotClockFromAsOf(held.body.as_of);
+  const tiles = readings.map((r) => ({ symbol: r.symbol, reading: r, wait: r.why === "too-early" && clock ? nyHhmm(firstTrendAt(clock)) : null }));
   // The device's clock against the server's: no age can be trusted, and the page says why rather than an age.
   if (!judged.fresh && judged.why === "device-clock") return { state: "none", line: "this device's clock is off", tiles, footer };
   if (read.read !== null) {
@@ -42,7 +46,6 @@ export function marketView(feed: FlowFeed, shownPerf: number, clocks: { perf: nu
             : `SPY ${spy.direction} · QQQ ${qqq.direction}`;
     return { state: read.read, line, tiles, footer };
   }
-  const clock = slotClockFromAsOf(held.body.as_of);
   // A stale answer is said once, with its own age; a stale trade or quote inside a fresh answer, with that price's age.
   const staleAge = (symbol: string) => (judged.fresh ? (readings.find((r) => r.symbol === symbol)?.ageMs ?? null) : judged.ageMs);
   const words = read.why.map((w) => ({ symbol: w.symbol, text: whyWords(w.why, clock, w.why === "stale" ? staleAge(w.symbol) : null) }));

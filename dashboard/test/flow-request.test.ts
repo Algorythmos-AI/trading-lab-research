@@ -183,6 +183,20 @@ describe("marketView on the fixture's answers", () => {
     expect(marketView({ status: "ok", held: { ...h, body } }, -Infinity, { perf: 3_000, wall: AS_OF + 3_000 })).toMatchObject({ state: "mixed", line: "SPY up · QQQ range" });
   });
 
+  it("before the fifth 10-minute close, each tile says when its first reading comes", async () => {
+    const h = await fixture("");
+    const early = AS_OF - 54 * 60_000; // 10:07 New York, two closes short of a trend
+    const iso = new Date(early).toISOString();
+    const cut = (row: (typeof h.body.names)[string]) => ({ ...row, trade_at: iso, quote_at: iso, bars: (row.bars ?? []).filter((b) => b.end <= early) });
+    const names = Object.fromEntries(Object.entries(h.body.names).map(([k, row]) => [k, cut(row)]));
+    const held = { ...h, body: { ...h.body, as_of: iso, names }, asOf: early, stamp: stampRequest(0, early), receivedWall: early + 100 };
+    const v = marketView({ status: "ok", held }, -Infinity, { perf: 3_000, wall: early + 3_000 });
+    expect(v).toMatchObject({ state: "none", line: "before 10:21: not enough bars yet" });
+    for (const t of v.tiles) expect(t).toMatchObject({ reading: { direction: null, why: "too-early" }, wait: "10:21" });
+    // a later reason clears the wait
+    expect((await view("flow-crossed")).tiles.map((t) => t.wait)).toEqual([null, null]);
+  });
+
   it("off, error and loading are calm", () => {
     expect(marketView({ status: "off", plan: true }, -Infinity, { perf: 0, wall: 0 })).toMatchObject({ state: "none", line: "data plan" });
     expect(marketView({ status: "error", limited: false }, -Infinity, { perf: 0, wall: 0 })).toMatchObject({ state: "none", line: "prices could not be read" });

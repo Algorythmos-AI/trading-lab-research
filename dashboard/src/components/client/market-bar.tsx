@@ -86,7 +86,7 @@ function Headline({ state, line }: { state: MarketView["state"]; line: string })
   );
 }
 
-function Tile({ symbol, reading }: { symbol: string; reading: IndexReading | null }) {
+function Tile({ symbol, reading, wait }: { symbol: string; reading: IndexReading | null; wait: string | null }) {
   const d = reading?.direction ? DIR[reading.direction] : null;
   // Values only when they are current: a stale answer shows dashes, never yesterday's numbers in today's place.
   const show = reading !== null && reading.why !== "stale";
@@ -104,6 +104,9 @@ function Tile({ symbol, reading }: { symbol: string; reading: IndexReading | nul
               <span aria-hidden>{d.glyph} </span>
               {d.word}
             </>
+          ) : wait ? (
+            // Too early for five 10-minute closes: say when the first reading comes, not just that there is none.
+            `from ${wait}`
           ) : (
             "no reading"
           )}
@@ -144,7 +147,7 @@ export function MarketBar() {
         <Headline state={v.state} line={v.line} />
         <div className="grid grid-cols-2 gap-2 md:contents">
           {v.tiles.map((t) => (
-            <Tile key={t.symbol} symbol={t.symbol} reading={t.reading} />
+            <Tile key={t.symbol} symbol={t.symbol} reading={t.reading} wait={t.wait} />
           ))}
         </div>
       </div>
