@@ -10,7 +10,7 @@ from wt.ops import control
 from wt.risk import execution_stops as xs
 from wt.risk.virtual_account import STOP_RULE_PREFIX, StateError, VirtualAccount
 
-RULES = xs.Rules(decision="DEC-0073", unprotected_polls=2, stop_slip_r=0.5, stop_slips=2)
+RULES = xs.Rules(decision="DEC-0073", unprotected_polls=2, stop_slip_r=0.5, stop_slip_min_usd=0.10, stop_slips=2)
 DAY = "2026-11-24"
 
 
@@ -28,9 +28,11 @@ def test_the_real_config_carries_the_records_numbers():
     assert r == RULES
 
 
-@pytest.mark.parametrize("bad", [{"decision": "0073"}, {"unprotected_polls": 0}, {"stop_slip_r": 0}])
+@pytest.mark.parametrize("bad", [{"decision": "0073"}, {"unprotected_polls": 0}, {"stop_slip_r": 0},
+                                 {"stop_slip_min_usd": -0.01}])
 def test_a_bad_config_is_refused(tmp_path, bad):
-    raw = {"decision": "DEC-0073", "unprotected_polls": 2, "stop_slip_r": 0.5, "stop_slips": 2, **bad}
+    raw = {"decision": "DEC-0073", "unprotected_polls": 2, "stop_slip_r": 0.5, "stop_slip_min_usd": 0.10,
+           "stop_slips": 2, **bad}
     (tmp_path / "risk.yaml").write_text(json.dumps({"S": {"execution_stops": raw}}))
     with pytest.raises(ValueError):
         xs.load("S", tmp_path / "risk.yaml")
@@ -99,6 +101,17 @@ def test_x5_two_stop_fills_over_half_an_r_from_the_stop_orders_own_fill():
     assert xs.slips([closed("a", 9.65), trailed], RULES) == 2
 
 
+def test_x5_a_small_r_slip_counts_only_past_the_ten_cent_floor():
+    """The gap fixtures' R is 12 cents, so 0.5R is 6: a slip must also pass US$0.10 a share (the owner's floor)."""
+    small = dict(entry=5.06, stop=4.94, price=4.94)
+    assert xs.slips([closed("a", 4.86, **small), closed("b", 4.85, **small)], RULES) == 0   # 8 and 9 cents
+    assert xs.slips([closed("a", 4.84, **small), closed("b", 4.84, **small)], RULES) == 0   # 10 cents is not more
+    x = xs.evaluate(RULES, [closed("a", 4.83, **small), closed("b", 4.80, **small)])        # 11 and 14 cents
+    assert x is not None and x.code == "X5" and "US$0.10" in x.detail
+    wide = dict(entry=20.0, stop=19.0, price=19.0)                                           # R a dollar: 0.5R rules
+    assert xs.slips([closed("c", 18.60, **wide), closed("d", 18.49, **wide)], RULES) == 1   # 40 cents no, 51 yes
+
+
 def test_rows_before_the_last_reset_do_not_count_and_a_new_fault_does():
     old = row("short_position", ts=f"{DAY}T15:00:00+00:00", symbol="AAA", qty=-1)
     history = [{"at": f"{DAY}T20:00:00+00:00", "reason": "stop rule X1: the account was short (DEC-0073)"},
@@ -147,7 +160,7 @@ def test_the_reset_refuses_while_the_desk_runs(tmp_path):
 def test_the_scorecard_line_counts_only():
     rows = [row("unprotected", trade_id="t", polls=1), closed("a", 9.65)]
     line = xs.state_line(RULES, rows)
-    assert "most 1 of 2" in line and "slip 1 of 2" in line and "FIRED" not in line
+    assert "most 1 of 2" in line and "slip 1 of 2" in line and "at least US$0.10" in line and "FIRED" not in line
     assert "FIRED: X3" in xs.state_line(RULES, [*rows, row("unprotected", trade_id="t", polls=2)])
 
 

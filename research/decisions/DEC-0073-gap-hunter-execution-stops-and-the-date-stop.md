@@ -204,10 +204,9 @@ change**.
   - The slip is measured against the stop's price when it filled (a trailed stop counts from where it was), in R of
     the stop the trade entered with.
   - Trades booked before this release carry no stop fill and are not counted.
-  - **For the owner: the line is small in cents.** These entries carry small risk. On the gap fixtures the trigger
-    is 5.06 and the stop 4.94, so R is 12 cents and 0.5R is 6 cents. Two stop-outs that each slip 6 cents (common on
-    a US$5 name) would latch the desk. The number is section 1's, accepted as written; it is not changed here.
-    Options: keep it, set a floor in cents (for example the larger of 0.5R and US$0.10), or a larger multiple of R.
+  - **The line is small in cents.** These entries carry small risk. On the gap fixtures the trigger is 5.06 and the
+    stop 4.94, so R is 12 cents and 0.5R is 6 cents. Two stop-outs that each slip 6 cents (common on a US$5 name)
+    would have latched the desk. The owner set a floor (next note).
 - **The overnight stop.** The after-close step asks each position's stop on its own, so one that fails no longer
   stops the checks for the others (`overnight_stop_failed`).
 - **The scorecard** prints the stock desk's stop rule and these stops after section 5: the most unprotected polls in
@@ -215,3 +214,16 @@ change**.
 - **No false latch on a normal session.** The replay tests of both rules (`test_runner_s.py`,
   `test_runner_s_gap.py`) now refuse any `execution_stop` or `unprotected` row unless a test means one. All of them
   pass unchanged.
+
+### 2026-11-22: X5 gets a floor of US$0.10 a share
+
+Asked in chat at 20:30 ET whether to keep X5 at 0.5R or add a floor, the owner answered "Add a 10c floor". No Gap
+Hunter trade existed.
+
+- **X5 now reads:** two stop exits, each filled under its stop price by more than the larger of 0.5R and US$0.10 a
+  share. Everything else in section 1 stands.
+- **Where it lives.** `config/risk.yaml` `S.execution_stops.stop_slip_min_usd: 0.10`.
+- **Its effect.**
+  - On an entry with 12 cents of risk, a slip must pass 10 cents, not 6.
+  - On one with a dollar of risk, 0.5R (50 cents) still sets the line.
+  - A test holds both cases (`test_x5_a_small_r_slip_counts_only_past_the_ten_cent_floor`).
