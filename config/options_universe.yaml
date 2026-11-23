@@ -15,9 +15,9 @@ radar:
   # recorded as out_of_scope and supplies nothing.
   lists_in_scope: ["DAILY RADAR", "MEGA CAP OPTIONS", "BREAKOUT WATCH"]
   max_candidates_in: 60      # the edition's own ticker limit; more distinct in-scope symbols than this: radar_invalid
-  # Freshness, against the session S being selected for. The edition must be S's (edition_date == S) and stamped
-  # after the close of the session before S and before the run.
-  prices_max_age_minutes: 240  # prices_as_of no older than this at the run; absent prices_as_of: radar_stale
+  # Freshness, against the session S being selected for: the edition must be S's (edition_date == S) and stamped
+  # (as_of) after the close of the session before S and before the run. The edition's prices_as_of is free text and
+  # is not a check (DEC-0070 section 10): nothing here reads the edition's prices.
   aliases: {GOOG: GOOGL}     # one class per company: an alias folds into its target before deduplication
 
 gate:
