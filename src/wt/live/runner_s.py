@@ -1433,8 +1433,13 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             sl.wt_on_partial(wt)
             gap_save(p, wt)
         minute = str(pd.Timestamp(now).floor("min"))
-        if not wt.partial_done and pd.Timestamp(now) >= wt.entry_bar + pd.Timedelta(minutes=1) \
-                and p.wt.get("t1_try") != minute and (px := target_exit_limit(q, wt.t1_price)) is not None:
+        t1_due = not wt.partial_done and pd.Timestamp(now) >= wt.entry_bar + pd.Timedelta(minutes=1)
+        # a try whose stop cancel was not confirmed sent no sale: inside its DEC-0071 hold it is asked again at the
+        # next poll, on a fresh quote, instead of waiting for the next minute (DEC-0075)
+        t1_held = t1_due and oms.held_for_exit(p)
+        t1_hold = t1_due and bool(p.stop_id) and p.exit_hold_stop == p.stop_id     # running, or run out this poll
+        if t1_due and (p.wt.get("t1_try") != minute or t1_held) \
+                and (px := target_exit_limit(q, wt.t1_price)) is not None:
             p.wt["t1_try"] = minute                            # one try a minute: an unfilled try cost its time without
             store.save(p)                                      # half the stop, so it is never repeated at each poll
             reason = "target_all" if wt.qty0 < 2 else "partial_t1"
@@ -1447,6 +1452,12 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                     gap_save(p, wt)
             if p.state != "in_position":
                 return
+        elif t1_hold:
+            # the sale is not asked again now (the bid has left the target, or the hold ran out since reconcile): the
+            # hold ends and the stop goes back in this poll, not at the next poll's reconcile, after its X3 check
+            # (DEC-0075, DEC-0073). A cancel the broker reports only after this is replaced by the next reconcile.
+            oms.end_hold(p)
+            oms.ensure_stop(p)
         # the newest closed bar, once
         if b is not None and len(b) and str(b.t.iloc[-1]) != p.wt.get("bar"):
             last = pd.Timestamp(b.t.iloc[-1])
