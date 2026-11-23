@@ -1513,6 +1513,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             if pos.qty > 0:
                 long_left = True
                 if owner is not None and owner.state in ACTIVE_POSITION:
+                    oms.end_hold(owner)                        # no exit is asked again tonight (DEC-0071)
                     oms.ensure_stop(owner)                     # a GTC stop keeps protecting overnight
                 log("END_OF_DAY_NOT_FLAT", symbol=pos.symbol, qty=pos.qty)
                 pager.fire("paper-s:not-flat", "Sleeve S NOT FLAT at the close",

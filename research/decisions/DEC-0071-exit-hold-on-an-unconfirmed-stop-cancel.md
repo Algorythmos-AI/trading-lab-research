@@ -74,3 +74,16 @@ The manager's existing suites pass unchanged.
 - `MultiOMS.move_stop` and `partial_exit` defer in the same way when a cancel is not confirmed. A moved stop that is
   deferred may also be put back at its old price on the next loop. Neither was seen in the records, and neither is
   changed here.
+
+## Notes
+
+### 2026-11-22: a hold still running at the close
+
+Found while building DEC-0073, before any release carried this record's code. A hold that begins in the session's
+last 15 s, at an exit asked on the last poll, is still running when the after-close step asks for the overnight GTC
+stop. If the cancel has landed by then, `ensure_stop` places nothing, because the hold says the exit will sell next.
+No exit is asked after the close, so the shares would have no stop until the next session's open.
+
+The after-close step now ends the hold first (`OMS.end_hold`), then asks for the stop. A test holds this
+(`tests/unit/test_oms_exit_hold.py`). Nothing else in this record changes. The 15 s bound still applies during the
+session.

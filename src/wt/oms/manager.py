@@ -309,6 +309,14 @@ class OMS:
         (DEC-0071). Tied to that stop's id: a stop placed since is never held."""
         return bool(p.stop_id) and p.exit_hold_stop == p.stop_id and self.clock() < p.exit_hold_until
 
+    def end_hold(self, p: TradePlan) -> None:
+        """End a DEC-0071 hold now: no exit will be asked again (the session is over), so the stop goes back at the
+        next ensure_stop. Without this, a hold begun in the last seconds before the close would leave the shares
+        without a stop overnight."""
+        if p.exit_hold_stop or p.exit_hold_until:
+            p.exit_hold_stop, p.exit_hold_until = "", 0.0
+            self._persist(p)
+
     def ensure_stop(self, p: TradePlan) -> None:
         """A GTC stop for min(entry fills, long position), replacing a wrongly sized one (cancel confirmed first)."""
         cur = self._read(p.stop_id) if p.stop_id else None

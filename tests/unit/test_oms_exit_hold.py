@@ -143,3 +143,18 @@ def test_a_stop_that_filled_instead_of_cancelling_closes_the_plan_as_a_stop():
     assert flat and p.state == "closed" and p.exit_reason == "stop" and p.exit_fill_price == 248.95
     assert not [cid for cid in b.placed if b.orders[cid].type == "market"]
     assert b.positions() == []
+
+
+def test_a_hold_still_running_at_the_close_ends_so_the_overnight_stop_goes_in():
+    """The after-close path (runner_s) ends the hold before it asks for the overnight stop: no exit is asked again
+    after the session, so a hold begun in its last seconds must not leave the shares without a stop."""
+    b, oms, p, clock = setup()
+    oms.exit_now(p, None, "eod_verify", market=True)                      # the last poll: deferred
+    b.settle()                                                            # the cancel lands as the session ends
+    oms.ensure_stop(p)
+    assert len(stops(b)) == 1 and b.orders[p.stop_id].status.terminal     # inside the hold: nothing placed
+    oms.end_hold(p)
+    oms.ensure_stop(p)
+    assert len(stops(b)) == 2 and b.orders[p.stop_id].status == OrderStatus.ACCEPTED
+    assert not oms.held_for_exit(p) and p.exit_hold_until == 0.0
+
