@@ -1,7 +1,11 @@
 # DEC-0072: the Options desk's board pauses any name that is not one of the desk's names
 
-- **Status: PROPOSED on 2026-11-23.** It takes effect when the owner merges the pull request that changes this line to
-  ACCEPTED. This record changes no code. The board's change is a later pull request, which must meet section 4.
+- **Status: ACCEPTED on 2026-11-23.** approved_by: owner. Proposed on 2026-11-23 (#599) and accepted by the owner's
+  merge of the pull request that changed this line.
+  - The owner asked for this accepting change on 2026-11-23, in chat ("Yes, open it"). The merge is the acceptance.
+  - **The merge also confirms section 2a's reading:** this rule is a check of whether the board has the facts to act
+    on a name, not an amendment to DEC-0035. So it is not an EXP-0033 early end.
+  - This record changes no code. The board's change is #601, which meets section 4 and merges after this one.
 - **Why now:** DEC-0070 section 6a (added 2026-11-23, in #598) found that the Trade now board can say ENTER ZONE for a
   name that is not one of the desk's 12. It made a registered guard a precondition of the switch (DEC-0048). This is
   that guard.
