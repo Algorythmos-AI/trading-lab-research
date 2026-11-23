@@ -706,3 +706,19 @@ def test_an_entry_gate_that_fails_sends_no_order(gap, monkeypatch, what):
     j = journal(gap)
     assert any(what in r["blockers"] for r in events(j, "signal_blocked"))
     assert not [c for c in b.placed if b.orders[c].side == "buy" and b.placed_at[c] < pd.Timestamp(at(9, 33))]
+
+
+def test_the_journal_says_why_each_rule_had_no_order(gap):
+    """A row whenever a rule's reason changes, and the minutes per reason on the day's end: words that decide nothing."""
+    session(tape_of(NO_ENTRY))
+    j = journal(gap)
+    rows = events(j, "gap_rules")
+    assert rows and all(r["symbol"] == "ABC" and set(r["rules"]) == {"e1", "e2", "e3", "e4"} for r in rows)
+    keys = [tuple(v["why"] for v in r["rules"].values()) for r in rows]
+    assert all(a != b for a, b in zip(keys, keys[1:], strict=False))                 # only changes are journaled
+    assert rows[0]["minute"] == "09:31" and rows[-1]["minute"] < "11:00"
+    done = one(j, "gap_day_done")
+    assert done["reason"] == "no_signal" and set(done["rules"]) == {"e1", "e2", "e3", "e4"}
+    for r in done["rules"].values():
+        assert sum(r["minutes"].values()) == 89                        # each minute decided, 09:31 to 10:59
+        assert r["last"]["why"] in r["minutes"]
