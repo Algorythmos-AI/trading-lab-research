@@ -3,6 +3,9 @@
 # Revised on 2026-11-12, after a blind review, by an editor who had seen no result (DEC-0047's opening lines).
 # Frozen with DEC-0047; a changed value is a new experiment and new trials, except that a decision record may amend it
 # before the first counted session, saying that no outcome of the selection was viewed to choose the change.
+# Amended by DEC-0070 (accepted 2026-11-23, before the first counted session; no outcome of any selection viewed): the
+# universe is S's (the desk's 12 and the Radar names the gate admits); the groups are taken over it; HYP-0053's fixed
+# set stays over the desk's 12; two early ends added; sessions on the 12 alone are counted like any other.
 experiment: EXP-0032
 status: registered                  # registered when DEC-0047 is accepted; no results file until the read writes it once
 decision: DEC-0047
@@ -60,6 +63,8 @@ sessions:
   ends_early_on:                    # the last session counted is the last before the change reaches production
     - a dated amendment to DEC-0046 that changes the selection (params_sha, or code it records as a change)
     - a change to the universe (config/options_desk.yaml names)
+    - a change to config/options_universe.yaml (its universe_sha) after the first counted session (DEC-0070)
+    - a change to src/wt/options/radar_candidates.py or universe.py that a record does not name as a non-change (DEC-0070)
     - a change to the card-field code (DEC-0046 section 6)
     - an amendment to DEC-0035 that changes a card number
     - a change to the frozen outcome rule
@@ -81,6 +86,10 @@ unit:
     - card_fault                    # both sides trigger on one bar (floor above ceiling)
   picked: the scored Stage 1 picks for S (the first min(4, eligible) eligible names by final rank, DEC-0046 R6); an unscored pick is missing, never replaced
   rest: the Stage 1-eligible scored names not picked
+  universe: >-
+    S's universe (DEC-0070): the desk's 12 and the Radar names the gate admitted for S; picked and rest are taken over
+    all of it, so their sizes vary by session; a session whose universe is the 12 alone (the Radar missing, stale or
+    invalid, or no name admitted) is counted like any other, and its record says which
   descriptive_only: [ineligible scored names (earnings_gap), unranked data-valid scored names (benchmark_missing)]
 
 outcome:                            # DEC-0047 section 3, verbatim from the ledger's source
@@ -207,9 +216,9 @@ trial_definitions:
     statistic: mean of D_s over included sessions
   HYP-0053:
     fixed_set: >-
-      chosen before the open from the Stage 1-eligible names: SPY and QQQ, each when Stage 1-eligible, plus the two
-      single names of the other ten with the highest Stage 1 ATR% (ATR14 / close, rounded to 6 decimals) among the
-      Stage 1-eligible ones; ties by symbol A to Z; a member that cannot be scored is missing and not replaced; a name
+      chosen before the open from the Stage 1-eligible names of the desk's 12 (config/options_desk.yaml; never a name
+      the Radar added, DEC-0070): SPY and QQQ, each when Stage 1-eligible, plus the two single names of the other ten
+      with the highest Stage 1 ATR% (ATR14 / close, rounded to 6 decimals) among the Stage 1-eligible ones; ties by symbol A to Z; a member that cannot be scored is missing and not replaced; a name
       in both sets counts in both
     per_session: D_s = mean R per triggered side (picked) - mean R per triggered side (fixed set)
     excluded: a session where either has no triggered name (counted)

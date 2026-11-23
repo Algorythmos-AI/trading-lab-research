@@ -1,8 +1,13 @@
 # DEC-0070: the Radar's candidates enter the Options desk's universe, through a fail-closed gate, after the research
 
-- **Status: PROPOSED on 2026-11-22.** It takes effect when the owner merges the pull request that changes this line to
-  ACCEPTED. Until then nothing it describes selects, publishes or trades anything. The code it names runs only as a
-  shadow (section 6) and admits no Radar name while the gate's thresholds are unset (section 3).
+- **Status: ACCEPTED on 2026-11-23.** approved_by: owner. Proposed on 2026-11-22 (#594) and accepted by the owner's
+  merge of the pull request that changed this line.
+  - The owner asked for this accepting change on 2026-11-23, in chat. The merge is the acceptance.
+  - **The owner's choices (section 5):** the groups are taken over S's whole universe (item 3, *Proposed*), and
+    HYP-0053's fixed rule stays over the desk's 12 (item 4, *Proposed*).
+  - `config/options_universe.yaml` at acceptance: `universe_sha` `bf1db9a4e7749f36086cc25a4cc7bb754c32d5db96b8ccb6d7d927628ce5e890`.
+  - Acceptance selects, publishes and trades nothing. The shadow runs (section 6). No Radar name joins the universe
+    while the gate's thresholds are unset (section 3), and the published focus changes only with DEC-0048.
 - **Why now:** the owner asked on 2026-11-20 and 2026-11-22 for one connected pipeline: the Radar researches broadly
   and publishes a validated dataset, and the Options desk's deterministic rules filter and rank it. The owner also
   set the scope: the Radar is for options only; Gap Hunter (DEC-0068) is a separate stock robot with its own
@@ -59,7 +64,7 @@ Radar edition for S (stored)  →  candidates (wt.options.radar_candidates)  →
 ```
 
 Code: `src/wt/options/radar_candidates.py`, `src/wt/options/universe.py`, `src/wt/options/radar_select.py`; config
-`config/options_universe.yaml` (its `universe_sha` is recorded in every record and named here on acceptance);
+`config/options_universe.yaml` (its `universe_sha` is recorded in every record; at acceptance `bf1db9a4e774…`, in full above);
 earnings rows for non-desk names `config/events/earnings_radar.csv`.
 
 ### 2. The universe (amends DEC-0046 section 1)
@@ -111,13 +116,13 @@ changes:
 2. **Section 2, the unit:** "each of the twelve names" becomes "each name of S's universe". A Radar name in the
    universe is scored by the same rule as a desk name, so the switch (DEC-0048) must publish card fields for every
    universe name, not only the picks.
-3. **The groups.** The owner chooses one on acceptance:
+3. **The groups.** Chosen on acceptance (2026-11-23): *Proposed*.
    - *Proposed:* *Picked* and *the rest* are taken over S's whole universe, as written for the 12. The sizes vary by
      session (4 against 8 to 16); the test statistic in section 5 is already a per-session difference of group means,
      so it needs no change.
    - *Alternative:* the groups are taken over the desk's 12 only, and Radar names are reported descriptively (section
      7). The experiment then tests the scoring on the 12 as registered, and says nothing about the Radar's names.
-4. **HYP-0053, the fixed rule** (SPY, QQQ and the two highest-ATR% names). The owner chooses one on acceptance:
+4. **HYP-0053, the fixed rule** (SPY, QQQ and the two highest-ATR% names). Chosen on acceptance (2026-11-23): *Proposed*.
    - *Proposed:* the fixed rule stays over the desk's 12. It is the baseline the selection must beat, and it should
      not move with the Radar.
    - *Alternative:* the fixed rule is taken over S's universe.
@@ -185,7 +190,6 @@ bars and rule states for a non-desk focus name) waits for DEC-0048: nothing can 
 ## What is not decided here
 
 - The gate's five thresholds (a dated amendment, section 3).
-- The groups and the fixed rule's universe (section 5 items 3 and 4: the owner's choice on acceptance).
 - The switch (DEC-0048).
 - Edits to the cloud Radar skill (dropping its stock lists; publishing structured earnings and scan counts): the
   owner's, in the claude.ai project.

@@ -1,7 +1,7 @@
 id: HYP-0067
 trial: "RADAR-SMALL-1D"
 family: R                       # the pre-market Radar's selection, forward (DEC-0055); counted apart from the global, C, O, M and F families
-status: pre-registered          # DEC-0055 (proposed 2026-11-17); NOT blind: the Radar's own scorecards were seen first (DEC-0055, "What has already been seen")
+status: withdrawn               # DEC-0070 (accepted 2026-11-23): the Radar is for options only; withdrawn before DEC-0055 was accepted, no session counted. Was: pre-registered under DEC-0055 (proposed 2026-11-17); NOT blind: the Radar's own scorecards were seen first (DEC-0055, "What has already been seen")
 arm: radar                      # the Radar's listed names against a fixed fund, from the open: no order of any kind
 statement: "On counted sessions S of EXP-0038 (DEC-0055 section 1), the distinct names on the scored radar edition's first 'SMALL CAP MOMENTUM' list, after the frozen desk names, GOOG, the symbols the day's sealed Nasdaq Trader directory marks ETF and the symbols it does not list are taken out (DEC-0055 section 2), return more than IWM over the open to the close of S (c(S) / o(S) - 1), by Alpaca SIP daily bars as served (feed=sip, adjustment=all); only a spin-off in the window takes a name out. A session is included in this trial when it has that list, at least one scored name and IWM's bar on S. Per included session D_S = the mean of the scored names' returns minus IWM's return over the same window."
 rule: list_minus_fund_per_session
