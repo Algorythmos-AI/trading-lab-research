@@ -27,7 +27,13 @@ names its reject, and nothing after it is asked:
    report for the symbol on D, S or the session after S.
 
 The candidates that pass are cut to `gate.max_additions` by (best list priority, higher evidence grade, symbol A to Z);
-the rest are `over_cap`. While a gate threshold is unset, every candidate is `gate_unset` and none is checked.
+the rest are `over_cap`. While a gate threshold is unset, every candidate is `gate_unset` and none is admitted.
+
+Every verdict carries the candidate's facts (`facts_of`), set or unset: the edition's avoid and risk flags, Stage 1's
+validity code, D's close, the median dollar volume, the chain facts, whether its next report is known, and whether the
+edition's calendar names a report in the hold. They are what the gate's thresholds are set from (DEC-0070 section 3:
+status frequencies on saved data, never outcomes; `scripts/options_universe_frequencies.py`). All are known before S
+opens; none is an outcome.
 The universe is the 12 followed by the admitted names in that order. Stage 1 then ranks them
 all with its frozen rules: on a wider universe its ranks are relative to every name, so the 12's ranks can move.
 """
@@ -46,7 +52,7 @@ from wt.options import select as sel
 from wt.risk import events as ev
 
 SCHEMA = "wt.options/universe"
-VERSION = 1
+VERSION = 2            # 2: every verdict carries the candidate's gate facts (`facts`), the gate set or not
 CHAIN_REJECTS = ("chain_unavailable", "chain_no_expiry", "chain_thin", "chain_volume_low", "chain_spread_wide")
 REJECT_CODES = ("radar_avoid", "radar_risk") + tuple(f"bars_{c}" for c in sel.VALIDITY_CODES) + (
     "price_low", "dollar_volume_low") + CHAIN_REJECTS + ("earnings_unknown", "earnings_in_radar_calendar", "over_cap",
@@ -124,6 +130,27 @@ def _check(c: Mapping[str, Any], parsed: list[lv.Bar] | None, facts: ChainFacts 
     return None
 
 
+def facts_of(c: Mapping[str, Any], parsed: list[lv.Bar] | None, chain: ChainFacts | None, d: str, s: str,
+             rows: Sequence[Mapping[str, Any]], p: sel.Params) -> dict[str, Any]:
+    """The facts the gate reads for candidate `c`, whatever its thresholds: no threshold is applied here."""
+    sym = c["symbol"]
+    why = sel.validity(parsed, d, p)
+    out: dict[str, Any] = {
+        "avoid": bool(c.get("avoid", True)), "risk_tag": bool(c.get("risk_tag", True)),
+        "validity": "ok" if why is None and parsed is not None else (why or "bad_bar"),
+        "close": None, "median_dollar_volume": None,
+        "chain": None if chain is None else asdict(chain),
+        "earnings_known": None if sym in p.index_names else not ev.earnings_gaps(
+            rows, [sym], dt.date.fromisoformat(d), p.earnings_unknown_after_days),
+        "earnings_in_hold": bool({d, s, lv.next_session(s)} & set(c.get("calendar_earnings") or [])),
+    }
+    if out["validity"] == "ok" and parsed is not None:
+        window = parsed[-p.min_bars:]
+        out["close"] = round(window[-1].c, 4)
+        out["median_dollar_volume"] = round(statistics.median(b.c * b.v for b in window[-p.dollar_volume:]), 2)
+    return out
+
+
 def gate(candidates: Mapping[str, Any], desk: Sequence[str], bars: Mapping[str, Any],
          chains: Mapping[str, ChainFacts | None], earnings_rows: Sequence[Any], p: sel.Params,
          cfg: rc.Config) -> dict[str, Any]:
@@ -148,8 +175,13 @@ def gate(candidates: Mapping[str, Any], desk: Sequence[str], bars: Mapping[str, 
             code = "gate_unset" if unset else _check(c, parsed, chains.get(c["symbol"]), d, s, rows, p, cfg)
         except Exception:                                   # one name never stops the others; it is never admitted
             code = "internal_error"
-        facts = chains.get(c["symbol"])
-        verdicts.append({"symbol": c["symbol"], "reject": code, "chain": None if facts is None else asdict(facts)})
+        chain = chains.get(c["symbol"])
+        try:
+            facts: dict[str, Any] | None = facts_of(c, parsed, chain, d, s, rows, p)
+        except Exception:                                   # a fact that cannot be read is recorded as missing
+            facts = None
+        verdicts.append({"symbol": c["symbol"], "reject": code, "chain": None if chain is None else asdict(chain),
+                         "facts": facts})
         if code is None:
             passed.append(c)
     passed.sort(key=lambda c: priority(c, cfg))
