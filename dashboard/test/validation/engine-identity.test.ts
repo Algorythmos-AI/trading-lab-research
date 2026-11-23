@@ -1,26 +1,24 @@
-// DEC-0051 section 8's engine identity check for DEC-0053 (DEC-0044's engine label e-d6053c7fdd0a, DEC-0052's → LABEL
-// below): a failed break locks its side for the rest of the entry window, and a confirmed retest on bars that do not
-// cover the session from its open is get ready (`lockUnseen`). It changes trade-state.ts, and trade-now.ts's rowView
-// only (the drawn headline of a row with a live alternative also says the lock); no row's key reads that headline, and
-// trade-now.ts runs as today's on both engines here.
+// DEC-0051 section 8's engine identity check for DEC-0072 (DEC-0044's engine label e-593cd517f8d5, DEC-0053's → LABEL
+// below): a row whose symbol is not one of the desk's names (market-calendar.json `options_names`) reads paused, always
+// and first. It changes trade-state.ts, and desk-eval.ts's `stale` day flag only (an off-desk pause is not a stale
+// feed); every fixture names desk symbols only, so neither engine ever meets the new branch here.
 //
-// The old engine is the base commit's trade-state.ts (integration 6bee358), rebuilt here from today's file by putting
+// The old engine is the base commit's trade-state.ts (integration 5cf8997), rebuilt here from today's file by putting
 // the old text back in place of each changed hunk (engine-identity.base.json, written from git when this check was set
 // up), and proved byte-identical to the base file by its SHA-256. It is written to a temporary module, and every export
 // of "@/lib/trade-state" is routed to the old or the new module by one switch, so the board (trade-now.ts) and the
-// server's evaluation (desk-eval.ts) run whole on either engine. An export the old file does not have (lockUntil,
-// locksOf) runs the new one on both: on the old engine's states (no `failedAt`) locksOf finds no lock.
+// server's evaluation (desk-eval.ts) run whole on either engine.
 //
 // What is compared, as section 8 judges it: a row differs when a side's state, its `brokeAt` or a card number (level,
-// entry, stop, target 1, target 2) differs. DEC-0053 is a rule change, so rows may differ, and the check's answer is
-// the counts, pinned here:
+// entry, stop, target 1, target 2) differs. DEC-0072 changes no state of a desk name, so the answer pinned here is
+// zero, and the rows are byte-identical as well:
 // - every case of guards-off-cases.ts (the fixture editions, the scripted morning, a session's clock and a half day's,
 //   each quote set): the board's rows and the server's evaluation;
 // - every session of retest.vectors.json (the clone's own answers, scripts/gen_retest_vectors.py), read at each bar's
-//   close: the new engine opens its enter zone at the clone's first signal except where an earlier failed break locks
-//   the side (DEC-0053's stated departure from the clone).
+//   close.
+// Then the new branch itself: the same cases with a desk name renamed to one the desk does not hold.
 //
-// The check DEC-0052 set up (base 8cd5ff0d) belonged to its release; this one replaces it, against its own base.
+// The check DEC-0053 set up (base 6bee358) belonged to its release; this one replaces it, against its own base.
 // It runs only while ENGINE_VERSION is its label (LABEL): a later engine change skips it, and needs its own identity
 // check (DEC-0051 section 8), against its own base, in place of this one.
 import { createHash } from "node:crypto";
@@ -31,15 +29,16 @@ import { evaluateSlot, type Evaluation } from "@/lib/desk-eval";
 import { ENGINE_VERSION } from "@/lib/engine-version.gen";
 import type { SidePlan } from "@/lib/focus-plan";
 import type { LiveQuote } from "@/lib/options";
-import { type BoardRow, boardRows } from "@/lib/trade-now";
+import { type BoardRow, boardRows, entryPrompt, noticeKey, rowView } from "@/lib/trade-now";
 import { atr2m, type Bar2, type Bars2m, BAR_MINUTES, CLOSE_GRACE_MS, type SideState, sideState } from "@/lib/trade-state";
 import { type BoardCase, boardCases, type EvalCase, evalCases } from "../guards-off-cases";
 import { serialise } from "../guards-off-run";
 import vectors from "../fixtures/retest.vectors.json";
+import calendar from "@/lib/market-calendar.json";
 import base from "./engine-identity.base.json";
 
-/** The engine label this check was run for: the label after DEC-0053. */
-const LABEL = "e-593cd517f8d5";
+/** The engine label this check was run for: the label after DEC-0072. */
+const LABEL = "e-8591f874008c";
 
 const H = vi.hoisted(() => ({
   engine: "new" as "old" | "new",
@@ -108,8 +107,8 @@ const evalKey = (ev: Evaluation) => ev.rows.map((r) => serialise(r));
 const cases = JSON.parse(JSON.stringify({ board: boardCases(), eval: evalCases() })) as { board: BoardCase[]; eval: EvalCase[] };
 
 describe.skipIf(otherEngine)("the old engine is the base commit's", () => {
-  it("the rebuilt trade-state.ts is byte-identical to the file at 6bee358; no constant moved, and the two new exports are DEC-0053's", () => {
-    expect(base.base).toBe("6bee358");
+  it("the rebuilt trade-state.ts is byte-identical to the file at 5cf8997; no constant moved, and no export was added", () => {
+    expect(base.base).toBe("5cf8997");
     expect(H.missingHunks).toBe(0);
     expect(H.baseSha).toBe(base.base_sha256);
     const src = readFileSync(fileURLToPath(new URL("../../src/lib/trade-state.ts", import.meta.url)), "utf8");
@@ -117,12 +116,12 @@ describe.skipIf(otherEngine)("the old engine is the base commit's", () => {
     for (const h of base.hunks) old = old.replace(h.new, () => h.old);
     expect(createHash("sha256").update(old).digest("hex")).toBe(base.base_sha256);
     expect(H.constantsDiffer.sort()).toEqual([]);
-    expect(H.onlyNew.sort()).toEqual(["lockUntil", "locksOf"]);
+    expect(H.onlyNew.sort()).toEqual([]);
   });
 });
 
 describe.skipIf(otherEngine)("every fixture: old engine against new (DEC-0051 section 8)", () => {
-  it("the board's rows over every guards-off case: no row's state, brokeAt or card numbers differ; only a locked side's words do", () => {
+  it("the board's rows over every guards-off case: no row differs, not even in its words", () => {
     let rows = 0;
     const differ: string[] = [];
     const anyByte: string[] = [];
@@ -139,10 +138,7 @@ describe.skipIf(otherEngine)("every fixture: old engine against new (DEC-0051 se
     expect(cases.board.length).toBe(735);
     expect(rows).toBe(2205);
     expect(differ).toEqual([]);
-    // the scripted morning's steps 3 to 5, in every edition and quote set: SPY's failed break (plan off at step 3, the
-    // same state and brokeAt) is now worded as its lock ("Failed at 10:26: no call until 13:00"), on its row
-    expect(anyByte.length).toBe(63);
-    expect([...new Set(anyByte.map((id) => id.split("/")[1]))].sort()).toEqual(["step3", "step4", "step5"]);
+    expect(anyByte).toEqual([]);
   });
 
   it("the server's evaluation over every guards-off slot: no row differs", () => {
@@ -185,7 +181,7 @@ function stateAt(c: Vec, i: number): SideState {
 }
 
 describe.skipIf(otherEngine)("the clone's retest sessions: old engine against new", () => {
-  it("rows differ only after a failed break: the new engine's enter zone is the clone's first signal's two slots unless a lock holds, on these counts", () => {
+  it("no bar state differs; the enter zone is still the clone's first signal's two slots unless DEC-0053's lock holds", () => {
     let bars = 0;
     let differ = 0;
     const sessionsDiffer: string[] = [];
@@ -213,8 +209,64 @@ describe.skipIf(otherEngine)("the clone's retest sessions: old engine against ne
   });
 });
 
-/** The pinned answer on the vectors: the counts this check printed when it was set up (2026-11-17). */
-const COUNTS = { sessions: 15, bars: 312, differ: 6, sessionsDiffer: 2 };
-/** The two sessions with a failed break: in the first the side reads its lock after the failure, in the second the lock
- * also removes the clone's signal on the re-break. Every other session's bar states are the same on both engines. */
-const SESSIONS_DIFFER = ["a close back through the level before the confirming close", "the first break fails; the second one's retest confirms"];
+/** The pinned answer on the vectors: the counts this check printed when it was set up (2026-11-23). */
+const COUNTS = { sessions: 15, bars: 312, differ: 0, sessionsDiffer: 0 };
+const SESSIONS_DIFFER: string[] = [];
+
+// ---- the new branch: a name the desk does not hold -----------------------------------------------------------------
+/** A case with every occurrence of the symbol `from` (as a whole JSON string) renamed to `to`. */
+const renamed = (c: BoardCase, from: string, to: string): BoardCase =>
+  JSON.parse(JSON.stringify(c).replaceAll(JSON.stringify(from), JSON.stringify(to))) as BoardCase;
+
+describe.skipIf(otherEngine)("a name the desk does not hold (DEC-0072 section 1)", () => {
+  // Every live case with a row in the entry zone, and that row's symbol.
+  const entering = cases.board.flatMap((c) =>
+    c.live ? boardRows(c.input, c.live).filter((r) => r.state?.state === "enter_zone").map((r) => ({ c, symbol: r.symbol })) : [],
+  );
+
+  it("the fixtures hold rows in the entry zone, every one a desk name", () => {
+    expect(entering.length).toBeGreaterThan(0);
+    const desk = new Set(calendar.options_names);
+    expect(entering.filter((e) => !desk.has(e.symbol))).toEqual([]);
+  });
+
+  it("the same row under a symbol off the desk reads paused, with no grid, no notice and no entry prompt, on both sides", () => {
+    for (const { c, symbol } of entering) {
+      const row = boardRows(renamed(c, symbol, "XYZQ").input, c.live).find((r) => r.symbol === "XYZQ")!;
+      const s = row.state!;
+      expect(s.state, c.id).toBe("paused");
+      expect(s.offDesk).toBe(true);
+      expect(s.line).toBe("Not one of the desk's names: its earnings and expiry facts are not on file");
+      expect(s.side).toBeUndefined();
+      expect(s.plan).toBeNull();
+      const v = rowView(s);
+      expect(v.grid).toBeNull();
+      expect(JSON.stringify(v.badge)).not.toMatch(/ENTER|CALL|PUT/);
+      expect(noticeKey(s)).toBeNull();
+      expect(entryPrompt(s)).toBe(false);
+    }
+  });
+
+  it("a lower-case desk symbol is still a desk name, and an alias is not (GOOG is not GOOGL)", () => {
+    const { c, symbol } = entering[0]!;
+    expect(boardRows(renamed(c, symbol, symbol.toLowerCase()).input, c.live)[0]!.state!.offDesk).toBeUndefined();
+    const goog = renamed(c, symbol, "GOOG");
+    expect(boardRows(goog.input, goog.live).find((r) => r.symbol === "GOOG")!.state!.state).toBe("paused");
+  });
+
+  it("the server's evaluation reads such a name paused, and does not count it as a stale feed", () => {
+    // a slot whose names all have rows and whose day reads no stale feed: rename its first focus name off the desk
+    const ev = cases.eval.find((e) => {
+      const out = evaluateSlot(e.input);
+      return out.rows.length > 0 && !out.day.stale && (e.input.edition.focus?.items?.length ?? 0) > 0;
+    });
+    expect(ev).toBeDefined();
+    const first = ev!.input.edition.focus!.items![0]!.symbol;
+    const off = JSON.parse(JSON.stringify(ev!.input).replaceAll(JSON.stringify(first), JSON.stringify("XYZQ"))) as EvalCase["input"];
+    const out = evaluateSlot(off);
+    const rows = out.rows.filter((r) => r.symbol === "XYZQ");
+    expect(rows.length).toBe(2);
+    expect(rows.every((r) => r.state === "paused")).toBe(true);
+    expect(out.day.stale).toBe(false);
+  });
+});
