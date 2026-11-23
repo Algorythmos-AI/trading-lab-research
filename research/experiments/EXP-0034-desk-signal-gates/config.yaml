@@ -14,7 +14,7 @@ trials:                             # the difference is a minus b
 code_read:                          # what the definitions describe; pins of unmerged code are written into README.md once merged
   flow.ts: "dashboard/src/lib/flow.ts at origin/integration 66c5efc8e09fd2289e64bd85c531aa9c6305fae8"
   context.ts: "as pull request #422 proposes it; not merged; copied below in words and numbers; pinned by a dated README line once merged"
-  engine: "trade-state.ts, trade-now.ts, desk-eval.ts as the board runs them; engine label e-593cd517f8d5, the release that ships DEC-0053 section 1 (DEC-0053 amendment, 2026-11-17, before the window; e-28344e769752 at registration)"
+  engine: "trade-state.ts, trade-now.ts, desk-eval.ts as the board runs them; engine label e-8591f874008c, the release that ships DEC-0072 (DEC-0072 section 6, 2026-11-23, before the window; e-593cd517f8d5 by the DEC-0053 amendment, 2026-11-17; e-28344e769752 at registration)"
   rules: "dashboard/src/lib/trade-rules.ts, ticket.ts, premium-stop.ts, owner-positions.ts (OWNER_FEES), chain.ts, focus-plan.ts"
 
 signal:                             # DEC-0051 section 1; per focus name of the session's edition and side, per settled slot
