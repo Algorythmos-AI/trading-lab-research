@@ -187,6 +187,24 @@ the 12, so no session so far would have chosen differently: EXP-0050 is unchange
 probe already keep only desk names (DEC-0060, DEC-0067). Plan step 5's other part (the positions job reading hourly
 bars and rule states for a non-desk focus name) waits for DEC-0048: nothing can reach it before the switch.
 
+### 9. The shadow records the gate's facts while the thresholds are unset (added 2026-11-23, after acceptance)
+
+Section 3 sets the thresholds "from status frequencies on saved data only (how many Radar names each value would keep
+over the shadow sessions)". The code first released skipped every candidate's bars and chain while a threshold was
+unset, so the shadow would have saved nothing to count. It is corrected before the first shadow session:
+
+- The run fetches each candidate's bars and chain on every session, the gate set or not.
+- Each verdict carries the candidate's facts (`universe.json` version 2, `wt.options.universe.facts_of`). Those are
+  the edition's avoid and risk flags, Stage 1's validity, D's close, the median dollar volume, the chain facts,
+  whether the next report is known, and whether a report falls in the hold. All are known before S opens; none is an
+  outcome.
+- `scripts/options_universe_frequencies.py` prints the counts the dated amendment reads. Its admission count follows
+  the gate's own order, and a test holds the two equal.
+
+**A non-change to the selection.** While a threshold is unset every candidate is still `gate_unset`, the universe is
+the 12, and the picks are the same. That is what section 5 item 1 asks a record to say of a change to
+`universe.py` or `radar_select.py`. No session has been counted.
+
 ## What is not decided here
 
 - The gate's five thresholds (a dated amendment, section 3).

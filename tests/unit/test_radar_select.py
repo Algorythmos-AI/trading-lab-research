@@ -547,3 +547,32 @@ def test_replay_reads_the_saved_desk_and_names_a_desk_change(tmp_path):
     folder = rs.write_run(tmp_path, S, do_run())
     assert rs.replay(folder, DESK[:-1], CFG, P, PSHA, REF) == ["the desk's names changed since the run "
                                                                 "(options_desk.yaml)"]
+
+
+def test_an_unset_gate_admits_nothing_but_records_every_candidates_facts():
+    """DEC-0070 section 3: the thresholds are set from status frequencies on saved data, so the shadow fetches and
+    records each candidate's gate facts while they are unset; the universe and the picks stay the 12's."""
+    unset = rc.load_config()
+    rec = do_run(cfg=unset)
+    uni = rec["universe.json"]
+    assert uni["names"] == DESK and uni["version"] == un.VERSION == 2
+    v = {x["symbol"]: x for x in uni["verdicts"]}
+    assert {x["reject"] for x in v.values()} == {"gate_unset"}
+    xyz = v["XYZ"]["facts"]
+    assert xyz["validity"] == "ok" and xyz["close"] is not None and xyz["median_dollar_volume"] > 0
+    assert xyz["chain"] is not None and xyz["chain"]["ntm_contracts"] > 0 and xyz["earnings_known"] is True
+    assert v["NEWCO"]["facts"]["validity"] == "short_history" and v["NEWCO"]["facts"]["close"] is None
+    assert v["ABC"]["facts"]["earnings_in_hold"] is True                 # the edition's calendar names its report on S
+    set_rec = do_run(cfg=CFG)                                            # the same facts whether the gate is set or not
+    assert {x["symbol"]: x["facts"] for x in set_rec["universe.json"]["verdicts"]} == {s: x["facts"] for s, x in v.items()}
+    assert rec["run.json"]["picks"] == do_run(cfg=unset)["run.json"]["picks"]
+    assert all(p["origin"] == "core" for p in rec["run.json"]["picks"])
+
+
+def test_a_fact_that_cannot_be_read_is_recorded_missing_and_stops_nothing(monkeypatch):
+    def broken(*a, **k):
+        raise RuntimeError("boom")
+    monkeypatch.setattr(un, "facts_of", broken)
+    rec = do_run(cfg=rc.load_config())
+    assert all(v["facts"] is None for v in rec["universe.json"]["verdicts"])
+    assert rec["universe.json"]["names"] == DESK

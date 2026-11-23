@@ -154,7 +154,9 @@ def run(session: str, *, now: dt.datetime, read_radar: Callable[[], Any], client
     fetched = sf.fetch_stage1(client, d, list(desk), min_bars=params.min_bars, earnings_rows=earnings_rows,
                               macro_rows=macro_rows, clock=clock, sleep=sleep)
     extra_fetch: str | None = None
-    if extra and not cfg.unset():
+    # Fetched whether the gate is set or not: an unset gate admits nothing, but its facts are recorded (DEC-0070
+    # section 3: the thresholds are set from them).
+    if extra:
         try:
             more = sf.fetch_stage1(client, d, extra, min_bars=params.min_bars, earnings_rows=earnings_rows,
                                    macro_rows=macro_rows, clock=clock, sleep=sleep)
@@ -162,7 +164,7 @@ def run(session: str, *, now: dt.datetime, read_radar: Callable[[], Any], client
         except (sf.FetchError, sel.BundleError) as e:    # no bars: every Radar name is rejected on its bars
             extra_fetch = getattr(e, "cause", type(e).__name__)
     chains: dict[str, un.ChainFacts | None] = {}
-    if extra and not cfg.unset() and chain_reader is not None:
+    if extra and chain_reader is not None:
         for sym in extra:
             close = _last_close(fetched["bars"].get(sym, []), d)
             if close is None:                               # the gate rejects it on its bars first
