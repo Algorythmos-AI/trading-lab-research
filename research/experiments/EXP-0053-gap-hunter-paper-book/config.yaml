@@ -23,6 +23,11 @@ measures:
   execution:
     - fill minus trigger, and fill against the NBBO journaled at the decision, in cents and in R
     - signals blocked, by blocker
+  cost_haircut:                 # DEC-0074, fixed before the first trade: reported beside paper R, gating nothing
+    unit: max(US$0.01, half the spread in the entry fill's journaled NBBO); US$0.025 when that NBBO is unknown
+    H1: c per share bought and per share sold by a limit or market order; 2c per share sold by the stop order
+    H2: 2.0 x H1
+    report: mean paper R, H1 R and H2 R per closed trade, each with its 95% bootstrap interval (sessions resampled)
 before_switch_on: DEC-0068 "What must be true before it is switched on"   # met 2026-11-22; the counts: before_switch_on_counts.json
 reports:
   never: [a setup name, a headline, a catalyst category]   # AGENTS.md data classes; trials are named by id

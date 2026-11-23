@@ -1,7 +1,9 @@
 # DEC-0071: a stop an exit asked to cancel is not put back while that exit is asked again
 
-- **Status:** PROPOSED on 2026-11-23. It takes effect on the host once the owner merges it into `integration` and a
-  release carries it to `main`. Until then the desks run the order manager as it was.
+- **Status: ACCEPTED on 2026-11-22 at 18:11 ET.** The owner merged it (#597, 753da89f). Release #605 (01cd34b8)
+  carried it to `main`, and the host has run it since the deploy of 2026-11-23 (`main` 6209f74, Release #607).
+  Until this correction (2026-11-23) the line still read PROPOSED.
+  - DEC-0075 (proposed 2026-11-23) takes up the two cases listed under "Not included".
 - **Evidence:** EXP-0048 (report section 3, the flatten leg) and the host's own plan files and journal, read on
   2026-11-23 (below).
 - **Kind:** an execution fix in the order manager (`src/wt/oms/manager.py`), as DEC-0063 asked for ("each would
