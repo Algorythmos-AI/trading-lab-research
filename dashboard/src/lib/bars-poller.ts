@@ -3,6 +3,7 @@
 // Kept apart from lib/bars-feed.ts (what the board reads) so the desk engine never imports it. Research only; nothing
 // here places an order.
 import { type BackoffOptions, capDelay, retryDelay } from "./backoff";
+import { BARS_DEADLINE_MS } from "./fetch-deadline";
 import type { BarsFeed } from "./bars-feed";
 import type { Bar2 } from "./trade-state";
 
@@ -70,7 +71,8 @@ export function barsPoller(d: BarsPollerDeps): { start: () => void; stop: () => 
     let next = BARS_POLL_MS;
     limited = false; // a transport failure below is not a rate limit
     try {
-      const res = await d.fetch(d.url, { cache: "no-store" });
+      // Never longer than BARS_DEADLINE_MS: while one read is out no other goes, so a hung one would stop the bars.
+      const res = await d.fetch(d.url, { cache: "no-store", signal: AbortSignal.timeout(BARS_DEADLINE_MS) });
       if (res.status === 503) {
         emit({ status: "off" });
         again = false;

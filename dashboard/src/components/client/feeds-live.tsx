@@ -335,6 +335,9 @@ export function FeedsLiveRows({ symbols, tickers }: { symbols: string; tickers: 
   );
 }
 
+/** When HideAtOpen last asked for a refresh of an old render (performance.now()), for the whole page. */
+let lastOldRefresh = -Infinity;
+
 /**
  * "Sessions compared", shown only while the server time is known to be before `hideAt` (the next open). The time is
  * the render's (`serverNow`) or the newest 5 s answer's, carried forward by the monotonic clock. Hidden while that
@@ -346,8 +349,14 @@ export function HideAtOpen({ serverNow, hideAt, children }: { serverNow: number;
   // The monotonic time of this mount; the page keys this part by `serverNow`, so a new render starts afresh. Only an
   // answer received after it vouches for the server time (a back/forward restore can bring an old render).
   const [mountPerf] = useState<number | null>(() => (typeof performance === "undefined" ? null : performance.now()));
+  // At most once a REFRESH_MS for the page, not once a mount: the page keys this part by `serverNow`, so with the
+  // computer's clock far from the server's each new render would read "old" again and ask for the next one at once.
   useEffect(() => {
-    if (oldRender(serverNow, Date.now())) router.refresh();
+    if (!oldRender(serverNow, Date.now())) return;
+    const at = performance.now();
+    if (at - lastOldRefresh < REFRESH_MS) return;
+    lastOldRefresh = at;
+    router.refresh();
   }, [serverNow, router]);
   const book = state.status === "ok" ? state : null;
   const shown = compareShown({
@@ -389,24 +398,20 @@ export function FreshPanel({ children }: { children: ReactNode }) {
   );
 }
 
-/** Renders the page again on the server every REFRESH_MS while it is open, and at once when the tab is shown again. */
+/**
+ * The page's own refresh: once at once when it is restored from the back-forward cache (an old render brought back).
+ * The minute refresh and the one when the tab is shown again are the layout's (AutoRefresh, guarded so a second one
+ * never starts while the last is still being drawn); this page used to run its own copy of both, so it refreshed
+ * twice a minute and twice on every tab switch.
+ */
 export function PageRefresh() {
   const router = useRouter();
   useEffect(() => {
-    const refresh = () => {
-      if (document.visibilityState === "visible") router.refresh();
-    };
     const onShow = (e: PageTransitionEvent) => {
-      if (e.persisted) refresh();
+      if (e.persisted && document.visibilityState === "visible") router.refresh();
     };
-    const id = window.setInterval(refresh, REFRESH_MS);
-    document.addEventListener("visibilitychange", refresh);
     window.addEventListener("pageshow", onShow);
-    return () => {
-      window.clearInterval(id);
-      document.removeEventListener("visibilitychange", refresh);
-      window.removeEventListener("pageshow", onShow);
-    };
+    return () => window.removeEventListener("pageshow", onShow);
   }, [router]);
   return null;
 }

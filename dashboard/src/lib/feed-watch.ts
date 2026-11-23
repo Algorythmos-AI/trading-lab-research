@@ -418,9 +418,32 @@ export interface Slot {
   assumed: boolean;
 }
 
-/** Every run of `feed` whose day is within the days around `nowMs`, oldest first. */
-export function slotsAround(feed: DocFeed, nowMs: number, back = 12, ahead = 8): Slot[] {
+/**
+ * The runs for a feed depend only on its New York day (and the window), never on the time within it: kept per feed for
+ * the last few days asked, so a page redrawing every second works them out once a day, not once a second (each run
+ * costs several time-zone conversions, and the strip asks for every feed's 21 days of runs on every tick).
+ */
+const slotCache = new WeakMap<DocFeed, Map<string, readonly Slot[]>>();
+const SLOT_CACHE_KEYS = 8;
+
+/** Every run of `feed` whose day is within the days around `nowMs`, oldest first. The list is shared: never change it. */
+export function slotsAround(feed: DocFeed, nowMs: number, back = 12, ahead = 8): readonly Slot[] {
   const today = nyDayOf(nowMs);
+  const key = `${today}|${back}|${ahead}`;
+  let byKey = slotCache.get(feed);
+  const hit = byKey?.get(key);
+  if (hit) return hit;
+  const slots = slotsFor(feed, today, back, ahead);
+  if (!byKey) {
+    byKey = new Map();
+    slotCache.set(feed, byKey);
+  }
+  if (byKey.size >= SLOT_CACHE_KEYS) byKey.delete(byKey.keys().next().value!);
+  byKey.set(key, slots);
+  return slots;
+}
+
+function slotsFor(feed: DocFeed, today: string, back: number, ahead: number): Slot[] {
   const raw: Omit<Slot, "expires">[] = [];
   for (let i = -back; i <= ahead; i++) {
     const d = addDays(today, i);
