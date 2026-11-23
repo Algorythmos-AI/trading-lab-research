@@ -941,6 +941,11 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
     gap_said: set[str] = set()      # blocked signals already journaled, with their blockers
     gap_walked = 0                  # bars already read for a trigger that was reached
     gap_minute: list[pd.Timestamp | None] = [None]            # the minute the entries were last decided for
+    # why each rule has (or has no) order: a row when any rule's reason changes, and the minutes per reason on the day's
+    # end. Journal words only; they decide nothing. A restart starts the tally again.
+    gap_why_seen: list[tuple[tuple[str, str], ...] | None] = [None]
+    gap_why_tally: dict[str, dict[str, int]] = {}
+    gap_why_last: dict[str, dict[str, Any]] = {}
     gap_rested = [""]               # the signal whose order the desk last had resting
     gap_n = max((p.attempt for p in today if p.origin == "entry"), default=0)
     wt: sl.WTState | None = None    # the exit's state for the plan in play
@@ -1213,6 +1218,8 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         nonlocal gap_done
         if not gap_done:
             gap_done = reason
+            if gap_why_tally:
+                kw = {**kw, "rules": {c: {"minutes": gap_why_tally[c], "last": gap_why_last.get(c)} for c in sorted(gap_why_tally)}}
             log("gap_day_done", day=day, symbol=primary, reason=reason, **kw)
 
     def gap_select() -> None:
@@ -1364,7 +1371,9 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             if resting is None or withdraw("windows_closed"):
                 gap_end("no_signal")                           # no rotation to another name: no trade today
             return
-        want = sl.gap_choose(sl.gap_orders(b, gctx, now_min))
+        reasons = sl.gap_reasons(b, gctx, now_min)
+        gap_why_note(reasons, minute)
+        want = sl.gap_choose([w.order for w in reasons.values() if w.order is not None])
         if resting is not None:
             if want is not None and sl.gap_cents(want) == (resting.trigger, resting.initial_stop):
                 return                                         # the same order: it keeps resting
@@ -1372,6 +1381,18 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                 return
         if plan is None and want is not None and now < entry_end:
             gap_place(want, b, now, minute, now_min)
+
+    def gap_why_note(reasons: dict[str, sl.GapWhy], minute: pd.Timestamp) -> None:
+        """Tally this minute's reason for each rule, and journal the reasons when one of them changed."""
+        for code, w in reasons.items():
+            per = gap_why_tally.setdefault(code, {})
+            per[w.why] = per.get(w.why, 0) + 1
+            gap_why_last[code] = w.row()
+        key = tuple((code, w.why) for code, w in reasons.items())
+        if key and key != gap_why_seen[0]:
+            gap_why_seen[0] = key
+            log("gap_rules", day=day, symbol=primary, minute=minute.tz_convert(ET).strftime("%H:%M"),
+                rules={code: w.row() for code, w in reasons.items()})
 
     def gap_save(p: GapPlan, s: sl.WTState) -> None:
         p.wt.update(entry_bar=s.entry_bar.isoformat(), partial_done=s.partial_done, last_bucket=s.last_bucket,
