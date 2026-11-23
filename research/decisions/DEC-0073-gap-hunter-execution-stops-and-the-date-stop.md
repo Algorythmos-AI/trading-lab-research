@@ -1,9 +1,10 @@
 # DEC-0073: Gap Hunter's kill test: execution stops that carry over, and what its date stop means
 
-- **Status: PROPOSED on 2026-11-22 at 18:30 ET**, the evening before Gap Hunter's first session (2026-11-23). The
-  owner accepts it by merging it.
-  - The numbers and lines marked **(set here)** are this record's choice and are his to change before he accepts it.
-  - Its code (section 3) comes in a later pull request, and nothing changes on the host until a release carries it.
+- **Status: ACCEPTED on 2026-11-22 at 18:50 ET.** The owner merged it (#600, 5cf8997f) the evening before Gap
+  Hunter's first session (2026-11-23). It was proposed at 18:30 ET.
+  - He took the numbers and lines marked **(set here)** as written.
+  - Its code (section 3) is the pull request that carries the note of 2026-11-22 below. Nothing changes on the host
+    until a release carries it.
 - **Amends:** DEC-0066 section 4, the stock desk's stop rule. It adds stops and fixes the reading of the date. It
   removes nothing: the −6.0R line, the 30-trade review and 2027-03-31 stand as written.
 - **Does not amend:** DEC-0068 (the rule) or HYP-0071 (its measure, interval and "too few" line).
@@ -149,3 +150,68 @@ Each one latches the desk's virtual account, as the stop rule does (`wt.risk.vir
   on noise.
 - **Tighter loss lines** (for example −3R). At the counted rate a −3R line would stop a break-even rule in about one
   run in four (25%, `kill_power.py`); it would measure luck, not the rule.
+
+## Notes
+
+### 2026-11-22: how the code reads section 1
+
+Written at 20:00 ET with the pull request that builds section 3, before Gap Hunter's first session: no Gap Hunter
+trade exists, so none of these readings was chosen with a result in view. Each is **for the owner to confirm or
+change**.
+
+- **Where it lives.** `wt.risk.execution_stops` reads the five stops from the desk's own journal. The numbers are
+  in `config/risk.yaml` (`S.execution_stops`, with this record's id). `wt.live.runner_s` asks at arming, and again
+  each time it journals a row a stop reads, so a fault latches the book in the session it happens in.
+- **The latch.**
+  - It is set as the stop rule's is: entries off, exits still managed.
+  - A resting entry is cancelled at the next poll (`entry_cancelled`, why `latched`), as the kill file does.
+  - The reason starts with the stop-rule prefix and ends with this record's id. It never names a symbol.
+  - `make reset-latch-s` clears it only with another record named in the reason, and refuses while `paper-s` or its
+    runner holds a lock.
+  - It pages once, when it latches (priority 5), as the stop rule does: not again at each arming while latched. The
+    journal says each time (`execution_stop`, `new_latch`).
+- **After a reset.** Only journal rows after the last reset of a latch this record set count, so X5's count starts
+  again. A reset of another latch (the stop rule's) does not restart them.
+- **A fault while the book is already latched** (by the stop rule) keeps the earlier reason. It is journaled
+  (`execution_stop`) and latches again at the next arming once the other latch is cleared.
+- **X1.** A `short_position` row at any poll, or a short after the close.
+- **X2.**
+  - After the close, a long whose shares are not all covered by this desk's resting GTC stops.
+  - A position over the hard caps, left for the owner (DEC-0066 section 3, item 5), is not the desk's and does not
+    count.
+  - A position that cannot be read is unknown and does not count. It still pages as before.
+- **X3.**
+  - Read at the start of each poll: the position as the last poll left it, against the shares this desk's resting
+    stops would sell (`OMS.stop_cover`, reconcile's measure).
+  - A stop the desk replaces in one poll counts once, never twice. A DEC-0071 hold does not count. A failed read
+    counts nothing.
+  - Read first and in its own block, so a protect step that raises cannot hide it. Found by its test: a stop the
+    broker refuses at every poll made reconcile raise before a later check could run.
+  - The manager's other deferrals do not trip it on their own. A trailed stop whose cancel is unconfirmed twice
+    running and then lands shows bare at one poll start, and reconcile puts a stop back before the next (a test
+    holds this). A first-target sale whose cancel is unconfirmed leaves half the shares under a resting limit sale;
+    if reconcile cannot settle it at two polls in a row, that counts, and is meant to.
+  - Once a stop has fired, `unprotected` rows are no longer journaled that session.
+- **X4.**
+  - Read only on Gap Hunter days, those with a `gap_primary` row.
+  - The day of an entry is the date in its trade id.
+  - An entry on a day with no primary counts. An adopted orphan does not.
+  - The same trade journaled twice is one entry.
+- **X5.**
+  - From the stop order's own fill: `stop_fill` and `stop_price`, journaled on `trade_closed` from this release.
+  - The exit price on that row is the average over every sell of the plan, the first-target sale included, so it
+    cannot say how far the stop slipped.
+  - The slip is measured against the stop's price when it filled (a trailed stop counts from where it was), in R of
+    the stop the trade entered with.
+  - Trades booked before this release carry no stop fill and are not counted.
+  - **For the owner: the line is small in cents.** These entries carry small risk. On the gap fixtures the trigger
+    is 5.06 and the stop 4.94, so R is 12 cents and 0.5R is 6 cents. Two stop-outs that each slip 6 cents (common on
+    a US$5 name) would latch the desk. The number is section 1's, accepted as written; it is not changed here.
+    Options: keep it, set a floor in cents (for example the larger of 0.5R and US$0.10), or a larger multiple of R.
+- **The overnight stop.** The after-close step asks each position's stop on its own, so one that fails no longer
+  stops the checks for the others (`overnight_stop_failed`).
+- **The scorecard** prints the stock desk's stop rule and these stops after section 5: the most unprotected polls in
+  a row, and the stop fills over the line, since the last reset.
+- **No false latch on a normal session.** The replay tests of both rules (`test_runner_s.py`,
+  `test_runner_s_gap.py`) now refuse any `execution_stop` or `unprotected` row unless a test means one. All of them
+  pass unchanged.

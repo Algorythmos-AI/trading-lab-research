@@ -246,6 +246,13 @@ class OMS:
             ok = ok and done
         return ok
 
+    def stop_cover(self, symbol: str, gtc_only: bool = False) -> int:
+        """Shares of `symbol` this strategy's resting stops would sell: reconcile's measure of cover. An order
+        get_order has reported cancelled is not cover, whatever the open-orders list still shows."""
+        return sum(o.qty - o.filled_qty for o in self._live(self.b.open_orders())
+                   if o.symbol == symbol and o.side == "sell" and o.type in ("stop", "stop_limit")
+                   and is_ours(o.client_order_id, self.strategy) and (not gtc_only or o.tif == "gtc"))
+
     # ---- lifecycle ------------------------------------------------------------------------------
     def place_entry(self, p: TradePlan) -> None:
         p.entry_id = self._next_id(p, "entry")

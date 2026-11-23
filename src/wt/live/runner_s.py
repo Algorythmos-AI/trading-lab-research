@@ -94,7 +94,7 @@ from wt.oms.multi import MultiOMS, MultiPlan
 from wt.ops import alerts as page
 from wt.ops import locks
 from wt.ops.alerts import Alerts, Pager
-from wt.risk import stop_rule
+from wt.risk import execution_stops, stop_rule
 from wt.risk.pretrade import Context, PreTradeGuard, load_limits
 from wt.risk.virtual_account import StateError, VirtualAccount
 
@@ -131,9 +131,15 @@ PM_BARS_DIR = DATA_DIR / "pm_bars_live"     # (wt.scanner.pool: LIVE_POOL_DIR, L
 PM_FROM = "04:00"
 GAP_ENTRY_ORDERS_MAX = 40       # entry orders a day; the rest of S.max_orders_per_day (60) is left to the exit
 STOP_MOVE_TRIES = 3             # a stop the broker will not take at one price is not asked for a fourth time
+# the journal rows the execution stops read (wt.risk.execution_stops, DEC-0073)
+X_EVENTS = frozenset({"short_position", "END_OF_DAY_NOT_FLAT", "unprotected", "gap_primary", "entry_filled",
+                      "trade_closed"})
 
 
 # ---- journal ------------------------------------------------------------------------------------------------------
+_WATCH: list[Callable[[dict[str, Any]], None]] = []    # the session's readers of its own rows (DEC-0073); run() clears it
+
+
 def log(event: str, **kw: Any) -> bool:
     """Append to sleeve S's own journal, hash-chained and fsynced. Never raises: a full disk must not kill a runner
     that holds a position. Returns whether the line is on disk."""
@@ -152,6 +158,11 @@ def log(event: str, **kw: Any) -> bool:
             line = repr(rec)[:2000]
         _echo(f"JOURNAL WRITE FAILED ({e.__class__.__name__}): {line}", sys.stderr)
     _echo(line, sys.stdout)
+    for watch in list(_WATCH):
+        try:
+            watch(rec)
+        except Exception as e:  # noqa: BLE001 — a reader of the journal must never take the runner down
+            _echo(f"JOURNAL READER FAILED ({e.__class__.__name__})", sys.stderr)
     return ok
 
 
@@ -486,6 +497,7 @@ def run(day: dt.date | None = None, poll_s: float = 10.0, broker: Any = None, re
     try:
         _start(day, poll_s, broker, rest, now_fn, sleep_fn, environ, pager)
     finally:
+        _WATCH.clear()
         pager.close()                                         # also on a refusal: its page is still delivered
 
 
@@ -654,6 +666,55 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                                "until a new decision record changes S.stop_rule or retires the sleeve and its latch "
                                "is cleared; a reset alone brings the latch back at the next arming.", 4)
         refuse(f"stop rule {fired.kind} ({rule.decision}): {fired.detail}")
+
+    # ---- the execution stops (DEC-0073): faults that latch the desk across sessions, read from the journal ----
+    xrules: execution_stops.Rules | None = None
+    try:
+        xrules = execution_stops.load(STRATEGY)
+    except Exception as e:  # noqa: BLE001 — a bad config refuses entries; exits are still managed
+        refuse(f"execution stops unreadable ({e.__class__.__name__}): config/risk.yaml S.execution_stops")
+    else:
+        if xrules is None:
+            refuse("no execution stops in config/risk.yaml (S.execution_stops)")
+    xrows = list(rows)
+    xsince = execution_stops.last_reset(va.latch_history, xrules.decision) if xrules is not None and va_ok else ""
+    xfired: list[str] = []
+
+    def x_check(arming: bool) -> None:
+        """Latch the book on the first execution stop that holds: entries off, exits on, until a record clears it."""
+        if xrules is None or not va_ok or xfired:
+            return
+        x = execution_stops.evaluate(xrules, xrows, xsince)
+        if x is None:
+            return
+        xfired.append(x.code)
+        new = not va.latched                                   # a latch already set keeps its own reason
+        if new:
+            va.latch(execution_stops.latch_reason(x, xrules))
+            try:
+                va.save(VA_PATH)
+            except OSError as e:
+                _echo(f"EXECUTION STOP LATCH NOT SAVED ({e.__class__.__name__})", sys.stderr)
+        log("execution_stop", code=x.code, detail=x.detail, decision=xrules.decision, arming=arming, new_latch=new)
+        if new:                                                # as the stop rule: a page when it latches, not daily
+            pager.once_per_day("paper-s:execution-stop",
+                               f"Gap Hunter stopped: execution stop {x.code} ({page.record(xrules.decision)})",
+                               "An execution fault latched the desk: no new entry, exits still managed. The "
+                               "session's journal (execution_stop) says which. Only a new decision record clears "
+                               "it (make reset-latch-s).", 5)
+        why = f"execution stop {x.code} ({xrules.decision}): {x.detail}"
+        if arming:
+            refuse(why)
+        else:
+            off.append(why)
+
+    def x_watch(rec: dict[str, Any]) -> None:
+        if rec.get("event") in X_EVENTS:
+            xrows.append(rec)
+            x_check(False)
+
+    x_check(True)
+    _WATCH[:] = [x_watch]                                     # this session's reader only
     va.roll(day)
     losers, realised, closed_n = day_state(rows, day)
     journaled = {str(r.get("trade_id")) for r in rows if r.get("event") == "trade_closed"}
@@ -736,6 +797,13 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                 log("account_save_failed", error=e.__class__.__name__)
         if p.trade_id not in journaled:
             r_mult = (px - entry) / (entry - stop0) if attributed and entry > stop0 else None
+            if p.stop_id:                                      # the stop order's own fill (DEC-0073 X5): the exit
+                try:                                           # price above averages every sell of the plan
+                    so = broker.get_order(p.stop_id)
+                except Exception:  # noqa: BLE001 — a record only
+                    so = None
+                if so is not None and so.filled_qty and so.avg_fill_price and so.stop_price:
+                    more = {**more, "stop_fill": so.avg_fill_price, "stop_price": so.stop_price}
             if log("trade_closed", day=trade_day, trial=own, symbol=p.symbol,
                    entry=entry, exit=px, exit_price_estimated=estimated, stop=stop0, qty=p.filled_qty, R=r_mult,
                    reason=p.exit_reason, trade_id=p.trade_id, origin=p.origin,
@@ -1098,6 +1166,8 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                 verdict = "expired" if isinstance(p, GapPlan) and now >= staged.expires_at else None
             if verdict is None and (now >= entry_end or kill_on):
                 verdict = "kill_file" if kill_on else "entry_window_closed"
+            if verdict is None and va.latched:
+                verdict = "latched"                            # an execution stop fired in the session (DEC-0073)
             if verdict is not None:
                 oms.cancel_entry_remainder(p)
                 log("entry_cancelled", trade_id=p.trade_id, symbol=p.symbol, why=verdict, filled=p.filled_qty,
@@ -1418,6 +1488,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                 oms.exit_now(p, None, reason=wt.stop_reason, market=True)
 
     held_try: dict[str, dt.datetime] = {}
+    bare_polls: dict[str, int] = {}                           # polls in a row each plan's position had no resting stop
     while True:
         now = clock()
         if now < open_dt:
@@ -1429,6 +1500,22 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             if KILL.exists() != kill_on:
                 kill_on = not kill_on
                 log("kill_state", on=kill_on)
+            # ---- DEC-0073 X3: a position the desk owns with no resting stop, as the last poll left it. First and in
+            # its own block: a protect step that raises cannot hide it, a failed read is unknown (never
+            # "unprotected"), and it never costs the plan its exit management. A stop the desk replaces this poll
+            # counts once, never twice. ----
+            try:
+                in_play = [p for p in [plan, *held] if p is not None and p.state in ACTIVE_POSITION]
+                if in_play:
+                    qty = {x.symbol: x.qty for x in broker.positions()}
+                    for p in in_play:
+                        q = qty.get(p.symbol, 0)
+                        bare = q > 0 and not oms.held_for_exit(p) and oms.stop_cover(p.symbol) < q
+                        bare_polls[p.trade_id] = bare_polls.get(p.trade_id, 0) + 1 if bare else 0
+                        if bare and not xfired:                # once a stop has fired, it is not journaled again
+                            log("unprotected", trade_id=p.trade_id, polls=bare_polls[p.trade_id])
+            except Exception as e:  # noqa: BLE001
+                log("unprotected_unread", error=e.__class__.__name__)
             # ---- sync and protect ----
             for p in [plan, *held]:
                 if p is None or not p.active:
@@ -1513,9 +1600,18 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             if pos.qty > 0:
                 long_left = True
                 if owner is not None and owner.state in ACTIVE_POSITION:
-                    oms.end_hold(owner)                        # no exit is asked again tonight (DEC-0071)
-                    oms.ensure_stop(owner)                     # a GTC stop keeps protecting overnight
-                log("END_OF_DAY_NOT_FLAT", symbol=pos.symbol, qty=pos.qty)
+                    try:
+                        oms.end_hold(owner)                    # no exit is asked again tonight (DEC-0071)
+                        oms.ensure_stop(owner)                 # a GTC stop keeps protecting overnight
+                    except Exception as e:  # noqa: BLE001 — one position's stop must not cost the others theirs
+                        log("overnight_stop_failed", trade_id=owner.trade_id, error=e.__class__.__name__)
+                protected: bool | None = None                 # a position left for the owner is not the desk's (X2)
+                if pos.symbol not in left_alone:
+                    try:
+                        protected = oms.stop_cover(pos.symbol, gtc_only=True) >= pos.qty
+                    except Exception:  # noqa: BLE001 — unread is unknown, never "unprotected"
+                        protected = None
+                log("END_OF_DAY_NOT_FLAT", symbol=pos.symbol, qty=pos.qty, protected=protected)
                 pager.fire("paper-s:not-flat", "Sleeve S NOT FLAT at the close",
                            f"A long position of {page.count(pos.qty)} share(s) is still open after the close; the "
                            "session's journal (END_OF_DAY_NOT_FLAT) names every one. One this desk owns keeps a GTC "
