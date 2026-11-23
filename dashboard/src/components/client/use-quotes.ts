@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type DataFeed, isDataFeed } from "@/lib/feed-provenance";
 import { extendTrail, type LiveQuote, type TrailPoint } from "@/lib/options";
+import { QUOTE_DEADLINE_MS } from "@/lib/fetch-deadline";
 import { type Backoff, type Poll, type PollResult, startPoll, statusResult } from "@/lib/quote-poll";
 
 export const POLL_MS = 2_000;
@@ -57,7 +58,8 @@ export function useQuoteFeed(symbols: string, enabled = true, background?: { rea
     let stopped = false;
     const run = async (): Promise<PollResult> => {
       try {
-        const res = await fetch(`/api/quote?s=${encodeURIComponent(symbols)}`, { cache: "no-store" });
+        // Never longer than QUOTE_DEADLINE_MS: a hung answer would hold the one-at-a-time poll, and the prices, forever.
+        const res = await fetch(`/api/quote?s=${encodeURIComponent(symbols)}`, { cache: "no-store", signal: AbortSignal.timeout(QUOTE_DEADLINE_MS) });
         const r = statusResult(res.status);
         if (r === "off") {
           // not configured: no point polling until the page is reloaded. Any prices held are dropped with it.

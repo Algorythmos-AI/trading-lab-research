@@ -17,6 +17,9 @@ import { type Direction, type IndexReading, type MarketWord, spreadWords, volume
 import { marketView, type MarketView } from "@/lib/market-view";
 import { TestingTag } from "./trade-now";
 import { useFlow } from "./use-flow";
+import { subscribeEvery } from "./use-now";
+
+const everySecond = subscribeEvery(1_000);
 
 type Tone = "good" | "bad" | "warn" | "neutral" | "muted";
 
@@ -46,10 +49,9 @@ const SIDE = { above: { glyph: "▲", tone: "good" }, below: { glyph: "▼", ton
 /** Both clocks, re-read every second: the monotonic one rounded up and the wall one rounded up, so an age reads old, never young. */
 function useClocks(): { perf: number; wall: number } | null {
   const snap = useSyncExternalStore(
-    (onChange) => {
-      const id = window.setInterval(onChange, 1_000);
-      return () => window.clearInterval(id);
-    },
+    // The page's shared 1 s tick (use-now.ts), the same function every render: an inline one here started a new
+    // interval on every redraw.
+    everySecond,
     () => `${Math.ceil(performance.now() / 1_000) * 1_000}|${Math.ceil(Date.now() / 1_000) * 1_000}`,
     () => null,
   );

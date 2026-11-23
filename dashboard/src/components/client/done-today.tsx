@@ -12,6 +12,7 @@ import { type Answer, type DoneAction, type DoneRead, DoneSync } from "@/lib/don
 import { newYork } from "@/lib/format";
 import { DONE_TONE, DONE_WORDS, doneButtonState, undoLeft } from "@/lib/done-view";
 import { railButton } from "./rail-button";
+import { FLAGS_DEADLINE_MS } from "@/lib/fetch-deadline";
 import { useNow } from "./use-now";
 import { cn } from "@/lib/utils";
 
@@ -70,7 +71,8 @@ export function useDonePolling(on: boolean): void {
 
 async function fetchFlags(init?: RequestInit): Promise<Answer> {
   try {
-    const res = await fetch(URL_FLAGS, { cache: "no-store", credentials: "same-origin", ...init });
+    // A read or write that hangs would leave the Done buttons waiting (busy) for good: never longer than this.
+    const res = await fetch(URL_FLAGS, { cache: "no-store", credentials: "same-origin", signal: AbortSignal.timeout(FLAGS_DEADLINE_MS), ...init });
     const body: unknown = await res.json().catch(() => null);
     if (!res.ok) {
       const reason = body && typeof body === "object" && "error" in body && typeof body.error === "string" ? body.error : null;
@@ -186,8 +188,9 @@ function UndoRing({ share }: { share: number }) {
  */
 export function DoneControl({ id = "done-today-confirm", className, limitReached = false }: { id?: string; className?: string; limitReached?: boolean }) {
   const d = useDoneToday();
-  // The countdown's clock: null in the server render and on hydration, so the two never differ.
-  const now = useNow(250);
+  // The countdown's clock: null in the server render and on hydration, so the two never differ. Only while Undo is
+  // offered: the rest of the time nothing here reads it, and a 250 ms clock would redraw the rail four times a second.
+  const now = useNow(250, !!d?.canUndo);
   const [asking, setAsking] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
