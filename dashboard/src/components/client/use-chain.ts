@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChainResponse } from "@/lib/chain";
+import { CHAIN_DEADLINE_MS, deadline } from "@/lib/fetch-deadline";
 import { type Poll, type PollResult, startPoll, statusResult } from "@/lib/quote-poll";
 
 /** The indicative feed is 15 minutes behind the market, so asking twice a minute loses nothing. */
@@ -85,6 +86,8 @@ export function useChain(
   useEffect(() => {
     if (!enabled || px === null) return;
     let stopped = false;
+    /** The request out now, cancelled with the effect: a new price bucket, name or contract never leaves the old one running. */
+    let out: ReturnType<typeof deadline> | null = null;
     /** When this poll last had a good answer (the monotonic clock). */
     let lastOk = -Infinity;
     /** The interval the last good answer's feed calls for; indicative's until one has come. */
@@ -97,7 +100,8 @@ export function useChain(
       try {
         const [x, k] = keep.split(":");
         const own = x && k ? `&x=${encodeURIComponent(x)}&k=${encodeURIComponent(k)}` : "";
-        const res = await fetch(`/api/chain?s=${encodeURIComponent(symbol)}&px=${px.toFixed(2)}${own}`, { cache: "no-store" });
+        out = deadline(CHAIN_DEADLINE_MS);
+        const res = await fetch(`/api/chain?s=${encodeURIComponent(symbol)}&px=${px.toFixed(2)}${own}`, { cache: "no-store", signal: out.signal });
         const r = statusResult(res.status);
         if (r === "off") {
           if (!stopped) setHeld({ symbol, feed: { status: "off" } });
@@ -108,6 +112,7 @@ export function useChain(
           return r; // "limited" (429) waits the longest; anything else the doubling wait
         }
         const chain = (await res.json()) as ChainResponse;
+        out.done();
         if (!stopped) setHeld({ symbol, feed: { status: "ok", chain, receivedAt: Date.now(), receivedPerf: performance.now() } });
         lastOk = performance.now();
         every = chainPollMs(chain.feed);
@@ -136,6 +141,7 @@ export function useChain(
     poll.current = p;
     return () => {
       stopped = true;
+      out?.cancel();
       p.stop();
       if (poll.current === p) poll.current = null;
     };

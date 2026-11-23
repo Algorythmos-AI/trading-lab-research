@@ -11,9 +11,14 @@ class, which the QQQ rule uses, unchanged.
                    4. wait for it; if it does not fill in time, cancel it and confirm;
                    5. size the stop to whatever position is left.
                  The shares being sold are without a stop from step 2 until they fill or step 5 runs: seconds, and
-                 the same window `exit_now` already has for a whole position.
+                 the same window `exit_now` already has for a whole position. A cancel sent in step 1 and not
+                 confirmed starts the DEC-0071 hold, as in `exit_now` (DEC-0075): the stop is not put back while
+                 the sale is asked again.
   move_stop      Raise the stop: cancel, confirm, save the new price, rest the new stop. Never lowers it. If the
                  broker refuses the new stop (the market is already under it), the old price is put back.
+                 A move whose cancel is not confirmed keeps the old stop resting and saves the new price as
+                 `stop_deferred` (DEC-0075): the stop that replaces the old one once it is gone rests at the new
+                 price, never the old one, and falls back to the old price if the broker refuses it.
   reconcile_all  Reconcile several active plans together. A partial sell left resting by a crash is cancelled
                  first, since with it resting the stop cannot be sized to the whole position. Every call names
                  every active plan's symbol, so one plan's call never cancels another's orders as strays.
@@ -29,7 +34,7 @@ from typing import Any
 
 from wt.brokers.base import BrokerRejected, TransportError
 from wt.core.types import Order, OrderStatus
-from wt.oms.manager import OMS, GuardRejected, PlanStore, SubmitFailed, TradePlan
+from wt.oms.manager import ACTIVE_POSITION, EXIT_HOLD_S, OMS, GuardRejected, PlanStore, SubmitFailed, TradePlan
 
 
 @dataclass
@@ -37,6 +42,7 @@ class MultiPlan(TradePlan):
     stop0: float | None = None                     # the stop at entry; None until the stop is first moved
     partial_qty: int = 0                           # shares sold by partial exits so far
     partial_ids: list[str] = field(default_factory=list)
+    stop_deferred: float | None = None             # DEC-0075: a raised stop whose old stop's cancel was not confirmed
 
     @property
     def initial_stop(self) -> float:
@@ -68,17 +74,83 @@ class MultiOMS(OMS):
     # ---- the stop ---------------------------------------------------------------------------------------------
     def _cancel_stop(self, p: MultiPlan) -> bool:
         """Cancel the plan's resting stop and confirm it. True when no stop of this plan is resting any more."""
+        return self._cancel_stop_sent(p)[0]
+
+    def _cancel_stop_sent(self, p: MultiPlan) -> tuple[bool, bool]:
+        """`_cancel_stop`, and whether a cancel was sent: (confirmed gone, cancel sent)."""
         if not p.stop_id:
-            return True
+            return True, False
         try:
             cur = self._read(p.stop_id)
             if cur is None or cur.status.terminal:
-                return True
+                return True, False
             self.b.cancel(p.stop_id)
         except TransportError:
-            return False                                     # a broker that cannot be read confirms nothing
+            return False, False                              # a broker that cannot be read confirms nothing
         ok, _ = self._confirm_terminal(p.stop_id)
-        return ok
+        return ok, True
+
+    def ensure_stop(self, p: TradePlan) -> None:
+        """`OMS.ensure_stop`, and a deferred stop move landing (DEC-0075). With no deferred price it is the base
+        method. With one, a stop that replaces the plan's gone stop rests at max(stop, deferred price): the new
+        price is saved first, so the journal and the stop's own order agree, and a refused stop falls back to the
+        old price. A stop that filled, or a plan that is no longer in its position, drops the deferred price."""
+        if not isinstance(p, MultiPlan) or p.stop_deferred is None:
+            super().ensure_stop(p)
+            return
+        cur = self._read(p.stop_id) if p.stop_id else None
+        if (cur is not None and cur.status == OrderStatus.FILLED) or p.state not in ACTIVE_POSITION:
+            self._drop_deferred(p, "stop filled" if cur is not None and cur.status == OrderStatus.FILLED else p.state)
+            super().ensure_stop(p)
+            return
+        want = min(p.filled_qty, max(self._position_qty(p.symbol), 0))
+        if cur is not None and not cur.status.terminal:
+            if cur.qty - cur.filled_qty == want:
+                return                                       # the old stop still rests: the move waits for it to go
+            self.b.cancel(p.stop_id)                         # a resize: the old stop goes first, as in the base
+            ok, _ = self._confirm_terminal(p.stop_id)
+            if not ok:
+                self._note(p, "stop_resize_deferred")
+                return
+            want = min(p.filled_qty, max(self._position_qty(p.symbol), 0))
+            if want <= 0:
+                return                                       # it filled meanwhile: the plan closes as a stop
+            p.stop_id = ""                                   # confirmed gone; the replacement is placed below
+        elif self.held_for_exit(p):
+            return                                           # DEC-0071: the exit or sale is asked again and sells
+        if want <= 0:
+            return
+        old, new = p.stop, max(p.stop, float(p.stop_deferred))
+        p.stop_deferred = None
+        if new <= old + 1e-9:
+            self._persist(p)
+            super().ensure_stop(p)
+            return
+        if p.stop0 is None:
+            p.stop0 = old
+        p.stop = new                                         # saved before it is placed: journal and order agree
+        self._persist(p)
+        try:
+            super().ensure_stop(p)
+        except (SubmitFailed, BrokerRejected, GuardRejected) as e:
+            self._note(p, "stop_move_refused", new, str(e))
+            p.stop, p.stop_id = old, ""
+            self._persist(p)
+            super().ensure_stop(p)                           # the old price goes back; a failure here propagates
+            return
+        self._note(p, "stop_moved", old, new, "deferred")
+        self._persist(p)
+
+    def _drop_deferred(self, p: MultiPlan, why: str) -> None:
+        if p.stop_deferred is not None:
+            self._note(p, "stop_deferred_dropped", p.stop_deferred, why)
+            p.stop_deferred = None
+            self._persist(p)
+
+    def _close(self, p: TradePlan, reason: str) -> None:
+        if isinstance(p, MultiPlan):
+            p.stop_deferred = None                           # a closed plan has no stop to move (DEC-0075)
+        super()._close(p, reason)
 
     def _place_stop(self, p: MultiPlan, qty: int) -> None:
         p.stop_id = self._next_id(p, "stop")
@@ -94,8 +166,13 @@ class MultiOMS(OMS):
         if p.state != "in_position" or new_stop <= p.stop + 1e-9:
             return False
         if not self._cancel_stop(p):
+            # the old stop may still rest: it stays the plan's stop, and the stop that replaces it once it is gone
+            # rests at the new price (DEC-0075), not at the old one for the next move to cancel again
+            p.stop_deferred = max(new_stop, p.stop_deferred or 0.0)
             self._note(p, "stop_move_deferred", new_stop)
+            self._persist(p)
             return False
+        p.stop_deferred = None                               # this move supersedes a deferred one
         old = p.stop
         if p.stop0 is None:
             p.stop0 = old
@@ -128,9 +205,14 @@ class MultiOMS(OMS):
             return 0
         if qty >= pos:
             return pos if self.exit_now(p, limit_price, reason) else 0
-        if not self._cancel_stop(p):
+        ok, sent = self._cancel_stop_sent(p)
+        if not ok:
+            if sent and p.exit_hold_stop != p.stop_id:      # DEC-0071's hold, once per stop (DEC-0075)
+                p.exit_hold_stop, p.exit_hold_until = p.stop_id, self.clock() + EXIT_HOLD_S
             self._note(p, "partial_deferred", reason, "stop cancel not confirmed")
+            self._persist(p)
             return 0
+        p.exit_hold_stop, p.exit_hold_until = "", 0.0
         try:
             self._place_stop(p, pos - qty)
         except (SubmitFailed, BrokerRejected, GuardRejected) as e:

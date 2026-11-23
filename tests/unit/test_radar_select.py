@@ -29,7 +29,7 @@ REF = "rs-test"
 CFG_RAW: dict[str, Any] = {
     "version": 1,
     "radar": {"lists_in_scope": ["DAILY RADAR", "MEGA CAP OPTIONS", "BREAKOUT WATCH"], "max_candidates_in": 60,
-              "prices_max_age_minutes": 240, "aliases": {"GOOG": "GOOGL"}},
+              "aliases": {"GOOG": "GOOGL"}},
     "gate": {"max_additions": 8, "price_min": 10.0, "median_dollar_volume_min": 50_000_000.0,
              "chain_expiry_max_days": 7, "chain_ntm_strikes_min": 4, "chain_ntm_pct": 0.05,
              "chain_volume_min": 1000.0, "chain_spread_max_pct": 0.15},
@@ -92,8 +92,6 @@ def test_candidates_take_in_scope_lists_only_normalised_and_without_prose():
     ({"as_of": "2026-11-20T20:00:00Z"}, "radar_stale"),            # before Friday's close
     ({"as_of": "2026-11-23T12:00:00Z"}, "radar_stale"),            # after the run
     ({"as_of": None}, "radar_stale"),
-    ({"prices_as_of": "2026-11-23T05:00:00Z"}, "radar_stale"),     # older than 240 minutes
-    ({"prices_as_of": None}, "radar_stale"),
     ({"schema": "stocksdelta/options"}, "radar_invalid"),
     ({"lists": "nope"}, "radar_invalid"),
     ({"lists": [{"name": "DAILY RADAR", "symbols": [f"A{chr(65 + i // 26)}{chr(65 + i % 26)}" for i in range(61)]}]},
@@ -576,3 +574,22 @@ def test_a_fact_that_cannot_be_read_is_recorded_missing_and_stops_nothing(monkey
     rec = do_run(cfg=rc.load_config())
     assert all(v["facts"] is None for v in rec["universe.json"]["verdicts"])
     assert rec["universe.json"]["names"] == DESK
+
+
+@pytest.mark.parametrize("prices", ["Fri 20 Nov 2026 close, IBKR", None, "2026-11-20T21:00:00Z", "garbage"])
+def test_the_editions_prices_as_of_is_not_a_freshness_check(prices):
+    """DEC-0070 section 10: the Radar writes prices_as_of as free text (the stored edition of 2026-11-23 read
+    "radar_stale: prices too old or untimed" on every try). Freshness is edition_date and as_of alone; the text is
+    never kept."""
+    rec = rc.extract(edition(prices_as_of=prices), S, RUN_AT, DESK, CFG)
+    assert rec["status"] == "ok" and rec["candidates"]
+    kept = rec["provenance"]["prices_as_of"]
+    assert kept is None if prices != "2026-11-20T21:00:00Z" else kept.startswith("2026-11-20T21:00:00")
+    assert "IBKR" not in json.dumps(rec)
+
+
+def test_the_config_refuses_the_retired_price_age_key():
+    raw = copy.deepcopy(CFG_RAW)
+    raw["radar"]["prices_max_age_minutes"] = 240
+    with pytest.raises(rc.ConfigError):
+        rc.config_from_mapping(raw)

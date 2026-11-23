@@ -76,7 +76,7 @@ the universe is the 12, and every record says which (`radar_missing`, `radar_sta
 - **Candidates** come only from the lists named in `radar.lists_in_scope` (DAILY RADAR, MEGA CAP OPTIONS, BREAKOUT
   WATCH). Every other list, and any list name not written there, supplies nothing and is counted.
 - **Freshness:** the edition's `edition_date` is S, its `as_of` after D's close and before the run, its `prices_as_of`
-  within `prices_max_age_minutes` of the run.
+  within `prices_max_age_minutes` of the run. (Section 10, 2026-11-24: `prices_as_of` is no longer a check.)
 - **Symbols** are normalised (upper case, one class letter after a dot, `GOOG` folded into `GOOGL`) and deduplicated.
 
 ### 3. The gate (new)
@@ -204,6 +204,27 @@ unset, so the shadow would have saved nothing to count. It is corrected before t
 **A non-change to the selection.** While a threshold is unset every candidate is still `gate_unset`, the universe is
 the 12, and the picks are the same. That is what section 5 item 1 asks a record to say of a change to
 `universe.py` or `radar_select.py`. No session has been counted.
+
+### 10. `prices_as_of` is not a freshness check (added 2026-11-24, after acceptance)
+
+The first shadow session (2026-11-23) read the stored edition on every try from 06:45 to 07:45 New York. It recorded
+`radar_stale`, detail "prices too old or untimed", and ran on the 12. The edition itself was S's: `edition_date`
+2026-11-23, stored at 10:47 UTC, after D's close and before the run.
+
+The cause is the rule, not the Radar. The edition writes `prices_as_of` as free text (the schema allows any string,
+for example "Fri 20 Nov 2026 close, IBKR"), and section 2 required a timestamp no older than 240 minutes. No real
+edition can pass that, so the pipeline could never have admitted a Radar name.
+
+- **Freshness is `edition_date` == S and `as_of` after D's close and no later than the run.** `prices_as_of` is not
+  read for freshness. Nothing downstream uses the edition's prices: the gate and Stage 1 read their own SIP bars.
+- **`radar.prices_max_age_minutes` leaves `config/options_universe.yaml`.** The loader refuses it if it comes back.
+  `universe_sha` moves from `bf1db9a4e7749f36086cc25a4cc7bb754c32d5db96b8ccb6d7d927628ce5e890` to
+  `0529f1a6d09186b7aaacb72eccaccd514e366da708c4e28f9e1b443f29c98a25`.
+- **The provenance** keeps `prices_as_of` only when it is a timestamp, never as text (the no-prose rule).
+- **No outcome was viewed.** The run's records hold no outcome, and the decision rests on the edition's field type
+  alone.
+- **No session has been counted** (EXP-0032 starts with DEC-0048), so this is not an early end. The 2026-11-23 shadow
+  session stays on record as it ran: operationally clean (exit 0, not late, the replay reproduces), on the 12 alone.
 
 ## What is not decided here
 

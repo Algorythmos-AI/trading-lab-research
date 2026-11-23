@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { useEvalStatus } from "./desk-shadow";
 import { useLive } from "./live-layer";
 import { useBoard } from "./trade-now";
+import { subscribeEvery } from "./use-now";
 
 /** A chip's state: the feed watch's, or "checking" while the strip's own clock cannot be trusted (stripClock). */
 export type ChipState = FeedStateName | "checking";
@@ -202,10 +203,8 @@ export function readStripClock(serverNow: number, perf: number = performance.now
   lastRead = { key, value };
   return value;
 }
-const everySecond = (onChange: () => void) => {
-  const id = window.setInterval(onChange, 1_000);
-  return () => window.clearInterval(id);
-};
+// The page's shared 1 s tick (use-now.ts): the strip redraws in the same pass as the rest of the page.
+const everySecond = subscribeEvery(1_000);
 
 /**
  * The chips with a stale clock: what reads well (on time, not due, waiting) cannot be vouched for and reads

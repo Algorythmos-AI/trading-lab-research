@@ -62,7 +62,6 @@ GATE_THRESHOLDS = ("price_min", "median_dollar_volume_min", "chain_ntm_strikes_m
 class Config:
     lists_in_scope: tuple[str, ...]
     max_candidates_in: int
-    prices_max_age_minutes: int
     aliases: dict[str, str]
     max_additions: int
     price_min: float | None
@@ -115,7 +114,7 @@ def config_from_mapping(cfg: Any) -> Config:
     top = _exactly(cfg, {"version", "radar", "gate", "list_priority"}, "the file")
     if top["version"] != 1 or isinstance(top["version"], bool):
         raise ConfigError("version must be 1")
-    r = _exactly(top["radar"], {"lists_in_scope", "max_candidates_in", "prices_max_age_minutes", "aliases"}, "radar")
+    r = _exactly(top["radar"], {"lists_in_scope", "max_candidates_in", "aliases"}, "radar")
     g = _exactly(top["gate"], {"max_additions", "price_min", "median_dollar_volume_min", "chain_expiry_max_days",
                                "chain_ntm_strikes_min", "chain_ntm_pct", "chain_volume_min",
                                "chain_spread_max_pct"}, "gate")
@@ -136,7 +135,6 @@ def config_from_mapping(cfg: Any) -> Config:
     return Config(
         lists_in_scope=in_scope,
         max_candidates_in=_pos_int(r["max_candidates_in"], "radar.max_candidates_in"),
-        prices_max_age_minutes=_pos_int(r["prices_max_age_minutes"], "radar.prices_max_age_minutes"),
         aliases=dict(aliases),
         max_additions=_pos_int(g["max_additions"], "gate.max_additions", 0),
         price_min=_opt_num(g["price_min"], "gate.price_min"),
@@ -253,9 +251,9 @@ def extract(edition: Any, session: str, run_at: dt.datetime, desk: Sequence[str]
     if as_of is None or not (close_utc(lv.prev_session(session)) < as_of <= run_at):
         return _record(session, run_at, "radar_stale", cfg, provenance=prov,
                        detail="as_of missing, before the prior close, or after the run")
-    if prices_at is None or run_at - prices_at > dt.timedelta(minutes=cfg.prices_max_age_minutes) \
-            or prices_at > run_at:
-        return _record(session, run_at, "radar_stale", cfg, provenance=prov, detail="prices too old or untimed")
+    # `prices_as_of` is not a freshness check (DEC-0070 section 10): the edition writes it as free text ("Fri 20 Nov 2026
+    # close, IBKR"), and nothing downstream reads the edition's prices; the gate and Stage 1 read their own SIP bars.
+    # It is kept in the provenance only when it is a timestamp, never as text.
 
     lists = edition.get("lists")
     tickers = edition.get("tickers")
