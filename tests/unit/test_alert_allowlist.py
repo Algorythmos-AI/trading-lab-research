@@ -246,6 +246,7 @@ site(f"{RS}::_session::'paper-s:stop-rule' | f'paper-s stopped by its stop rule 
      {"rule": NS(decision=T), "fired": NS(kind=T, detail=T)})
 site(f"{RS}::_session.x_check::'paper-s:execution-stop' | f'Gap Hunter stopped: execution stop {{x.code}} ({{pa",
      {"x": NS(code="X3", detail=T), "xrules": NS(decision=T)})          # a code from the closed set X1 to X5
+site(f"{RS}::_session.protect::'paper-s:protect-failed' | 'Gap Hunter could not protect a position'", {})   # DEC-0077
 RO = "src/wt/live/runner_o.py::Runner"
 site(f"{RO}.give_up_arm::'arm-broker' | 'Options clone: broker unreachable at arm'", {"e": E})
 site(f"{RO}.connect_at_arm::'flatten-required' | 'Options clone: a position no plan knows'", {})

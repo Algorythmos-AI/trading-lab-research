@@ -265,8 +265,9 @@ class MultiOMS(OMS):
         return max(new, 0)
 
     # ---- several plans ----------------------------------------------------------------------------------------
-    def reconcile_all(self, plans: list[MultiPlan]) -> list[str]:
-        """Reconcile every active plan. Returns the actions taken or flagged, as `OMS.reconcile` words them."""
+    def reconcile_all(self, plans: list[MultiPlan], keep: set[str] | frozenset[str] = frozenset()) -> list[str]:
+        """Reconcile every active plan. Returns the actions taken or flagged, as `OMS.reconcile` words them. `keep`:
+        the symbols of other active plans, whose orders are never cancelled as strays (DEC-0077)."""
         active = [p for p in plans if p.active]
         managed = {p.symbol for p in active}
         acts: list[str] = []
@@ -284,6 +285,6 @@ class MultiOMS(OMS):
             if p.state == "in_position" and p.partial_ids:
                 self._settle(p)
             others = managed - {p.symbol}
-            acts += [a for a in self.reconcile(managed, {}, plan=p)
+            acts += [a for a in self.reconcile(managed, {}, plan=p, keep=keep)
                      if not any(f"position {sym} " in a or a.startswith(f"UNPROTECTED {sym} ") for sym in others)]
         return acts
