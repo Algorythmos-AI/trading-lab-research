@@ -640,6 +640,19 @@
   }
  ],
  "gap_hunter": {
+  "as_of": "2026-10-08T14:40:00+00:00",
+  "closed": [
+   {
+    "booked": true,
+    "code": "e3",
+    "day": "2026-10-07",
+    "h1_r": -1.21,
+    "h2_r": -1.37,
+    "r": -1.05,
+    "reason": "stop",
+    "symbol": "DDDD"
+   }
+  ],
   "enabled": false,
   "funnel": {
    "kept": 38,
@@ -649,12 +662,134 @@
    "tier1": 6,
    "tier2": 4
   },
+  "heartbeat": {
+   "armed_at": "2026-10-08T12:30:00+00:00",
+   "ended": false,
+   "last_row": "2026-10-08T14:38:00+00:00",
+   "rows_today": 9,
+   "session": "2026-10-08"
+  },
   "kill": false,
   "last_session": "2026-10-08",
   "latched": false,
   "mean_r": null,
   "open": 0,
+  "pick": {
+   "rank": 1,
+   "symbol": "AAAA",
+   "tier2": [
+    "AAAA",
+    "BBBB",
+    "CCCC"
+   ],
+   "why": null
+  },
+  "position": {
+   "code": "e2",
+   "entry": 5.07,
+   "origin": "entry",
+   "shares": 46,
+   "sold_at_target": 23,
+   "state": "in_position",
+   "stop": 5.07,
+   "stop0": 4.94,
+   "symbol": "AAAA",
+   "target": 5.33,
+   "trigger": 5.06
+  },
+  "rotation": {
+   "changes": 1,
+   "done": null,
+   "names": 3
+  },
+  "rules": [
+   {
+    "rule": "e1",
+    "stop": null,
+    "trigger": null,
+    "why": "no_level"
+   },
+   {
+    "rule": "e2",
+    "stop": 4.94,
+    "trigger": 5.06,
+    "why": "ok"
+   },
+   {
+    "rule": "e3",
+    "stop": null,
+    "trigger": null,
+    "why": "waiting"
+   },
+   {
+    "rule": "e4",
+    "stop": null,
+    "trigger": null,
+    "why": "never_red"
+   }
+  ],
+  "safety": {
+   "stop_rule": {
+    "decision": "DEC-0066",
+    "max_loss_r": -6.0,
+    "review_at": 30,
+    "stop_date": "2027-03-31",
+    "sum_r": -1.05,
+    "trades": 1
+   },
+   "x_latched": []
+  },
   "sessions": 3,
+  "timeline": [
+   {
+    "code": null,
+    "event": "armed",
+    "r": null,
+    "symbol": null,
+    "t": "2026-10-08T12:30:00+00:00",
+    "why": null
+   },
+   {
+    "code": null,
+    "event": "gap_primary",
+    "r": null,
+    "symbol": "AAAA",
+    "t": "2026-10-08T13:25:00+00:00",
+    "why": null
+   },
+   {
+    "code": "e2",
+    "event": "entry_placed",
+    "r": null,
+    "symbol": "AAAA",
+    "t": "2026-10-08T13:31:05+00:00",
+    "why": null
+   },
+   {
+    "code": "e2",
+    "event": "entry_filled",
+    "r": null,
+    "symbol": "AAAA",
+    "t": "2026-10-08T13:31:40+00:00",
+    "why": null
+   },
+   {
+    "code": "e2",
+    "event": "partial_filled",
+    "r": null,
+    "symbol": "AAAA",
+    "t": "2026-10-08T13:36:00+00:00",
+    "why": "target"
+   },
+   {
+    "code": "e2",
+    "event": "stop_moved",
+    "r": null,
+    "symbol": "AAAA",
+    "t": "2026-10-08T13:36:01+00:00",
+    "why": "breakeven"
+   }
+  ],
   "total_r": 0.0,
   "trades": 0
  },
