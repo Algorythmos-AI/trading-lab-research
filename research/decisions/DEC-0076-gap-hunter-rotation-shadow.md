@@ -1,9 +1,8 @@
 # DEC-0076: Gap Hunter moves to the highest-ranked tier-2 name with a valid order, in shadow first
 
-- **Status: PROPOSED on 2026-11-23**, after the US close. The owner chose the rule's three main points in chat
-  that evening (below). The owner accepts it with a pull request that changes this line to ACCEPTED and the
-  registry row to `accepted`; no shadow session counts before that. The points marked **(set here)** are the
-  owner's to change before the shadow's first session.
+- **Status: ACCEPTED** by the owner's merge of the pull request that changed this line; written and merged as
+  proposed on 2026-11-23, after the US close. The owner chose the rule's three main points in chat that evening
+  (below). The points marked **(set here)** were accepted as written (see "Notes").
 - **Builds on:** DEC-0068 (the selection, the score, Tier 2, the registered gap entries and their musts; all
   unchanged) and DEC-0066 (the book, limits, day stop and stop rule; unchanged).
 - **Does not amend:** DEC-0068. HYP-0071 keeps trading exactly as registered: the primary only, no rotation. This
@@ -82,3 +81,16 @@ DEC-0068 left rotation out to keep one trade a day simple. This record tests it 
   EXP-0054: the shadow starts at its first session after the shadow's code reaches the host.
 - This rule cannot be checked on past years, for the reason given in DEC-0068 "Disclosure" (no headlines before
   2026-04-28). Its evidence is forward sessions only.
+
+## Notes
+
+### Accepted, before the shadow's first counted session
+
+- Accepted by the owner's merge of the pull request that set the status line to ACCEPTED and the family S row of
+  `config/trial_registry.yaml` to `accepted` (family S: 4). The global count stays at 87.
+- The **(set here)** points are kept as written: the shadow journals each change of the resting name or order, and
+  the attempt with the engine's fill verdict, the NBBO and the spread must; it runs at most 20 sessions; the owner
+  sees at least 10 sessions of counts before a switch-on note.
+- The shadow's code is in `wt.live.runner_s` (journal rows `rotation_shadow`), merged to `integration`. EXP-0054
+  counts from the first session at or after this acceptance in which that code runs on the host.
+- Nothing about any shadow attempt's outcome had been computed or seen when this was accepted.

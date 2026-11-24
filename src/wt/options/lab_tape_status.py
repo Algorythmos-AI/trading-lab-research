@@ -55,7 +55,9 @@ def stop_code(stopped: Any) -> str | None:
 
 
 def why_not(m: Mapping[str, Any]) -> list[str]:
-    """The EXP-0052 counting rules a recorded session fails, as codes; empty when it would count."""
+    """The EXP-0052 counting rules a recorded session fails, as codes; empty when it would count. A field a rule
+    reads that is missing or not a number fails that rule: a value the manifest does not carry cannot be within its
+    limit."""
     if m.get("recorder") != 2 or str(m.get("session", "")) < FIRST_V2:
         return ["v1"]                                    # not measured the v2 way: the other rules cannot be read
     out = []
@@ -65,12 +67,14 @@ def why_not(m: Mapping[str, Any]) -> list[str]:
         out.append("opening")
     if (_num(m.get("coverage_fresh_strict")) or 0.0) < 0.99:
         out.append("fresh_coverage")
-    if (_num(m.get("longest_stale_s")) or 0.0) > 300:
+    stale_s = _num(m.get("longest_stale_s"))
+    if stale_s is None or stale_s > 300:
         out.append("stale_run")
     if any(abs(x) > 250 for x in (_num(m.get("clock_offset_ms")), _num(m.get("clock_offset_ms_end"))) if x is not None) \
             or _num(m.get("clock_offset_ms")) is None or _num(m.get("clock_offset_ms_end")) is None:
         out.append("clock")
-    if (_num(m.get("tier1_crossed_share")) or 0.0) > 0.005:
+    crossed = _num(m.get("tier1_crossed_share"))
+    if crossed is None or crossed > 0.005:
         out.append("crossed")
     return out
 

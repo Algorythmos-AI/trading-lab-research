@@ -20,9 +20,9 @@ export type CountOrNull = null | number;
 export interface PaperOptions {
   schema: "stocksdelta/paper-options";
   /**
-   * 4 adds `select`, the Radar → Options shadow's status; 3 adds each lab session's upload delay and rate-limit headroom; 2 adds `lab`, the options lab's tape status; 1 to 3 are still taken.
+   * 5 adds the shadow's `progress` and each shadow session's `check`; 4 adds `select`, the Radar → Options shadow's status; 3 adds each lab session's upload delay and rate-limit headroom; 2 adds `lab`, the options lab's tape status; 1 to 4 are still taken.
    */
-  schema_version: 1 | 2 | 3 | 4;
+  schema_version: 1 | 2 | 3 | 4 | 5;
   run_id: string;
   /**
    * When the host built it: an ISO time with its zone.
@@ -133,6 +133,15 @@ export interface PaperOptions {
      * @maxItems 10
      */
     sessions: SelectSession[];
+    /**
+     * Version 5: the shadow's progress toward the switch's operational gate: clean sessions (the job's own check says clean), checked sessions, runs, and how many clean sessions are needed. Counts only.
+     */
+    progress?: {
+      clean: number;
+      checked: number;
+      runs: number;
+      needed: number;
+    };
   };
 }
 export interface CloneTrade {
@@ -341,6 +350,35 @@ export interface SelectSession {
     picked: CountOrNull;
   };
   picks_from_radar: number;
+  /**
+   * Version 5: the job's own check of this run (check.json): clean or the reason codes, the replay's word, the gate facts' coverage and how many of its picks are in the published focus (a count, never a name). Null when the run has no check.
+   */
+  check?: null | {
+    checked_at: null | Stamp;
+    clean: boolean;
+    /**
+     * @maxItems 8
+     */
+    reasons: (
+      | "radar_not_ok"
+      | "late"
+      | "radar_bars_failed"
+      | "no_radar_candidates"
+      | "facts_missing"
+      | "replay_differs"
+      | "replay_error"
+      | "check_invalid"
+    )[];
+    replay: null | "reproduces" | "differs" | "error";
+    universe_version: null | number;
+    verdicts: null | number;
+    verdicts_with_facts: null | number;
+    published: {
+      status: null | "ok" | "other_session" | "unreadable" | "not_read";
+      overlap: null | number;
+      of: null | number;
+    };
+  };
 }
 export interface CodeCounts {
   [k: string]: number | undefined;

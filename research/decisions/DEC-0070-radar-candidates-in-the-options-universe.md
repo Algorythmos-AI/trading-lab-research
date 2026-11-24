@@ -226,6 +226,35 @@ edition can pass that, so the pipeline could never have admitted a Radar name.
 - **No session has been counted** (EXP-0032 starts with DEC-0048), so this is not an early end. The 2026-11-23 shadow
   session stays on record as it ran: operationally clean (exit 0, not late, the replay reproduces), on the 12 alone.
 
+### 11. A clean shadow session needs the Radar read, and the job checks its own run (added 2026-11-24, after acceptance)
+
+The owner chose this on 2026-11-24, in chat, when asked whether a run that never saw the Radar should count toward the
+five clean sessions of section 6: it should not. Section 6's count exists to show the pipeline works on real data, and a
+run on the 12 alone has not exercised the Radar's half of it.
+
+- **A clean session** has all of these, and section 6's five are counted from clean sessions only:
+  1. the run folder exists (the job wrote it whole, so it exited 0) and `run.json` is not `late`;
+  2. `radar_status` is `ok` and the edition gave at least one name new to the desk (one the gate judges): a run
+     whose Radar names are all among the 12 has exercised the desk's half only;
+  3. the candidates' bars were fetched (`radar_bars_fetch` is `ok`);
+  4. every gate verdict carries its facts (`universe.json` version 2, section 9);
+  5. the replay reproduces the run.
+- **The job checks its own run.** After writing S's folder it writes `check.json` beside it (`radar_select.check_run`):
+  clean, or the codes of what failed (`radar_not_ok`, `late`, `radar_bars_failed`, `no_radar_candidates`,
+  `facts_missing`, `replay_differs`, `replay_error`). A session that is not clean pages the owner's phone once, with the
+  date and the codes only. Earlier folders without a `check.json` are checked the same way at the next run.
+  `check.json` is not one of the run's hashed files: the replay never reads it. A check is written once: a later
+  config or code change would make an old run's replay differ, so a session's record is not rewritten unless the
+  owner asks for it (`check --again`).
+- **The overlap count is a record, never a comparison.** The check counts how many of the shadow's picks are in the
+  published focus for S (a count; the names stay in the run's own files). It is DEC-0046 section 7's criterion 8 in
+  count form: no outcome of either list is read, shown or computed, and the count is not part of "clean".
+- **The 2026-11-23 session does not count.** It stays on record as it ran (section 10): operationally sound, but
+  `radar_stale`, so it reads not clean on the Radar page (its codes include `radar_not_ok`; its replay is checked
+  against today's config, which section 10 changed after it ran).
+- **No outcome was viewed** to write this, and nothing here reads one. Like section 6's count, it is operational, not
+  evidence of skill.
+
 ## What is not decided here
 
 - The gate's five thresholds (a dated amendment, section 3).

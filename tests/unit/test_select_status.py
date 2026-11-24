@@ -108,8 +108,99 @@ def test_the_block_validates_against_the_sites_schema(tmp_path: Path) -> None:
 
 
 def test_a_site_that_takes_version_3_gets_no_select_block() -> None:
-    doc = {"schema": "stocksdelta/paper-options", "schema_version": 4, "lab": {"sessions": []}, "select": {"x": 1}}
+    doc = {"schema": "stocksdelta/paper-options", "schema_version": 5, "lab": {"sessions": []},
+           "select": {"mode": "shadow", "off": False, "sessions": [{"session": "2026-11-24", "check": None}],
+                      "progress": {"clean": 0, "checked": 0, "runs": 1, "needed": 5}}}
     v3 = paper_site.as_version(doc, 3)
     assert v3["schema_version"] == 3 and "select" not in v3 and "lab" in v3
     assert "select" not in paper_site.as_version(doc, 2) and "select" not in paper_site.as_version(doc, 1)
-    assert paper_site.as_version(doc, 4) == doc
+    assert paper_site.as_version(doc, 5) == doc
+
+
+def test_a_version_4_site_gets_the_block_without_progress_or_checks() -> None:
+    doc = {"schema": "stocksdelta/paper-options", "schema_version": 5,
+           "select": {"mode": "shadow", "off": False, "sessions": [{"session": "2026-11-24", "check": {"clean": True}}],
+                      "progress": {"clean": 1, "checked": 1, "runs": 1, "needed": 5}}}
+    v4 = paper_site.as_version(doc, 4)
+    assert v4["schema_version"] == 4 and v4["select"] == {"mode": "shadow", "off": False,
+                                                         "sessions": [{"session": "2026-11-24"}]}
+    assert doc["select"]["sessions"][0]["check"] == {"clean": True}                  # the original is untouched
+
+
+def check_doc(session: str = "2026-11-23", **over: Any) -> dict[str, Any]:
+    doc: dict[str, Any] = {
+        "schema": "wt.options/radar-select-check", "version": 1, "session": session,
+        "checked_at": "2026-11-23T12:46:00+00:00", "clean": True, "reasons": [], "replay": "reproduces",
+        "universe_version": 2, "verdicts": 14, "verdicts_with_facts": 14, "candidates": 21, "picks": 4,
+        "published": {"status": "ok", "overlap": 3, "of": 4},
+    }
+    doc.update(over)
+    return doc
+
+
+def write_check(root: Path, doc: Any) -> None:
+    (root / doc["session"] / "check.json").write_text(json.dumps(doc))
+
+
+def test_the_check_and_the_progress_are_carried_in_codes_and_counts(tmp_path: Path) -> None:
+    for day in ("2026-11-19", "2026-11-20", "2026-11-23", "2026-11-24"):
+        write(tmp_path, run_doc(day))
+    write_check(tmp_path, check_doc("2026-11-19", clean=False, reasons=["radar_not_ok", "late"], replay="differs",
+                                    published={"status": "not_read", "overlap": None, "of": None}))
+    write_check(tmp_path, check_doc("2026-11-20"))
+    write_check(tmp_path, check_doc("2026-11-23"))
+    b = ss.block(tmp_path)
+    assert b is not None and b["progress"] == {"clean": 2, "checked": 3, "runs": 4, "needed": 5}
+    by = {v["session"]: v["check"] for v in b["sessions"]}
+    assert by["2026-11-24"] is None
+    assert by["2026-11-19"]["reasons"] == ["radar_not_ok", "late"] and by["2026-11-19"]["published"]["overlap"] is None
+    assert by["2026-11-23"]["published"] == {"status": "ok", "overlap": 3, "of": 4}
+    sub = {**schema()["properties"]["select"], "definitions": schema()["definitions"]}
+    jsonschema.validate(b, sub)
+    text = json.dumps(b)
+    assert "NVDA" not in text and "XYZ" not in text
+
+
+def test_a_bad_check_never_reads_clean(tmp_path: Path) -> None:
+    cases = {
+        "2026-11-17": check_doc("2026-11-17", reasons=["late"]),                  # says clean but gives a reason
+        "2026-11-18": check_doc("2026-11-18", clean=False, reasons=["NVDA broke"]),  # a reason outside the set
+        "2026-11-19": check_doc("2026-11-19", clean="yes"),
+        "2026-11-20": check_doc("2026-11-23"),                                    # another session's record
+        "2026-11-23": {**check_doc("2026-11-23"), "schema": "other"},
+    }
+    for day, doc in cases.items():
+        write(tmp_path, run_doc(day))
+        (tmp_path / day / "check.json").write_text(json.dumps(doc))
+    write(tmp_path, run_doc("2026-11-24"))
+    (tmp_path / "2026-11-24" / "check.json").write_text("{not json")
+    b = ss.block(tmp_path)
+    assert b is not None and b["progress"]["clean"] == 0
+    by = {v["session"]: v["check"] for v in b["sessions"]}
+    assert by["2026-11-17"]["reasons"] == ["late"] and not by["2026-11-17"]["clean"]
+    assert by["2026-11-18"]["reasons"] == ["check_invalid"] and "NVDA" not in json.dumps(b)
+    assert by["2026-11-19"]["clean"] is False
+    assert by["2026-11-20"] is None and by["2026-11-23"] is None and by["2026-11-24"] is None
+    jsonschema.validate(b, {**schema()["properties"]["select"], "definitions": schema()["definitions"]})
+
+
+def test_the_closed_sets_match_the_job() -> None:
+    from wt.options import radar_select as rs
+    assert ss.NOT_CLEAN == rs.NOT_CLEAN and ss.REPLAY_WORDS == rs.REPLAY_WORDS
+    assert ss.PUBLISHED_WORDS == rs.PUBLISHED_WORDS and ss.CLEAN_NEEDED == rs.CLEAN_NEEDED
+    assert ss.CHECK_SCHEMA == rs.CHECK_SCHEMA and ss.CHECK_FILE == rs.CHECK_FILE
+    enum = schema()["definitions"]["select_session"]["properties"]["check"]["oneOf"][1]["properties"]["reasons"]
+    assert enum["items"]["enum"] == [*ss.NOT_CLEAN, ss.CHECK_INVALID]
+
+
+def test_the_progress_command_prints_counts_and_codes(tmp_path: Path, capsys: Any) -> None:
+    write(tmp_path, run_doc("2026-11-23"))
+    write(tmp_path, run_doc("2026-11-24"))
+    write_check(tmp_path, check_doc("2026-11-24", clean=False, reasons=["facts_missing"]))
+    assert ss.main(["progress", "--root", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert "0 of 5 clean sessions (1 checked of 2 runs)" in out
+    assert "2026-11-24  not clean: facts_missing" in out and "2026-11-23  no check" in out
+    assert "3 of 4 published" in out and "NVDA" not in out
+    assert ss.main(["progress", "--root", str(tmp_path / "none")]) == 0
+    assert "never run" in capsys.readouterr().out

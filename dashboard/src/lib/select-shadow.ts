@@ -60,3 +60,57 @@ export function topRejects(rejected: Record<string, number | undefined> | undefi
     .sort((a, b) => b.count - a.count || a.code.localeCompare(b.code))
     .slice(0, n);
 }
+
+/** Why a shadow session is not clean (wt.options.radar_select.NOT_CLEAN, plus the page's own `check_invalid`). */
+export const NOT_CLEAN_WORDS: Record<string, string> = {
+  radar_not_ok: "the Radar was not read ok",
+  late: "late",
+  radar_bars_failed: "the candidates' bars could not be fetched",
+  no_radar_candidates: "no Radar candidates",
+  facts_missing: "gate facts missing",
+  replay_differs: "the replay differs",
+  replay_error: "the replay could not run",
+  check_invalid: "the check record is unreadable",
+};
+
+/** Clean sessions the switch's operational gate needs when the host sends no number (radar_select.CLEAN_NEEDED). */
+export const CLEAN_NEEDED = 5;
+
+export type CheckMark = "clean" | "not_clean" | "no_check";
+
+export interface ProgressView {
+  clean: number;
+  needed: number;
+  /** The recent sessions, oldest first: clean, not clean or not checked. */
+  marks: { session: string; mark: CheckMark; reasons: string[] }[];
+  /** False for a version 4 block: the host does not check its runs yet. */
+  tracked: boolean;
+}
+
+/** The shadow's progress toward its five clean sessions. Null when the host has sent no shadow status. */
+export function progressView(block: SelectBlock | null): ProgressView | null {
+  if (block === null) return null;
+  const marks = block.sessions.map((s) => {
+    const c = s.check ?? null;
+    const mark: CheckMark = c === null ? "no_check" : c.clean ? "clean" : "not_clean";
+    return { session: s.session, mark, reasons: c && !c.clean ? c.reasons : [] };
+  });
+  const p = block.progress;
+  return {
+    clean: p ? p.clean : marks.filter((m) => m.mark === "clean").length,
+    needed: p ? p.needed : CLEAN_NEEDED,
+    marks,
+    tracked: p !== undefined,
+  };
+}
+
+/** "3 of 4 of its picks are in the published focus", or why it cannot be said. Null without a check. */
+export function publishedWords(check: SelectSession["check"]): string | null {
+  if (!check) return null;
+  const p = check.published;
+  if (p.status === "ok" && typeof p.overlap === "number" && typeof p.of === "number")
+    return `${p.overlap} of the published ${p.of} also picked by the shadow`;
+  if (p.status === "other_session") return "Published focus was for another session";
+  if (p.status === "not_read") return "Published focus not read (checked later)";
+  return "Published focus unreadable";
+}

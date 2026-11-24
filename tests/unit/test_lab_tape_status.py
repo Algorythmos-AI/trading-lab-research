@@ -57,15 +57,28 @@ def test_the_two_real_sessions_read_as_they_should(tmp_path: Path) -> None:
 @pytest.mark.parametrize("change,why", [
     ({"coverage_fresh_strict": 0.98}, ["fresh_coverage"]),
     ({"longest_stale_s": 301.0}, ["stale_run"]),
+    ({"longest_stale_s": 300.0}, []),
+    ({"longest_stale_s": None}, ["stale_run"]),
+    ({"longest_stale_s": "150"}, ["stale_run"]),
     ({"clock_offset_ms_end": -251.0}, ["clock"]),
     ({"clock_offset_ms_end": None}, ["clock"]),
     ({"tier1_crossed_share": 0.0051}, ["crossed"]),
+    ({"tier1_crossed_share": 0.005}, []),
+    ({"tier1_crossed_share": None}, ["crossed"]),
+    ({"tier1_crossed_share": 0}, []),
     ({"opening_complete": False}, ["opening"]),
     ({"focus_session": "2026-11-19"}, ["no_focus"]),
     ({"recorder": None}, ["v1"]),
 ])
 def test_each_counting_rule_is_checked_on_its_own(change: dict[str, Any], why: list[str]) -> None:
     assert L.why_not({**V2, **change}) == why
+
+
+@pytest.mark.parametrize("field,why", [("longest_stale_s", ["stale_run"]), ("tier1_crossed_share", ["crossed"]),
+                                       ("coverage_fresh_strict", ["fresh_coverage"]), ("clock_offset_ms", ["clock"])])
+def test_a_rule_whose_field_is_missing_fails(field: str, why: list[str]) -> None:
+    """EXP-0052 counts a session only when each value is within its limit: one the manifest lacks is not."""
+    assert L.why_not({k: v for k, v in V2.items() if k != field}) == why
 
 
 def test_shadow_then_counted_and_what_is_left_out(tmp_path: Path) -> None:
@@ -93,10 +106,10 @@ def test_the_paper_document_carries_it_and_a_version_1_site_gets_it_without(tmp_
     doc = paper_site.build(paper_site.dt.datetime(2026, 11, 21, tzinfo=paper_site.dt.UTC), "r", tmp_path / "j.jsonl",
                            tmp_path / "state", {"costs": {"fee_per_contract_each_way": 0.65}},
                            {"WT_LAB_TAPE": str(tmp_path / "tape")})
-    assert doc["schema_version"] == 4 and len(doc["lab"]["sessions"]) == 2 and paper_site.validate(doc) == []
+    assert doc["schema_version"] == 5 and len(doc["lab"]["sessions"]) == 2 and paper_site.validate(doc) == []
     old = paper_site.as_version(doc, 1)
     assert old["schema_version"] == 1 and "lab" not in old and paper_site.validate(old) == []
-    assert paper_site.as_version(doc, 4) == doc
+    assert paper_site.as_version(doc, 5) == doc
 
 
 def test_a_broken_tape_never_stops_the_paper_history(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
