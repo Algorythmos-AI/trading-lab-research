@@ -274,6 +274,7 @@ site(f"{DP}::_switch::'deploy-broken' | 'Host left between two releases'", {"aft
 site(f"{DP}::auto::'Deployed automatically' | f\"The host moved {{short_sha(head)}} -> {{short_sha(t",
      {"head": T, "target": T, "n": T})
 site(f"{DP}::auto::'deploy-auto-fault' | 'Automatic deploy could not run'", {"e": E})
+site(f"{DP}::auto::TOKEN_KEY | 'The host's GitHub token was refused'", {"target": T})
 site(f"{DP}::auto::'deploy-broken' | 'Automatic deploy stopped half way'", {"e": E, "head": T})
 site(f"{DP}::auto::'deploy-stuck' | 'Release deployed'", {"target": T})
 site(f"{DP}::auto::NOTIFY_KEY | 'A deploy needs you'", {"head": T, "target": T, "owner": T})

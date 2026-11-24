@@ -12,6 +12,9 @@ token when it is logged in (the Mac), else unauthenticated (a public repository,
 A fine-grained personal access token cannot be given the "Checks" permission (GitHub keeps it for GitHub Apps), so
 on a private repository the check-runs endpoint answers 403 to it. The same results are then read from the Actions
 API (`Actions: read`): the commit's workflow runs and their jobs, whose names are the check names. Fails closed.
+
+A 401 to a token that was sent means GitHub refused the token itself (expired, revoked or mistyped). It is still not
+green, but the verdict says so (`token_refused`, TOKEN_REFUSED), so the deploy can page the fix at once.
 """
 from __future__ import annotations
 
@@ -28,6 +31,9 @@ import requests
 from wt.core.config import ROOT
 
 API = "https://api.github.com"
+# What a verdict says when GitHub refused the token itself (HTTP 401: expired, revoked or mistyped). Kept apart from
+# "not green" so the deploy can say the fix (a new GH_TOKEN) instead of waiting as if CI had failed.
+TOKEN_REFUSED = "the GitHub token was refused (HTTP 401)"
 DEFAULT_REQUIRED = ("test",)         # the ml job left with the crypto desk's code (DEC-0036)
 
 
@@ -36,6 +42,7 @@ class Verdict:
     green: bool
     detail: str
     checks: dict[str, str]
+    token_refused: bool = False
 
 
 def required_names() -> tuple[str, ...]:
@@ -128,6 +135,9 @@ def check(sha: str, required: tuple[str, ...] | None = None, slug: str | None = 
     try:
         code, runs = _pages(session, f"{API}/repos/{slug}/commits/{sha}/check-runs?per_page=100", headers,
                             "check_runs")
+        if code == 401 and "Authorization" in headers:
+            # the credential itself is bad: fail closed, and say so in words of its own
+            return Verdict(False, TOKEN_REFUSED, {}, token_refused=True)
         if code in (403, 404) and "Authorization" in headers:
             # a fine-grained token cannot hold "Checks": read the same jobs through the Actions API
             code2, runs = _jobs_of_runs(sha, slug, headers, session)
