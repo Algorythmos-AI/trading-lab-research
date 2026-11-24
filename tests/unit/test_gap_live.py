@@ -268,3 +268,48 @@ def test_a_close_exactly_on_the_ema_exits_in_both_or_neither(code):
     bars, ctx, slip = random_day(2219)                               # its 09:40 close ties the engine's EMA9
     got = compare(code, bars, ctx, slip)
     assert got["trade"] and got["exits"][-1] == "runner_5m_close_below_ema9"
+
+
+# ---- why a rule has no order (journal words; they decide nothing) ----------------------------------------------------
+WHYS = {"ok", "not_opened", "waiting", "no_level", "no_pattern", "never_red", "no_room", "spent", "closed"}
+
+
+@pytest.mark.parametrize("seed", range(40))
+def test_the_reasons_carry_exactly_the_orders_gap_orders_gives(seed):
+    """gap_reasons is the same code as gap_orders: at every minute the same orders, and "ok" exactly when there is one."""
+    bars, ctx, _ = random_day(seed)
+    for i in range(1, min(len(bars), 95)):
+        prefix = bars.iloc[:i]
+        now_min = int(sl.et_minutes(bars.iloc[: i + 1])[-1])
+        got = sl.gap_reasons(prefix, ctx, now_min)
+        assert [w.order for w in got.values() if w.order is not None] == sl.gap_orders(prefix, ctx, now_min)
+        for code, w in got.items():
+            assert w.code == code and w.why in WHYS and (w.why == "ok") == (w.order is not None)
+            assert w.order == sl.GAP_RULES[code](prefix, ctx, now_min)
+
+
+def test_levels_just_overhead_leave_every_rule_without_room_and_say_where():
+    """A gap that opens under its pre-market high with levels a few cents over every trigger (2026-11-23's primary)."""
+    rows = [(1.86, 1.95, 1.86, 1.935, 503_000), (1.935, 1.96, 1.76, 1.771, 780_000)] + flat(40, 1.77)
+    bars = minute_bars(rows)
+    ctx = {"pm_high": 2.465, "pm_pattern": None, "pm_bars": None, "overhead": [1.90, 1.92, 1.94, 1.99, 2.61]}
+    got = sl.gap_reasons(bars.iloc[:6], ctx, 576)
+    assert {c: w.why for c, w in got.items()} == {"e1": "no_room", "e2": "no_room", "e3": "waiting", "e4": "no_room"}
+    assert got["e1"].row() == {"why": "no_room", "trigger": 2.475, "stop": 2.275, "ceiling": 2.61}
+    assert got["e2"].row() == {"why": "no_room", "trigger": 1.97, "stop": 1.74, "ceiling": 1.99}
+    assert got["e4"].ceiling == 1.90 and sl.gap_orders(bars.iloc[:6], ctx, 576) == []
+
+
+def test_the_other_reasons():
+    ctx = {"pm_high": 5.10, "pm_pattern": None, "pm_bars": None, "overhead": []}
+    bars = minute_bars(OPEN + flat(40, 5.02))
+    thin = minute_bars([(5.00, 5.05, 4.95, 4.98, 90_000)] + flat(40, 4.98))
+    assert {c: w.why for c, w in sl.gap_reasons(thin.iloc[:2], ctx, 572).items() if c != "e3"} == dict.fromkeys(("e1", "e2", "e4"), "not_opened")
+    assert sl.gap_reasons(thin.iloc[:25], ctx, 595)["e3"].why == "not_opened"
+    assert sl.gap_reasons(bars.iloc[:1], {**ctx, "pm_high": 5.00}, 571)["e1"].why == "no_level"
+    assert sl.gap_reasons(bars.iloc[:3], {**ctx, "pm_high": None}, 573)["e2"].why == "waiting"   # room, before 09:35
+    assert sl.gap_reasons(bars.iloc[:5], ctx, 575)["e4"].why == "never_red"
+    assert sl.gap_reasons(bars.iloc[:30], ctx, 600)["e1"].why == "closed"
+    reached = minute_bars(OPEN + flat(3, 5.02) + [(5.02, 5.11, 5.02, 5.10, 50_000)] + flat(5, 5.10))
+    assert sl.gap_reasons(reached.iloc[:5], ctx, 575)["e1"].row() == {"why": "spent", "trigger": 5.11, "stop": 4.94}
+    assert sl.gap_reasons(bars, ctx, 660) == {}

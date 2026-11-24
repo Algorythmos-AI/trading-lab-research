@@ -378,22 +378,52 @@ def _opened(bars: pd.DataFrame, m: np.ndarray) -> bool:
     return bool(len(bars) and int(m[0]) == RTH_OPEN and first_minute_volume_ok(float(bars.v.iloc[0]), GAP_FIRST_MIN_VOL))
 
 
-def _still(order: GapOrder, bars: pd.DataFrame, m: np.ndarray, now_min: int) -> GapOrder | None:
+@dataclass(frozen=True)
+class GapWhy:
+    """One rule's answer for a minute: its order, or why it has none. Journal words only (codes, never a setup name).
+
+    `why`: "ok" (an order rests), "not_opened" (no 09:30 bar, or under the first-minute volume), "waiting" (its
+    window has not opened), "no_level" (no pre-market level over the 09:30 high), "no_pattern", "never_red" (no bar
+    has closed under the open), "no_room" (under 2:1 to the nearest level over the trigger: `trigger`, `stop` and
+    `ceiling` say which), "spent" (its order was reached, or traded under its stop) or "closed" (its window is over)."""
+    code: str
+    why: str
+    order: GapOrder | None = None
+    trigger: float | None = None
+    stop: float | None = None
+    ceiling: float | None = None
+
+    def row(self) -> dict[str, Any]:
+        """The journal's words for it: the reason, with the prices when they say something."""
+        out: dict[str, Any] = {"why": self.why}
+        for k in ("trigger", "stop", "ceiling"):
+            v = getattr(self, k)
+            if v is not None:
+                out[k] = round(float(v), 4)
+        return out
+
+
+def _no_room(code: str, ctx: dict[str, Any], trig: float, stop: float) -> GapWhy:
+    return GapWhy(code, "no_room", None, trig, stop, _ceiling(ctx, trig))
+
+
+def _still(order: GapOrder, bars: pd.DataFrame, m: np.ndarray, now_min: int) -> GapWhy:
     """The order, if it should still rest: no closed bar after its signal has reached its trigger (then it filled or
     it never will), none traded under its stop first, and its window is open. The engine's entry loop, bar by bar."""
     h, low = bars.h.to_numpy(float), bars.l.to_numpy(float)
     for k in range(order.signal_i + 1, len(bars)):
-        if int(m[k]) >= order.valid_until or h[k] >= order.trigger or low[k] < order.stop:
-            return None
-    return order if now_min < order.valid_until else None
+        if int(m[k]) >= order.valid_until:
+            return GapWhy(order.code, "closed")
+        if h[k] >= order.trigger or low[k] < order.stop:
+            return GapWhy(order.code, "spent", None, order.trigger, order.stop)
+    if now_min < order.valid_until:
+        return GapWhy(order.code, "ok", order, order.trigger, order.stop)
+    return GapWhy(order.code, "closed")
 
 
-def gap_e1(bars: pd.DataFrame, ctx: dict[str, Any], now_min: int,
-           m: np.ndarray | None = None) -> GapOrder | None:
-    """ENT-GG-1 (`gg_level_break`): over the lowest pre-market level the 09:30 bar left unbroken."""
-    m = et_minutes(bars) if m is None else m
+def _e1(bars: pd.DataFrame, ctx: dict[str, Any], now_min: int, m: np.ndarray) -> GapWhy:
     if not _opened(bars, m):
-        return None
+        return GapWhy("e1", "not_opened")
     h0, l0 = float(bars.h.iloc[0]), float(bars.l.iloc[0])
     levels: list[tuple[float, float | None]] = []
     pat = ctx.get("pm_pattern")
@@ -403,13 +433,41 @@ def gap_e1(bars: pd.DataFrame, ctx: dict[str, Any], now_min: int,
         levels.append((float(ctx["pm_high"]), None))
     unbroken = [x for x in levels if x[0] > h0 + 1e-9]
     if not unbroken:
-        return None
+        return GapWhy("e1", "no_level")
     lvl, pstop = min(unbroken, key=lambda x: x[0])
     trig = round(lvl + TICK, 4)
     stop = round(max((pstop if pstop is not None else l0) - TICK, trig - E1_STOP_CAP), 4)
     if trig - stop < TICK or not _room(ctx, trig, stop):
-        return None
+        return _no_room("e1", ctx, trig, stop)
     return _still(GapOrder("e1", trig, stop, 0, E1_END, bv="1m"), bars, m, now_min)
+
+
+def gap_e1(bars: pd.DataFrame, ctx: dict[str, Any], now_min: int,
+           m: np.ndarray | None = None) -> GapOrder | None:
+    """ENT-GG-1 (`gg_level_break`): over the lowest pre-market level the 09:30 bar left unbroken."""
+    return _e1(bars, ctx, now_min, et_minutes(bars) if m is None else m).order
+
+
+def _e2(bars: pd.DataFrame, ctx: dict[str, Any], now_min: int, m: np.ndarray) -> GapWhy:
+    if not _opened(bars, m):
+        return GapWhy("e2", "not_opened")
+    h, low = bars.h.to_numpy(float), bars.l.to_numpy(float)
+    trig1, stop1 = round(h[0] + TICK, 4), round(low[0] - TICK, 4)
+    room1 = _room(ctx, trig1, stop1)
+    if room1:
+        if len(bars) == 1 and now_min == E2_ONE_MIN:
+            o = GapOrder("e2", trig1, stop1, 0, E2_ONE_MIN + 1, one_bar=True)
+            return GapWhy("e2", "ok", o, trig1, stop1)
+        if len(bars) > 1 and int(m[1]) == E2_ONE_MIN and h[1] >= trig1:
+            return GapWhy("e2", "spent", None, trig1, stop1)   # it triggered: the ladder's one attempt is spent
+    if now_min < E2_FIVE_FROM:
+        return GapWhy("e2", "waiting") if room1 else _no_room("e2", ctx, trig1, stop1)
+    first5 = m < E2_FIVE_FROM
+    sig = int(np.nonzero(first5)[0][-1])
+    trig5, stop5 = round(float(h[first5].max()) + TICK, 4), round(float(low[first5].min()) - TICK, 4)
+    if not _room(ctx, trig5, stop5):
+        return _no_room("e2", ctx, trig5, stop5)
+    return _still(GapOrder("e2", trig5, stop5, sig, E2_FIVE_END), bars, m, now_min)
 
 
 def gap_e2(bars: pd.DataFrame, ctx: dict[str, Any], now_min: int,
@@ -417,32 +475,14 @@ def gap_e2(bars: pd.DataFrame, ctx: dict[str, Any], now_min: int,
     """ENT-GG-2 (`orb_ladder`): the 09:30 bar's high, for the 09:31 minute only; if that order did not trigger (or
     had no 2:1 room), the first five minutes' high from 09:35 to 09:50. The batch detector learns whether the
     one-minute order triggered by reading the 09:31 bar; here the order simply rests for that minute."""
-    m = et_minutes(bars) if m is None else m
-    if not _opened(bars, m):
-        return None
-    h, low = bars.h.to_numpy(float), bars.l.to_numpy(float)
-    trig1, stop1 = round(h[0] + TICK, 4), round(low[0] - TICK, 4)
-    if _room(ctx, trig1, stop1):
-        if len(bars) == 1 and now_min == E2_ONE_MIN:
-            return GapOrder("e2", trig1, stop1, 0, E2_ONE_MIN + 1, one_bar=True)
-        if len(bars) > 1 and int(m[1]) == E2_ONE_MIN and h[1] >= trig1:
-            return None                                        # it triggered: the ladder's one attempt is spent
-    if now_min < E2_FIVE_FROM:
-        return None
-    first5 = m < E2_FIVE_FROM
-    sig = int(np.nonzero(first5)[0][-1])
-    trig5, stop5 = round(float(h[first5].max()) + TICK, 4), round(float(low[first5].min()) - TICK, 4)
-    if not _room(ctx, trig5, stop5):
-        return None
-    return _still(GapOrder("e2", trig5, stop5, sig, E2_FIVE_END), bars, m, now_min)
+    return _e2(bars, ctx, now_min, et_minutes(bars) if m is None else m).order
 
 
-def gap_e3(bars: pd.DataFrame, ctx: dict[str, Any], now_min: int,
-           m: np.ndarray | None = None) -> GapOrder | None:
-    """ENT-GG-3 (`continuation_5m`): the first five-minute bull flag, flat top or ABCD that completes between 09:50
-    and 11:00 with its consolidation starting at or after 09:45. The rule has one signal a day: the first."""
-    if now_min < E3_FIRST or not len(bars) or not first_minute_volume_ok(float(bars.v.iloc[0]), GAP_FIRST_MIN_VOL):
-        return None
+def _e3(bars: pd.DataFrame, ctx: dict[str, Any], now_min: int, m: np.ndarray | None) -> GapWhy:
+    if now_min < E3_FIRST:
+        return GapWhy("e3", "waiting")
+    if not len(bars) or not first_minute_volume_ok(float(bars.v.iloc[0]), GAP_FIRST_MIN_VOL):
+        return GapWhy("e3", "not_opened")
     pm = ctx.get("pm_bars")
     allb = pd.concat([pm, bars], ignore_index=True) if pm is not None and len(pm) else bars.reset_index(drop=True)
     off = len(allb) - len(bars)
@@ -450,11 +490,12 @@ def gap_e3(bars: pd.DataFrame, ctx: dict[str, Any], now_min: int,
     starts = b5.start.to_numpy()
     rth = np.nonzero(starts >= RTH_OPEN)[0]
     if not len(rth):
-        return None
+        return GapWhy("e3", "no_pattern")
     rth0 = int(rth[0])
     done = bucket_complete_at(b5, allb, 5)
     e9 = ema(b5.c.to_numpy(float), 9)
     ends = b5.end.to_numpy()
+    roomless: GapWhy | None = None
     for k in range(rth0, len(b5)):
         end = int(ends[k])
         if end < E3_FIRST or end > E3_LAST or done[k] < 0:
@@ -474,10 +515,41 @@ def gap_e3(bars: pd.DataFrame, ctx: dict[str, Any], now_min: int,
             continue
         trig, stop = round(pat.trigger + TICK, 4), round(pat.stop - TICK, 4)
         if trig - stop < TICK or not _room(ctx, trig, stop):
+            roomless = _no_room("e3", ctx, trig, stop)
             continue
         return _still(GapOrder("e3", trig, stop, sig, E3_LAST, bv="5m"), bars,
                       et_minutes(bars) if m is None else m, now_min)
-    return None
+    return roomless if roomless is not None else GapWhy("e3", "no_pattern")
+
+
+def gap_e3(bars: pd.DataFrame, ctx: dict[str, Any], now_min: int,
+           m: np.ndarray | None = None) -> GapOrder | None:
+    """ENT-GG-3 (`continuation_5m`): the first five-minute bull flag, flat top or ABCD that completes between 09:50
+    and 11:00 with its consolidation starting at or after 09:45. The rule has one signal a day: the first."""
+    return _e3(bars, ctx, now_min, m).order
+
+
+def _e4(bars: pd.DataFrame, ctx: dict[str, Any], now_min: int, m: np.ndarray) -> GapWhy:
+    if not _opened(bars, m):
+        return GapWhy("e4", "not_opened")
+    o, h, low, c = (bars[k].to_numpy(float) for k in "ohlc")
+    o0, n, was_below = float(o[0]), len(bars), False
+    for j in range(1, n + 1):                                  # j: the bar that the order made at bar j-1's close acts on
+        was_below = was_below or bool(c[j - 1] < o0)
+        if j < n and int(m[j]) >= E4_END:
+            return GapWhy("e4", "closed")
+        if not was_below:
+            continue
+        trig = round(max(o0, float(h[j - 1])) + TICK, 4)
+        stop = round(float(low[:j].min()) - TICK, 4)
+        rests = trig - stop >= TICK and _room(ctx, trig, stop)
+        if j == n:
+            if rests and now_min < E4_END:
+                return GapWhy("e4", "ok", GapOrder("e4", trig, stop, j - 1, E4_END, one_bar=True), trig, stop)
+            return GapWhy("e4", "closed") if rests else _no_room("e4", ctx, trig, stop)
+        if rests and h[j] >= trig:
+            return GapWhy("e4", "spent", None, trig, stop)      # that order triggered: the rule's one attempt is spent
+    return GapWhy("e4", "never_red")
 
 
 def gap_e4(bars: pd.DataFrame, ctx: dict[str, Any], now_min: int,
@@ -485,28 +557,22 @@ def gap_e4(bars: pd.DataFrame, ctx: dict[str, Any], now_min: int,
     """ENT-GG-4 (`red_to_green`): once a bar has closed under the opening price, a buy over the newest closed bar's
     high, never under the open, with the stop under the low of the day. Re-priced at every bar until 10:00. The
     batch detector names the bar that triggered; here the order rests one bar ahead of it."""
-    m = et_minutes(bars) if m is None else m
-    if not _opened(bars, m):
-        return None
-    o, h, low, c = (bars[k].to_numpy(float) for k in "ohlc")
-    o0, n, was_below = float(o[0]), len(bars), False
-    for j in range(1, n + 1):                                  # j: the bar that the order made at bar j-1's close acts on
-        was_below = was_below or bool(c[j - 1] < o0)
-        if j < n and int(m[j]) >= E4_END:
-            return None
-        if not was_below:
-            continue
-        trig = round(max(o0, float(h[j - 1])) + TICK, 4)
-        stop = round(float(low[:j].min()) - TICK, 4)
-        rests = trig - stop >= TICK and _room(ctx, trig, stop)
-        if j == n:
-            return GapOrder("e4", trig, stop, j - 1, E4_END, one_bar=True) if rests and now_min < E4_END else None
-        if rests and h[j] >= trig:
-            return None                                        # that order triggered: the rule's one attempt is spent
-    return None
+    return _e4(bars, ctx, now_min, et_minutes(bars) if m is None else m).order
 
 
 GAP_RULES = {"e1": gap_e1, "e2": gap_e2, "e3": gap_e3, "e4": gap_e4}
+_GAP_WHY = {"e1": _e1, "e2": _e2, "e3": _e3, "e4": _e4}
+
+
+def gap_reasons(bars: pd.DataFrame, ctx: dict[str, Any], now_min: int, codes: tuple[str, ...] = GAP_CODES,
+                m: np.ndarray | None = None) -> dict[str, GapWhy]:
+    """Each rule's answer for minute `now_min`: its order, or why it has none. The same code as `gap_orders`, which
+    keeps only the orders. Empty before the 09:30 bar has closed and from 11:00."""
+    if not len(bars) or now_min >= GAP_LAST_MINUTE:
+        return {}
+    b = bars.reset_index(drop=True)
+    m = et_minutes(b) if m is None else m
+    return {code: _GAP_WHY[code](b, ctx, now_min, m) for code in codes}
 
 
 def gap_orders(bars: pd.DataFrame, ctx: dict[str, Any], now_min: int, codes: tuple[str, ...] = GAP_CODES,
@@ -514,12 +580,7 @@ def gap_orders(bars: pd.DataFrame, ctx: dict[str, Any], now_min: int, codes: tup
     """Every rule's order that should rest during minute `now_min`, from the session's closed bars (all of them
     started before that minute). Nothing before the 09:30 bar has closed, nothing from 11:00. `m`: the bars'
     minutes of day, when the caller already has them."""
-    if not len(bars) or now_min >= GAP_LAST_MINUTE:
-        return []
-    b = bars.reset_index(drop=True)
-    m = et_minutes(b) if m is None else m
-    out = [GAP_RULES[code](b, ctx, now_min, m) for code in codes]
-    return [x for x in out if x is not None]
+    return [w.order for w in gap_reasons(bars, ctx, now_min, codes, m).values() if w.order is not None]
 
 
 def gap_choose(orders: list[GapOrder]) -> GapOrder | None:
