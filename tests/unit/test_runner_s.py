@@ -123,7 +123,7 @@ def journal(env, allow_errors: bool = False) -> list[dict]:
     # an execution stop (DEC-0073) or a poll without a stop is a fault too: a replay that means one says so
     errors = [r for r in rows if r["event"] in ("loop_error", "held_error", "data_timeout", "scan_failed",
                                                  "execution_stop", "unprotected", "unprotected_unread",
-                                                 "overnight_stop_failed")]
+                                                 "overnight_stop_failed", "rotation_shadow_error")]
     assert allow_errors or not errors, errors[:3]
     return rows
 
