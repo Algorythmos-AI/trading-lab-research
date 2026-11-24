@@ -32,7 +32,7 @@ import {
   type StageState,
   type Who,
 } from "@/lib/radar-pipeline";
-import { RADAR_STATUS_WORDS, type SelectBlock, shadowView, type ShadowView, topRejects } from "@/lib/select-shadow";
+import { type CheckMark, NOT_CLEAN_WORDS, progressView, type ProgressView, publishedWords, RADAR_STATUS_WORDS, type SelectBlock, shadowView, type ShadowView, topRejects } from "@/lib/select-shadow";
 import { cn } from "@/lib/utils";
 
 const SYD = "Australia/Sydney";
@@ -305,19 +305,60 @@ const SHADOW_STATE: Record<ShadowView["state"], { tone: Tone; words: string }> =
 
 const n = (v: number | null | undefined) => (typeof v === "number" ? String(v) : "—");
 
+const CHECK_MARK: Record<CheckMark, { cell: string; words: string }> = {
+  clean: { cell: "bg-good-fill", words: "clean" },
+  not_clean: { cell: "bg-bad-fill", words: "not clean" },
+  no_check: { cell: "border-border border border-dashed", words: "not checked" },
+};
+
+/** How far the shadow is toward the five clean sessions the switch's operational gate needs (not evidence of skill). */
+function ShadowProgress({ p }: { p: ProgressView }) {
+  const done = p.clean >= p.needed;
+  const tone: Tone = done ? "good" : p.clean > 0 ? "warn" : "neutral";
+  const bad = p.marks.filter((m) => m.mark === "not_clean").length;
+  return (
+    <div data-shadow-progress className="grid gap-1.5">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+        <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">Shadow progress</span>
+        <span data-shadow-clean className={cn("font-mono text-lg font-semibold tabular-nums", TONE_TEXT[tone])}>
+          {p.clean} of {p.needed} clean
+        </span>
+        <span className="text-muted-foreground text-xs">
+          {!p.tracked ? "the host does not check its runs yet" : done ? "enough to set the gate thresholds" : `${p.needed - p.clean} to go${bad ? `, ${bad} not clean` : ""}`}
+        </span>
+      </div>
+      {p.marks.length > 0 ? (
+        <div className="flex items-center gap-1" role="img" aria-label={`The shadow's recent sessions, oldest first: ${p.marks.map((m) => `${weekDate(m.session)} ${CHECK_MARK[m.mark].words}`).join(", ")}`}>
+          {p.marks.map((m) => (
+            <span
+              key={m.session}
+              data-check-mark={m.mark}
+              title={`${weekDate(m.session)}: ${CHECK_MARK[m.mark].words}${m.reasons.length ? ` (${m.reasons.map((r) => NOT_CLEAN_WORDS[r] ?? r).join(", ")})` : ""}`}
+              className={cn("h-4 max-w-12 flex-1 rounded-[2px]", CHECK_MARK[m.mark].cell)}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /**
  * The Radar → Options shadow (DEC-0070): the same session's Radar candidates through the gate into the desk's frozen
  * Stage 1 rules, run on the host at 06:45 New York. Counts and codes only, never a name, and never the published focus:
  * it is drawn apart from the stages above and changes neither the headline nor the on-time record.
  */
-function ShadowCard({ view }: { view: ShadowView }) {
+function ShadowCard({ view, progress }: { view: ShadowView; progress: ProgressView | null }) {
   const r = view.run;
   const st = SHADOW_STATE[view.state];
+  const c = r?.check ?? null;
+  const agree = publishedWords(c);
   return (
     <section aria-label="Shadow selection" data-shadow-card data-shadow-state={view.state} className="border-border grid gap-2 rounded-lg border border-dashed p-3">
       <h3 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
         Shadow selection for {weekDate(view.session)} · not the published focus
       </h3>
+      {progress ? <ShadowProgress p={progress} /> : null}
       {r ? (
         <>
           <ul className="grid gap-1.5 sm:grid-cols-3" aria-label="Shadow stages">
@@ -355,6 +396,20 @@ function ShadowCard({ view }: { view: ShadowView }) {
             {!r.radar_bars_ok ? <Chip tone="bad">The candidates&apos; bars could not be fetched</Chip> : null}
             {r.finished_at ? <Chip tone="neutral">Finished {both(Date.parse(r.finished_at))}</Chip> : null}
           </div>
+          {c ? (
+            <div data-shadow-check={c.clean ? "clean" : "not_clean"} className="flex flex-wrap gap-1.5">
+              <Chip tone={c.clean ? "good" : "bad"}>{c.clean ? "Clean session: it counts" : `Not clean: ${c.reasons.map((x) => NOT_CLEAN_WORDS[x] ?? x).join(", ")}`}</Chip>
+              <Chip tone={c.replay === "reproduces" ? "good" : "bad"}>{c.replay === "reproduces" ? "Replay matches" : c.replay === "differs" ? "Replay differs" : "Replay could not run"}</Chip>
+              <Chip tone={c.reasons.includes("facts_missing") || c.verdicts === null || c.verdicts !== c.verdicts_with_facts ? "bad" : "good"}>
+                Gate facts on {n(c.verdicts_with_facts)} of {n(c.verdicts)} verdicts
+              </Chip>
+              {agree ? <Chip tone="neutral">{agree}</Chip> : null}
+            </div>
+          ) : progress?.tracked ? (
+            <div className="flex flex-wrap gap-1.5">
+              <Chip tone="neutral">Not checked yet: the job writes its check after the run</Chip>
+            </div>
+          ) : null}
         </>
       ) : (
         <div className="flex flex-wrap items-center gap-2">
@@ -437,7 +492,7 @@ export function RadarPipelineView({ file, nowMs, shadow }: { file: PipelineFile 
         <ReliabilityStrip r={v.reliability} />
         <FunnelCard session={v.days.focus} radarMorning={v.days.previous} funnel={v.obs?.funnel ?? null} />
       </div>
-      {shadow !== undefined ? <ShadowCard view={shadowView(shadow, v.days.focus, nowMs)} /> : null}
+      {shadow !== undefined ? <ShadowCard view={shadowView(shadow, v.days.focus, nowMs)} progress={progressView(shadow)} /> : null}
     </div>
   );
 }

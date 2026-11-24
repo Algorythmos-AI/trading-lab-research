@@ -1,6 +1,6 @@
 {
   "schema": "stocksdelta/paper-options",
-  "schema_version": 4,
+  "schema_version": 5,
   "run_id": "paper-options-2026-10-12-201000000000",
   "as_of": "2026-10-12T20:10:00+00:00",
   "paper": true,
@@ -3250,7 +3250,24 @@
           "eligible": 11,
           "picked": 4
         },
-        "picks_from_radar": 0
+        "picks_from_radar": 0,
+        "check": {
+          "checked_at": "2026-10-12T10:45:41Z",
+          "clean": false,
+          "reasons": [
+            "radar_not_ok",
+            "no_radar_candidates"
+          ],
+          "replay": "reproduces",
+          "universe_version": 2,
+          "verdicts": 0,
+          "verdicts_with_facts": 0,
+          "published": {
+            "status": "not_read",
+            "overlap": null,
+            "of": null
+          }
+        }
       },
       {
         "session": "2026-10-12",
@@ -3284,8 +3301,28 @@
           "eligible": 11,
           "picked": 4
         },
-        "picks_from_radar": 0
+        "picks_from_radar": 0,
+        "check": {
+          "checked_at": "2026-10-12T10:45:41Z",
+          "clean": true,
+          "reasons": [],
+          "replay": "reproduces",
+          "universe_version": 2,
+          "verdicts": 14,
+          "verdicts_with_facts": 14,
+          "published": {
+            "status": "ok",
+            "overlap": 3,
+            "of": 4
+          }
+        }
       }
-    ]
+    ],
+    "progress": {
+      "clean": 1,
+      "checked": 2,
+      "runs": 2,
+      "needed": 5
+    }
   }
 }

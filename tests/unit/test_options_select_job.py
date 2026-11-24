@@ -80,8 +80,27 @@ class Reader:
         return a
 
 
+class Sender:
+    """Records the job's phone pages instead of sending them (and writes no alert state)."""
+
+    def __init__(self) -> None:
+        self.pages: list[tuple[str, str, str, int, str | None]] = []
+
+    def once_per_day(self, key: str, title: str, message: str, priority: int = 3, day: str | None = None) -> bool:
+        self.pages.append((key, title, message, priority, day))
+        return True
+
+
+PUBLISHED = ({"items": [{"symbol": s, "rank": i + 1} for i, s in enumerate(["NVDA", "TSLA", "PLTR", "SPY"])]}, S)
+
+
 @pytest.fixture
-def job(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
+def sender() -> Sender:
+    return Sender()
+
+
+@pytest.fixture
+def job(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, sender: Sender) -> Any:
     monkeypatch.setattr(rc, "load_config", lambda path=rc.CONFIG_PATH: CFG)
     monkeypatch.setattr(sf, "desk_names", lambda: list(DESK))
     monkeypatch.setattr(rs, "read_earnings", lambda: [er("XYZ", "2027-01-28"), er("ABC", "2027-01-28")])
@@ -90,7 +109,7 @@ def job(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
     def go(reader: Reader, clock: Clock) -> int:
         broker, _ = world()
         return rs.main(["job", "--root", str(tmp_path)], client=lambda: broker, read_radar=reader, clock=clock,
-                       sleep=clock.sleep)
+                       sleep=clock.sleep, read_published=lambda: PUBLISHED, sender=sender)
     return go
 
 
@@ -180,3 +199,115 @@ def test_the_off_switch_runs_nothing(job: Any, tmp_path: Path) -> None:
     reader = Reader(edition())
     assert job(reader, Clock(START)) == rs.EXIT_OK
     assert reader.reads == 0 and not (tmp_path / S).exists()
+
+
+# ---------------------------------------------------------------- the job's check of its own run
+def test_a_clean_run_is_checked_clean_and_pages_nothing(job: Any, tmp_path: Path, sender: Sender, capsys: Any) -> None:
+    assert job(Reader(edition()), Clock(START)) == rs.EXIT_OK
+    c = saved(tmp_path, "check.json")
+    assert c["clean"] is True and c["reasons"] == [] and c["replay"] == "reproduces"
+    assert c["universe_version"] == 2 and c["verdicts"] == c["verdicts_with_facts"] and c["verdicts"] > 0
+    picks = {p["symbol"] for p in saved(tmp_path, "run.json")["picks"]}
+    assert c["published"] == {"status": "ok", "overlap": len(picks & {"NVDA", "TSLA", "PLTR", "SPY"}), "of": 4}
+    assert sender.pages == []
+    assert "check: CLEAN" in capsys.readouterr().out
+    assert rs.replay(tmp_path / S, DESK, CFG, *_params()) == []        # check.json is not one of the run's files
+
+
+def _params() -> tuple[Any, str, str]:
+    from wt.options import select as sel
+    p, sha = sel.load_params()
+    return p, sha, sel.picker_ref()
+
+
+def test_a_stale_radar_is_not_clean_and_pages_once_with_codes_only(job: Any, tmp_path: Path, sender: Sender) -> None:
+    assert job(Reader(edition(edition_date="2026-11-20")), Clock(START)) == rs.EXIT_OK
+    c = saved(tmp_path, "check.json")
+    assert c["clean"] is False and c["reasons"][:2] == ["radar_not_ok", "no_radar_candidates"]
+    assert c["replay"] == "reproduces"
+    assert len(sender.pages) == 1
+    key, title, message, priority, day = sender.pages[0]
+    assert key == "options-select:not-clean" and day == S and priority == 3
+    assert "radar_not_ok" in message and S in message
+    for sym in ("NVDA", "TSLA", "PLTR", "SPY", "XYZ"):
+        assert sym not in title + message
+
+
+def test_an_unreadable_published_focus_is_a_word_not_a_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+                                                               sender: Sender) -> None:
+    monkeypatch.setattr(rc, "load_config", lambda path=rc.CONFIG_PATH: CFG)
+    monkeypatch.setattr(sf, "desk_names", lambda: list(DESK))
+    monkeypatch.setattr(rs, "read_earnings", lambda: [er("XYZ", "2027-01-28"), er("ABC", "2027-01-28")])
+    monkeypatch.setattr(rs, "alpaca_chain_reader", lambda *a, **k: chain_reader)
+    broker, _ = world()
+    clock = Clock(START)
+
+    def boom() -> Any:
+        raise RuntimeError("network")
+    assert rs.main(["job", "--root", str(tmp_path)], client=lambda: broker, read_radar=Reader(edition()), clock=clock,
+                   sleep=clock.sleep, read_published=boom, sender=sender) == rs.EXIT_OK
+    assert saved(tmp_path, "check.json")["published"] == {"status": "unreadable", "overlap": None, "of": None}
+    other = rs.check_run(tmp_path / S, DESK, CFG, *_params(), published=(PUBLISHED[0], "2026-11-20"),
+                         checked_at=START)
+    assert other["published"]["status"] == "other_session" and other["clean"] is True
+
+
+def test_earlier_runs_without_a_check_are_checked_and_never_paged(job: Any, tmp_path: Path, sender: Sender) -> None:
+    assert job(Reader(edition()), Clock(START)) == rs.EXIT_OK
+    old = tmp_path / "2026-11-20"
+    (tmp_path / S).rename(old)                                     # an earlier run, from before the checks existed
+    (old / "check.json").unlink()
+    run = json.loads((old / "run.json").read_text())
+    run["session"] = "2026-11-20"
+    (old / "run.json").write_text(json.dumps(run))                 # its hash list no longer matches: replay differs
+    assert job(Reader(edition()), Clock(START)) == rs.EXIT_OK
+    back = json.loads((old / "check.json").read_text())
+    assert back["session"] == "2026-11-20" and back["published"]["status"] == "not_read"
+    assert saved(tmp_path, "check.json")["clean"] is True
+    assert sender.pages == []                                      # only today's run pages
+
+
+def test_a_tampered_run_is_not_clean_and_the_check_command_rewrites_it(job: Any, tmp_path: Path, sender: Sender,
+                                                                       capsys: Any) -> None:
+    assert job(Reader(edition()), Clock(START)) == rs.EXIT_OK
+    uni = saved(tmp_path, "universe.json")
+    for v in uni["verdicts"][:1]:
+        v["facts"] = None
+    (tmp_path / S / "universe.json").write_text(json.dumps(uni))
+    broker, _ = world()
+    kw = dict(client=lambda: broker, read_radar=Reader(edition()), clock=Clock(START), sleep=lambda s: None,
+              read_published=lambda: PUBLISHED, sender=sender)
+    assert rs.main(["check", "--session", S, "--root", str(tmp_path)], **kw) == rs.EXIT_OK      # kept, not rewritten
+    assert saved(tmp_path, "check.json")["clean"] is True and "kept (--again rewrites it)" in capsys.readouterr().out
+    assert rs.main(["check", "--session", S, "--root", str(tmp_path), "--again"], **kw) == rs.EXIT_NOT_CLEAN
+    c = saved(tmp_path, "check.json")
+    assert c["reasons"] == ["facts_missing", "replay_differs"] and c["replay"] == "differs"
+    assert "NOT CLEAN (facts_missing, replay_differs)" in capsys.readouterr().out
+    assert sender.pages == []                                      # a check by hand never pages
+    assert rs.main(["check", "--session", "2026-11-24", "--root", str(tmp_path)], **kw) == rs.EXIT_ERROR
+
+
+def test_a_late_run_or_failed_radar_bars_are_not_clean(tmp_path: Path) -> None:
+    from test_radar_select import do_run
+    rec = do_run()
+    rec["run.json"] = {**rec["run.json"], "late": True, "radar_bars_fetch": "FetchError"}
+    folder = rs.write_run(tmp_path, S, rec)
+    c = rs.check_run(folder, DESK, CFG, *_params()[:2], "rs-test", published=None, checked_at=START)
+    assert "late" in c["reasons"] and "radar_bars_failed" in c["reasons"] and c["published"]["status"] == "not_read"
+
+
+def test_the_page_carries_only_the_date_and_codes() -> None:
+    title, message = rs.page_text("2026-11-24 NVDA", ["late", "NVDA broke $500"])
+    assert "NVDA" not in title + message and "$" not in message
+    assert "unknown date" in message and "late, other" in message
+
+
+def test_a_run_whose_radar_names_are_all_on_the_desk_does_not_count(tmp_path: Path) -> None:
+    from test_radar_select import do_run
+    rec = do_run()
+    counts = rec["run.json"]["counts"]["candidates"]
+    rec["run.json"] = {**rec["run.json"], "counts": {**rec["run.json"]["counts"],
+                                                     "candidates": {**counts, "discovered": 0}}}
+    folder = rs.write_run(tmp_path, S, rec)
+    c = rs.check_run(folder, DESK, CFG, *_params()[:2], "rs-test", published=None, checked_at=START)
+    assert c["reasons"] == ["no_radar_candidates"] and c["discovered"] == 0 and c["candidates"] > 0
