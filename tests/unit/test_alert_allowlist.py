@@ -247,6 +247,12 @@ site(f"{RS}::_session::'paper-s:stop-rule' | f'paper-s stopped by its stop rule 
 site(f"{RS}::_session.x_check::'paper-s:execution-stop' | f'Gap Hunter stopped: execution stop {{x.code}} ({{pa",
      {"x": NS(code="X3", detail=T), "xrules": NS(decision=T)})          # a code from the closed set X1 to X5
 site(f"{RS}::_session.protect::'paper-s:protect-failed' | 'Gap Hunter could not protect a position'", {})   # DEC-0077
+site(f"{RS}::_session.book::'paper-s:position' | 'Gap Hunter closed its trade'",
+     {"r_mult": T, "estimated": True})                                   # R goes through page.ratio: "?R" for junk
+site(f"{RS}::_session.manage::'paper-s:data-timeout' | 'Gap Hunter has no quotes for an open position'", {})
+site(f"{RS}::_session.on_entry::'paper-s:position' | 'Gap Hunter is in a trade'", {})
+site(f"{RS}::_session::'paper-s:entries-off' | 'Gap Hunter armed with new entries off'", {"off": [T, T]})
+site(f"{RS}::_session::'paper-s:loop-error' | 'Gap Hunter\'s poll keeps failing'", {"loop_errs": [T]})
 RO = "src/wt/live/runner_o.py::Runner"
 site(f"{RO}.give_up_arm::'arm-broker' | 'Options clone: broker unreachable at arm'", {"e": E})
 site(f"{RO}.connect_at_arm::'flatten-required' | 'Options clone: a position no plan knows'", {})

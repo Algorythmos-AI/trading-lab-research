@@ -124,6 +124,8 @@ MIN_FREE_GB = 3.0
 FALLBACK_STOP_PCT = 1.0         # protective stop for a position no plan accounts for
 HELD_EXIT_RETRY_S = 300         # an adopted position that failed to exit is retried at most every 5 minutes
 ARM_LEAD = dt.timedelta(hours=3, minutes=15)
+LOOP_ERROR_PAGE_POLLS = 3       # polls in a row that end in loop_error before the owner is paged
+QUOTE_OUTAGE_PAGE_S = 120       # seconds of failed quote reads for an open position before the owner is paged
 ENTRY_CUTOFF_MIN = 30           # no new entry in the last half hour before the close
 SEQ_BLOCK = 1000                # each plan's order ids come from its own block of sequence numbers (see plan_seq)
 BAR_PAGES = 20
@@ -881,6 +883,9 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                 va.save(VA_PATH)
             except OSError:
                 account_unsaved = True
+        if p.origin == "entry":
+            pager.fire("paper-s:position", "Gap Hunter is in a trade",
+                       "Its entry filled and its stop rests. The session's journal (entry_filled) has the trade.", 3)
         log("entry_filled", trade_id=p.trade_id, symbol=p.symbol, qty=p.filled_qty, price=p.avg_entry,
             nbbo=nbbo(p.symbol), **({"code": p.code} if isinstance(p, GapPlan) else {}))
 
@@ -943,6 +948,11 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                    booked=attributed and priced and va_ok,
                    virtual=asdict(va) if va_ok else None, **more):
                 journaled.add(p.trade_id)
+                if p.origin == "entry" and trade_day == day:
+                    pager.resolve("paper-s:position", "Gap Hunter closed its trade",
+                                  f"Closed at {page.ratio(r_mult, '+.2f')}R"
+                                  f"{' (exit price estimated)' if estimated else ''}. The session's journal "
+                                  "(trade_closed) has the trade.")
                 if attributed and trade_day == day:
                     x = -1.0 if r_mult is None or estimated else float(r_mult)
                     closed_n, realised = closed_n + 1, realised + x
@@ -1147,6 +1157,10 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         day_stop=day_stopped(losers, realised), skew_s=measure_skew(broker, clock),
         virtual=asdict(va) if va_ok else None, stock_feed="sip", pages=pager.alerts is not None, role=role,
         lease=lease_state, record_accepted=accepted())
+    if off and role != "shadow":
+        pager.once_per_day("paper-s:entries-off", "Gap Hunter armed with new entries off",
+                           f"Armed with new entries off for {page.count(len(off))} reason(s). Exits are still "
+                           "managed. The session's journal (refuse_to_arm) names each reason.", 4)
 
     def close_out(p: TradePlan) -> None:
         book(p, dt.date.fromisoformat(p.date))
@@ -1352,8 +1366,17 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             q = None
             try:
                 q = with_deadline(data.quote, p.symbol)
+                quote_down.pop(p.trade_id, None)
+                quote_paged.discard(p.trade_id)
             except Exception:  # noqa: BLE001
                 log("data_timeout", what="quote", symbol=p.symbol)
+                since = quote_down.setdefault(p.trade_id, now)
+                if (now - since).total_seconds() >= QUOTE_OUTAGE_PAGE_S and p.trade_id not in quote_paged:
+                    quote_paged.add(p.trade_id)                # asked once an outage; the pager sends one a day
+                    pager.once_per_day("paper-s:data-timeout", "Gap Hunter has no quotes for an open position",
+                                       "Quotes for its open position have failed for 2 minutes. Exits that need a "
+                                       "quote wait; the resting stop still protects it. The session's journal "
+                                       "(data_timeout) has each failure.", 4)
             # a target is sold on a quote no older than the entry gate allows: a stale bid over the target (a halt
             # after a run-up) would ask for a sale that cannot fill, again at every poll
             fresh = q if q is not None and (pd.Timestamp(now) - q[2]).total_seconds() <= guard.limits.max_quote_age_s \
@@ -1770,6 +1793,9 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                 oms.exit_now(p, None, reason=wt.stop_reason, market=True)
 
     held_try: dict[str, dt.datetime] = {}
+    loop_errs = [0]                                           # polls in a row that ended in loop_error
+    quote_down: dict[str, dt.datetime] = {}                   # each open plan's first failed quote read in a row
+    quote_paged: set[str] = set()                             # plans whose current quote outage has paged
     bare_polls: dict[str, int] = {}                           # polls in a row each plan's position had no resting stop
     while True:
         now = clock()
@@ -1878,6 +1904,13 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                         consider(sym, now)
         except Exception as e:  # noqa: BLE001 — never crash with an open position; log and keep protecting
             log("loop_error", error=repr(e)[:300])
+            loop_errs[0] += 1
+            if loop_errs[0] == LOOP_ERROR_PAGE_POLLS:
+                pager.once_per_day("paper-s:loop-error", "Gap Hunter's poll keeps failing",
+                                   f"The last {page.count(loop_errs[0])} polls in a row failed. It keeps trying; "
+                                   "the session's journal (loop_error) has each error.", 5)
+        else:
+            loop_errs[0] = 0
         sleep(poll_s)
 
     # ---- after the close ----
