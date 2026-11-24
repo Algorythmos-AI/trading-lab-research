@@ -99,3 +99,17 @@ def test_a_fine_grained_token_reads_the_jobs_through_the_actions_api(monkeypatch
     s = Session([Resp(403, {}), Resp(403, {})])
     v = ci.check("abc", ("test",), "O/r", session=s)
     assert not v.green and "403 (checks) and 403 (actions)" in v.detail
+
+
+def test_a_refused_token_is_its_own_verdict(monkeypatch):
+    """A 401 to a token that was sent: not green, and said as a refused token, not as a red check (host 2026-11-23)."""
+    monkeypatch.setenv("GH_TOKEN", "expired")
+    s = Session([Resp(401, {"message": "Bad credentials"})])
+    v = ci.check("abc", ("test",), "O/r", session=s)
+    assert not v.green and v.token_refused and v.detail == ci.TOKEN_REFUSED
+    assert len(s.urls) == 1                                    # no second try through the Actions API
+    # A red check and a 403 stay what they were.
+    s = Session([Resp(200, {"check_runs": [run("test", "failure", 1)]})])
+    assert not ci.check("abc", ("test",), "O/r", session=s).token_refused
+    s = Session([Resp(403, {}), Resp(403, {})])
+    assert not ci.check("abc", ("test",), "O/r", session=s).token_refused

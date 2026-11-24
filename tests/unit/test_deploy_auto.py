@@ -242,3 +242,22 @@ def test_the_job_is_hourly_never_gates_a_deploy_and_does_not_wait_for_itself(aut
             assert busy == []                                                   # the job itself does not
         assert deploy.auto(LATER) == 0 and head(auto.live) == auto.new
     assert isinstance(ci.Verdict(True, "x", {}), ci.Verdict)
+
+
+def test_a_refused_github_token_pages_the_fix_the_first_hour_once_a_day(auto, monkeypatch, capsys):
+    """Host 2026-11-23: a 401 read as "not green" left three releases waiting with no page saying why."""
+    refused = ci.Verdict(False, ci.TOKEN_REFUSED, {}, token_refused=True)
+    monkeypatch.setattr(deploy.ci, "check", lambda sha, required=None: refused)
+    assert deploy.auto(LATER) == 0
+    assert head(auto.live) == auto.first and auto.phone.said == []
+    (key, title, message), = auto.phone.daily
+    assert key == deploy.TOKEN_KEY and "token was refused" in title
+    assert "401" in message and "sudo wt-set-secrets" in message and auto.new[:8] in message
+    assert f"{auto.new[:12]} waits: {ci.TOKEN_REFUSED} (said)" in capsys.readouterr().out
+    # The next hour: the same page is not sent twice in a day.
+    assert deploy.auto(LATER) == 0
+    assert "(already said today)" in capsys.readouterr().out
+    # The owner's own deploy refuses with the fix, not "not green".
+    assert deploy.deploy(None, stage=True) == 2
+    out = capsys.readouterr().out
+    assert ci.TOKEN_REFUSED in out and "wt-set-secrets" in out and head(auto.live) == auto.first
