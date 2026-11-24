@@ -1,14 +1,14 @@
 import { deskNote } from "@/lib/desk-state";
 import { after } from "next/server";
 import { entitlementForHealth } from "@/lib/entitlement";
-import { calendarHealth, funnelHealth, journalHealth, ledgerHealth, optionsCloneHealth, optionsHealth, optionsLiveHealth, paperOptionsHealth, radarDeskHealth, radarHealth, radarRunHealth } from "@/lib/editions";
-import { fixtureMode, loadCalendar, loadCryptoSnapshot, loadFunnel, loadHftSnapshot, loadJournal, loadLedger, loadOptions, loadOptionsClone, loadOptionsLive, loadPaperOptions, loadRadar, loadRadarDesk, loadRadarRunLatest, loadSnapshot } from "@/lib/snapshot";
+import { calendarHealth, funnelHealth, journalHealth, ledgerHealth, optionsCloneHealth, optionsHealth, optionsLiveHealth, paperOptionsHealth, gapHunterLiveHealth, radarDeskHealth, radarHealth, radarRunHealth } from "@/lib/editions";
+import { fixtureMode, loadCalendar, loadCryptoSnapshot, loadFunnel, loadGapHunterLive, loadHftSnapshot, loadJournal, loadLedger, loadOptions, loadOptionsClone, loadOptionsLive, loadPaperOptions, loadRadar, loadRadarDesk, loadRadarRunLatest, loadSnapshot } from "@/lib/snapshot";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(): Promise<Response> {
-  const [result, crypto, hft, options, radar, optionsLive, journal, optionsClone, ledger, calendar, funnel, radarDesk, paperOptions, radarRun, plan] = await Promise.all([
+  const [result, crypto, hft, options, radar, optionsLive, journal, optionsClone, ledger, calendar, funnel, radarDesk, paperOptions, radarRun, gapHunterLive, plan] = await Promise.all([
     loadSnapshot(),
     loadCryptoSnapshot(),
     loadHftSnapshot(),
@@ -23,6 +23,7 @@ export async function GET(): Promise<Response> {
     loadRadarDesk(),
     loadPaperOptions(),
     loadRadarRunLatest(),
+    loadGapHunterLive(),
     // Never waits on Alpaca: the instance's last answer, or a first probe raced against 300 ms (entitlement.ts).
     entitlementForHealth().catch(() => ({ value: null, pending: null })),
   ]);
@@ -75,6 +76,7 @@ export async function GET(): Promise<Response> {
         radar_desk: radarDeskHealth(radarDesk),
         paper_options: paperOptionsHealth(paperOptions),
         radar_run: radarRunHealth(radarRun),
+        gap_hunter_live: gapHunterLiveHealth(gapHunterLive),
       },
       // What the site's keys are entitled to, asked of Alpaca: added after every older field, and left out without
       // keys, so nothing a reader of the fields above relies on moves.

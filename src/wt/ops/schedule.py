@@ -133,6 +133,16 @@ JOBS: dict[str, Job] = {j.name: j for j in (
         calendars=("Mon..Fri 09..16:04/5:00 America/New_York", "*:04/15:00 UTC"),
         what="Publish the options paper account's open positions, read only: every 5 minutes in the US session, every 15 otherwise",
         runtime_max_h=0.2),
+    # Gap Hunter's own document (DEC-0078, wt.ops.gap_live): its `gap_hunter` block on its own, every minute from
+    # 08:30 to 16:15 New York, and on the 15-minute rhythm at any hour so the cadence check holds. The job itself
+    # sends on a minute only up to the day's close + 15 (13:15 on a half day). Second 30: clear of the publishers'
+    # minute starts. Read only; sends nothing until the site says it takes the document.
+    Job("gap-hunter-publish", "com.wt.gap-hunter-publish", 0, 0, ("-m", "wt.ops.gap_live"), "backtest",
+        "gap_hunter_publish", deadline_min=2, trading=False, interval_s=900, preflight=False,
+        calendars=("Mon..Fri 08:30/1:30 America/New_York", "Mon..Fri 09..15:00/1:30 America/New_York",
+                   "Mon..Fri 16:00..15:30 America/New_York", "*:05/15:30 UTC"),
+        what="Publish Gap Hunter's live state: every minute in the US session, every 15 otherwise",
+        runtime_max_h=0.1),
     # ADR 0007: twice an hour the host says, at most once a day, when a deploy would be accepted. It deploys
     # nothing. Minutes 20 and 50: clear of both publishers.
     Job("deploy-notify", "com.wt.deploy-notify", 0, 0, ("-m", "wt.ops.deploy", "ready"), "backtest", "deploy_notify",

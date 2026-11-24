@@ -102,6 +102,14 @@ export const PAPER_OPTIONS_PATHS = {
 } as const;
 
 /**
+ * Gap Hunter's live state (DEC-0078): the stocks snapshot's `gap_hunter` block on its own, sent every minute in
+ * session by the trading host. Latest only: each document is the whole block.
+ */
+export const GAP_HUNTER_LIVE_PATHS = {
+  latest: "gap-hunter-live/latest.json",
+} as const;
+
+/**
  * The focus card ledger's editions (stocksdelta/ledger): how the Top 4 Focus Card did, one per session it scored,
  * kept the same way as the radar's. Each carries the running record too, so the latest alone draws Card record.
  */
