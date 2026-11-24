@@ -823,7 +823,20 @@ def main(argv: list[str] | None = None) -> int:
         rc = _publish(a)
     if not a.dry_run:
         webull_watch()
+        gap_hunter_watch()
     return rc
+
+
+def gap_hunter_watch() -> None:
+    """Gap Hunter's watch from outside its process (wt.ops.gap_watch): not started, ended early, process gone, or
+    up but not armed, in the session. Here because this job runs every 5 minutes in the trading window whatever the
+    runner does. Never fails this job."""
+    try:
+        from wt.ops.gap_watch import run
+        if fired := run():
+            print(f"gap hunter watch: {', '.join(fired)}")
+    except Exception as e:  # noqa: BLE001 - the dashboard must never fail over the Gap Hunter watch
+        print(f"gap hunter watch: could not run ({e.__class__.__name__})")
 
 
 def webull_watch() -> None:

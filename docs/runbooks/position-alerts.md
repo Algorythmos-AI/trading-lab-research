@@ -67,10 +67,14 @@ and counts, never a symbol, a price or an error's text. The journal event each p
 | Gap Hunter armed with new entries off | 4, once a day | `paper-s:entries-off` | `refuse_to_arm` | Armed with entries off for the count of reasons shown. Exits are still managed. Each reason is a `refuse_to_arm` row; some also page on their own (lease, stop rule, not paper) |
 | Gap Hunter's poll keeps failing | 5, once a day | `paper-s:loop-error` | `loop_error` | 3 polls in a row failed. It keeps trying every poll. Read the `loop_error` rows; if they repeat with a position open, check the account holds a stop |
 | Gap Hunter has no quotes for an open position | 4, once a day | `paper-s:data-timeout` | `data_timeout` | Quotes for an open position failed for 2 minutes. Exits that need a quote wait; the resting stop still protects it. Check the data feed (`keys-and-feeds.md`) |
+| Gap Hunter did not start today | 4 (5 with a position open), once a day | `paper-s:watch-not-started` | none: from the publish job (`wt.ops.gap_watch`) | The market has been open 5 minutes and the paper-s job has no run today. Check the timer (`systemctl list-timers wt-paper-s`) and the job log. Resolves when a run starts |
+| Gap Hunter is not running in the session | 4 (5 with a position open), once a day | `paper-s:watch-ended` | none: from the publish job | Today's run was refused, failed, hit its deadline or ended before the close. A restart refused by its preflight is never retried: with a position open only its resting stop protects it. The heartbeat and job log say why |
+| Gap Hunter's process is gone | 5, once a day | `paper-s:watch-dead` | none: from the publish job | The heartbeat says running but no process holds the `paper-s-runner` lock. Check `systemctl status wt-paper-s` |
+| Gap Hunter is running but not armed | 4 (5 with a position open), once a day | `paper-s:watch-not-armed` | none: from the publish job | The runner is up but today's journal has no `armed` row 5 minutes after the open. Its `refuse_to_arm` or `broker_connect_failed` rows say why |
 | Sleeve S NOT FLAT at the close | 5 | `paper-s:not-flat` | `END_OF_DAY_NOT_FLAT` | A long position is open after the close. One the desk owns keeps a GTC stop and is sold at the next open. Clears when a later close is verified flat |
 | Sleeve S is SHORT at the close | 5 | `paper-s:short-at-close` | `END_OF_DAY_NOT_FLAT` | Short after the close. Nothing is bought back. Follow [not-flat-at-close.md](not-flat-at-close.md) |
 | Sleeve S could not verify flat after the close | 5 | `paper-s:not-flat` | `END_OF_DAY_NOT_FLAT` | The broker could not be read after the close. Check the account |
 
-Not paged for sleeve S (the job runner does these for paper B only): a latch found after the session, repeated loop
-errors, and an exits-only start after a failed preflight. A failed preflight refuses `paper-s` outright; a position
-it holds keeps its GTC stop until the next session that starts.
+Not paged for sleeve S (the job runner does these for paper B only): a latch found after the session, and an
+exits-only start after a failed preflight. A failed preflight refuses `paper-s` outright; a position it holds keeps
+its GTC stop until the next session that starts, and the publish job pages `paper-s:watch-ended` for it.
