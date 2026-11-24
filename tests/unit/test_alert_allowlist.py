@@ -141,6 +141,13 @@ def drive_pipeline_check() -> list[tuple[str, str]]:
             for slot in ("pre-open", "after-close", T) for date in ("2026-11-12", T)]
 
 
+def drive_shadow_not_clean() -> list[tuple[str, str]]:
+    """The Radar -> Options shadow's not-clean page: hostile dates and reasons, and every real reason code."""
+    from wt.options import radar_select as rs
+    return [alerts.render(*rs.page_text(day, reasons))
+            for day in ("2026-11-24", T) for reasons in (list(rs.NOT_CLEAN), [T, *NAMES], [])]
+
+
 def drive_webull_alarms() -> list[tuple[str, str]]:
     """Every alarm page of the Webull journal publisher, with hostile values where the code takes any."""
     from wt.webull import publish as wp
@@ -317,6 +324,8 @@ site("src/wt/options/live.py::announce::f'options:rule:{sym}:{rule}' | 'Options:
      {"bar": T, "hhmm": alerts.hhmm, "sym": NAMES[0], "rule": T, "labels": {T: T}})
 site("src/wt/options/pipeline_check.py::run::f'pipeline-check:{slot}' | title", lambda *_: drive_pipeline_check())
 site("src/wt/options/pipeline_check.py::run::key | title", lambda *_: drive_pipeline_check())
+site("src/wt/options/radar_select.py::page_not_clean::'options-select:not-clean' | title",
+     lambda *_: drive_shadow_not_clean())
 
 
 SITES_FOUND = alert_sites.sites()
@@ -439,7 +448,7 @@ def test_a_new_alert_without_an_entry_is_caught(tmp_path):
 def test_subprocess_is_not_used_to_send(monkeypatch):
     """Belt and braces: nothing in this module's drivers reaches the network or a shell."""
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: pytest.fail("no subprocess in the allowlist drivers"))
-    assert drive_stop_page() and drive_visibility() and drive_pipeline_check()
+    assert drive_stop_page() and drive_visibility() and drive_pipeline_check() and drive_shadow_not_clean()
 
 
 def test_a_job_failed_page_names_its_dated_log_and_how_it_ended():

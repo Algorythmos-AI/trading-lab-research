@@ -5,6 +5,7 @@ frozen Stage 1 rules (DEC-0046, `wt.options.select`, unchanged).
     python -m wt.options.radar_select run --session <S> [--root <dir>]
     python -m wt.options.radar_select replay --session <S> [--root <dir>]
     python -m wt.options.radar_select job [--root <dir>]
+    python -m wt.options.radar_select check --session <S> [--root <dir>]
 
 `job` is the host job (`wt-options-select`, 06:45 New York on weekdays): S is today in New York (a day with no session
 writes nothing and exits 0); it reads the Radar until the edition is S's and fresh or it is 07:45 New York, then runs
@@ -31,17 +32,29 @@ whole, so the folder exists only when every file in it was written; a second run
 `replay` recomputes the universe from `candidates.json`, `fetch.json` and the chain facts saved in `universe.json`,
 then Stage 1 from the rebuilt bundle, and fails when any hash differs from the saved one.
 
+After a job's run is written, the job checks it and writes `check.json` beside it (`check_run`): the replay's word,
+whether every gate verdict carries its facts, how many of the run's picks are in the published focus for S (a count,
+never a name), and the codes that keep the session from being clean. A clean session is one the switch's operational
+gate counts (five are needed): on time, the Radar read ok with at least one name new to the desk, their bars fetched,
+facts on every verdict, and a replay that reproduces. A session that is not clean pages the owner's phone once (codes
+only). The job also checks any earlier run folder that has no `check.json` yet. `check` does the same for one session
+by hand: it writes a `check.json` only where there is none (a later config or code change would make an old run's
+replay differ), and `--again` rewrites one. `check.json` is not one of the run's hashed files: `replay` never reads it.
+
 What is never written: the edition's prose (why, notes, labels, headlines), any price after the run, any outcome.
 """
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as dt
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
+import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -70,7 +83,21 @@ RADAR_RETRY_UNTIL = (7, 45)
 RADAR_RETRY_EVERY_S = 300.0
 OFF = "OFF"                    # var/options-select/OFF: the job runs nothing while it exists (the owner's switch)
 
-EXIT_OK, EXIT_ERROR, EXIT_USAGE, EXIT_EXISTS, EXIT_TOO_EARLY, EXIT_REPLAY = 0, 1, 2, 3, 4, 5
+EXIT_OK, EXIT_ERROR, EXIT_USAGE, EXIT_EXISTS, EXIT_TOO_EARLY, EXIT_REPLAY, EXIT_NOT_CLEAN = 0, 1, 2, 3, 4, 5, 6
+
+CHECK_SCHEMA = "wt.options/radar-select-check"
+CHECK_VERSION = 1
+CHECK_FILE = "check.json"
+FACTS_VERSION = 2              # wt.options.universe.VERSION from which every verdict carries its gate facts
+# Why a session is not clean, in this order (a closed set: the status block and the page take only these).
+NOT_CLEAN = ("radar_not_ok", "late", "radar_bars_failed", "no_radar_candidates", "facts_missing", "replay_differs",
+             "replay_error")
+REPLAY_WORDS = ("reproduces", "differs", "error")
+# The published focus as the check read it: for S (overlap counted), for another session, unreadable, or not read
+# (a folder checked later, when S's focus is no longer the one published).
+PUBLISHED_WORDS = ("ok", "other_session", "unreadable", "not_read")
+_DAY_DIR = re.compile(r"\d{4}-\d{2}-\d{2}")
+CLEAN_NEEDED = 5               # clean sessions before the gate thresholds' amendment (handover, DEC-0070 section 3)
 
 ChainReader = Callable[[str, float, str], "Sequence[ch.Quote] | None"]
 
@@ -333,6 +360,160 @@ def replay(folder: Path, desk: Sequence[str], cfg: rc.Config, params: sel.Params
     return problems
 
 
+def _count_of(v: Any) -> int | None:
+    return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else None
+
+
+def check_run(folder: Path, desk: Sequence[str], cfg: rc.Config, params: sel.Params, params_sha: str,
+              picker_ref: str, *, published: tuple[Mapping[str, Any] | None, str | None] | None,
+              checked_at: dt.datetime) -> dict[str, Any]:
+    """The check record of one written run (see the module text). `published`: what the dashboard's focus route
+    gave, (focus block, its session), or None when it was not read. Raises OSError or ValueError when the run's
+    `run.json` cannot be read: there is nothing to check then."""
+    run_doc = json.loads((folder / "run.json").read_text(encoding="utf-8"))
+    if not isinstance(run_doc, dict) or run_doc.get("schema") != RUN_SCHEMA:
+        raise ValueError("run.json is not a run record")
+    session = str(run_doc.get("session"))
+    try:
+        problems = replay(folder, desk, cfg, params, params_sha, picker_ref)
+        replay_word = "reproduces" if not problems else "differs"
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, sel.BundleError):
+        replay_word = "error"
+    verdicts: int | None = None
+    with_facts: int | None = None
+    universe_version: int | None = None
+    try:
+        uni = json.loads((folder / "universe.json").read_text(encoding="utf-8"))
+        if isinstance(uni, dict) and isinstance(uni.get("verdicts"), list):
+            universe_version = _count_of(uni.get("version"))
+            verdicts = len(uni["verdicts"])
+            with_facts = sum(1 for v in uni["verdicts"] if isinstance(v, Mapping) and v.get("facts") is not None)
+    except (OSError, ValueError):
+        pass
+    raw_counts = run_doc.get("counts")
+    counts: Mapping[str, Any] = raw_counts if isinstance(raw_counts, Mapping) else {}
+    raw_cand = counts.get("candidates")
+    cand: Mapping[str, Any] = raw_cand if isinstance(raw_cand, Mapping) else {}
+    n_candidates = _count_of(cand.get("candidates"))
+    n_discovered = _count_of(cand.get("discovered"))       # the Radar's names new to the desk: the ones the gate sees
+    raw_picks = run_doc.get("picks")
+    picks = [p["symbol"].upper() for p in (raw_picks if isinstance(raw_picks, list) else [])
+             if isinstance(p, Mapping) and isinstance(p.get("symbol"), str)]
+    if published is None:
+        pub: dict[str, Any] = {"status": "not_read", "overlap": None, "of": None}
+    else:
+        focus, pub_session = published
+        items = (focus or {}).get("items") if isinstance(focus, Mapping) else None
+        if pub_session is None or not isinstance(items, list):
+            pub = {"status": "unreadable", "overlap": None, "of": None}
+        elif pub_session != session:
+            pub = {"status": "other_session", "overlap": None, "of": None}
+        else:
+            names = {str(i["symbol"]).upper() for i in items if isinstance(i, Mapping) and isinstance(i.get("symbol"), str)}
+            pub = {"status": "ok", "overlap": len(names & set(picks)), "of": len(names)}
+    why = {
+        "radar_not_ok": run_doc.get("radar_status") != "ok",
+        "late": run_doc.get("late") is not False,
+        "radar_bars_failed": run_doc.get("radar_bars_fetch") != "ok",
+        "no_radar_candidates": not n_discovered,                    # a run on the desk's names alone does not count
+        "facts_missing": universe_version is None or universe_version < FACTS_VERSION or verdicts is None
+                         or with_facts != verdicts,
+        "replay_differs": replay_word == "differs",
+        "replay_error": replay_word == "error",
+    }
+    reasons = [code for code in NOT_CLEAN if why[code]]
+    return {
+        "schema": CHECK_SCHEMA, "version": CHECK_VERSION, "session": session,
+        "checked_at": checked_at.astimezone(dt.UTC).isoformat(),
+        "clean": not reasons, "reasons": reasons, "replay": replay_word,
+        "universe_version": universe_version, "verdicts": verdicts, "verdicts_with_facts": with_facts,
+        "candidates": n_candidates, "discovered": n_discovered, "picks": len(picks), "published": pub,
+    }
+
+
+def write_check(folder: Path, doc: Mapping[str, Any]) -> Path:
+    """Write (or rewrite) the run folder's `check.json` atomically: a temporary file beside it, then one rename."""
+    path = folder / CHECK_FILE
+    fd, tmp = tempfile.mkstemp(prefix=f".{CHECK_FILE}.", dir=folder)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(sel.dumps(doc))
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
+    return path
+
+
+def page_text(session: str, reasons: Sequence[str]) -> tuple[str, str]:
+    """The phone page for a session that is not clean: the date and the reason codes, nothing else."""
+    from wt.ops.alerts import day, word
+    codes = ", ".join(dict.fromkeys(word(r, NOT_CLEAN) for r in reasons)) or "unknown"
+    return ("Options shadow: session not clean",
+            f"The Radar to Options shadow run for {day(session)} does not count toward the {CLEAN_NEEDED} clean "
+            f"sessions: {codes}. See the Radar page or run: radar_select check.")
+
+
+def page_not_clean(session: str, reasons: Sequence[str], sender: Any = None) -> bool:
+    """Page once for `session` (a New York day) when its run is not clean."""
+    from wt.ops.alerts import Alerts
+    title, message = page_text(session, reasons)
+    return bool((sender if sender is not None else Alerts()).once_per_day(
+        "options-select:not-clean", title, message, 3, day=session))
+
+
+def check_folders(root: Path, session: str, desk: Sequence[str], cfg: rc.Config, params: sel.Params,
+                  params_sha: str, picker_ref: str, *, clock: Callable[[], dt.datetime],
+                  read_published: Callable[[], tuple[Mapping[str, Any] | None, str | None]],
+                  sender: Any = None) -> dict[str, Any] | None:
+    """The job's check after its run: S's folder (re)checked with the published focus read now, then every earlier
+    run folder that has no `check.json`, checked without it. Pages when S is not clean. Returns S's check record,
+    or None when S's run cannot be read. Never raises for a bad folder: the run is already written."""
+    out: dict[str, Any] | None = None
+    folder = root / session
+    if folder.is_dir():
+        try:
+            published = read_published()
+        except Exception:  # noqa: BLE001 (an unreadable focus is a word in the record, not a failed job)
+            published = (None, None)
+        try:
+            out = check_run(folder, desk, cfg, params, params_sha, picker_ref, published=published,
+                            checked_at=clock())
+            write_check(folder, out)
+        except Exception as e:  # noqa: BLE001 (the run is written; a check that breaks never fails the job)
+            print(f"radar_select job {session}: check: {type(e).__name__}", file=sys.stderr)
+            out = None
+    earlier = sorted(p for p in root.iterdir() if p.is_dir() and _DAY_DIR.fullmatch(p.name) and p.name < session
+                     and not (p / CHECK_FILE).exists()) if root.is_dir() else []
+    for old in earlier:
+        try:
+            write_check(old, check_run(old, desk, cfg, params, params_sha, picker_ref, published=None,
+                                       checked_at=clock()))
+            print(f"radar_select job {session}: checked the earlier run {old.name}")
+        except Exception as e:  # noqa: BLE001 (an old folder that cannot be checked is skipped, said in the log)
+            print(f"radar_select job {session}: check of {old.name}: {type(e).__name__}", file=sys.stderr)
+    if out is not None and not out["clean"]:
+        try:
+            page_not_clean(session, out["reasons"], sender)
+        except Exception as e:  # noqa: BLE001 (a page that cannot be sent never fails the job)
+            print(f"radar_select job {session}: page: {type(e).__name__}", file=sys.stderr)
+    return out
+
+
+def check_line(doc: Mapping[str, Any]) -> str:
+    """One line for a terminal: the verdict, the reasons, the replay, the facts and the overlap count."""
+    pub = doc.get("published") or {}
+    overlap = (f"{pub.get('overlap')} of {pub.get('of')} picks in the published focus" if pub.get("status") == "ok"
+               else f"published focus {pub.get('status')}")
+    return (f"{'CLEAN' if doc.get('clean') is True else 'NOT CLEAN'}"
+            f"{'' if doc.get('clean') else ' (' + ', '.join(doc.get('reasons') or []) + ')'}; replay {doc.get('replay')}; "
+            f"facts on {doc.get('verdicts_with_facts')} of {doc.get('verdicts')} verdicts (universe v{doc.get('universe_version')}); "
+            f"{doc.get('discovered')} new to the desk of {doc.get('candidates')} candidates; {overlap}")
+
+
 # ---------------------------------------------------------------- command line
 
 class _Parser(argparse.ArgumentParser):
@@ -350,16 +531,25 @@ def _read_radar() -> Any:
     return read_edition("radar")
 
 
+def _read_published() -> tuple[Mapping[str, Any] | None, str | None]:
+    from wt.options.clone_site import read_focus
+    return read_focus()
+
+
 def main(argv: list[str] | None = None, *, client: Callable[[], sf.Client] = sf._client,
          read_radar: Callable[[], Any] = _read_radar, clock: Callable[[], dt.datetime] = _now,
-         sleep: Callable[[float], None] | None = None, chain_feed: str = "indicative") -> int:
+         sleep: Callable[[float], None] | None = None, chain_feed: str = "indicative",
+         read_published: Callable[[], tuple[Mapping[str, Any] | None, str | None]] = _read_published,
+         sender: Any = None) -> int:
     import time
     ap = _Parser(prog="python -m wt.options.radar_select", description="Radar → Options selection (shadow)")
     sub = ap.add_subparsers(dest="cmd", required=True, parser_class=_Parser)
-    for name in ("run", "replay", "job"):
+    for name in ("run", "replay", "job", "check"):
         a = sub.add_parser(name)
         if name != "job":
             a.add_argument("--session", required=True)
+        if name == "check":
+            a.add_argument("--again", action="store_true", help="rewrite an existing check.json")
         a.add_argument("--root", type=Path, default=VAR)
     try:
         args = ap.parse_args(argv)
@@ -397,6 +587,29 @@ def main(argv: list[str] | None = None, *, client: Callable[[], sf.Client] = sf.
             print(f"radar_select: replay: {p}", file=sys.stderr)
         print(f"radar_select replay {session}: {'reproduces' if not problems else 'DIFFERS'}")
         return EXIT_REPLAY if problems else EXIT_OK
+    if args.cmd == "check":
+        kept = args.root / session / CHECK_FILE
+        if kept.exists() and not args.again:
+            try:
+                old = json.loads(kept.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                old = None
+            if isinstance(old, dict):
+                print(f"radar_select check {session}: kept (--again rewrites it): {check_line(old)}")
+                return EXIT_OK if old.get("clean") is True else EXIT_NOT_CLEAN
+        try:
+            published = read_published()
+        except Exception:  # noqa: BLE001 (an unreadable focus is a word in the record)
+            published = (None, None)
+        try:
+            doc = check_run(args.root / session, desk, cfg, params, psha, ref, published=published,
+                            checked_at=clock())
+            write_check(args.root / session, doc)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+            print(f"radar_select: check: cannot read the run ({type(e).__name__})", file=sys.stderr)
+            return EXIT_ERROR
+        print(f"radar_select check {session}: {check_line(doc)}")
+        return EXIT_OK if doc["clean"] else EXIT_NOT_CLEAN
     # A job's second run for S (a restart, a run by hand) is not a failure: the first run's folder stands.
     exists = EXIT_OK if job else EXIT_EXISTS
     if (args.root / session).exists():
@@ -434,6 +647,14 @@ def main(argv: list[str] | None = None, *, client: Callable[[], sf.Client] = sf.
         print(f"radar_select: {type(e).__name__}: {e}", file=sys.stderr)
         return EXIT_ERROR
     r = records["run.json"]
+    if job:
+        try:
+            checked = check_folders(args.root, session, desk, cfg, params, psha, ref, clock=clock,
+                                    read_published=read_published, sender=sender)
+        except Exception as e:  # noqa: BLE001 (the run is written: its check never fails the job)
+            print(f"radar_select job {session}: check: {type(e).__name__}", file=sys.stderr)
+            checked = None
+        print(f"radar_select job {session}: check: {check_line(checked) if checked else 'not written'}")
     print(f"radar_select {args.cmd} {session}: radar {r['radar_status']}, "
           f"{r['counts']['universe']['admitted']} admitted of {r['counts']['universe']['candidates_gated']} gated, "
           f"picks {' '.join(p['symbol'] for p in r['picks']) or '(none)'}{' LATE' if r['late'] else ''}; {folder}")

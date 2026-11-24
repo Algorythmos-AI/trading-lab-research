@@ -20,7 +20,8 @@ set by a dated amendment, every Radar name is rejected `gate_unset` and the univ
 ## What it writes
 
 One folder per session, built whole and renamed into place, so it exists only when complete. It holds
-`candidates.json`, `fetch.json`, `universe.json`, `stage1-bundle.json`, `stage1.json` and `run.json`. The module
+`candidates.json`, `fetch.json`, `universe.json`, `stage1-bundle.json`, `stage1.json` and `run.json`, and then the
+job's `check.json` (written after the folder, not one of the run's hashed files). The module
 docstring of `src/wt/options/radar_select.py` says what each holds.
 
 It never writes the Radar's prose. The job log is `logs/options_select_<YYYYMMDD>.log`; its last line gives the
@@ -35,19 +36,40 @@ Radar status, counts and picks. Logs stay on the host: no alert carries a symbol
 
 ## Checks after a session (read only)
 
-- `systemctl status wt-options-select.service` shows exit 0.
-- `jq '{radar_status, late, gate_unset, counts: .counts.universe}' var/options-select/<S>/run.json`
-- `.venv/bin/python -m wt.options.radar_select replay --session <S>` prints `reproduces`.
+The job checks its own run and writes `var/options-select/<S>/check.json` (DEC-0070 section 11). Three ways to read it:
 
-A **clean session** for DEC-0046 section 7's five has all four of these:
+- **The Radar page:** the "Shadow selection" box shows "Shadow progress: N of 5 clean", one square per recent session
+  (green clean, red not clean, dashed not checked; hover for the reasons), and the session's check: clean or the
+  reasons, the replay, the gate facts' coverage, and how many of the shadow's picks are in the published four.
+- **The phone:** a session that is not clean pages once, "Options shadow: session not clean", with the date and codes.
+- **A terminal on the host:**
+  - `.venv/bin/python -m wt.options.select_status progress` prints the count and one line a session;
+  - `.venv/bin/python -m wt.options.radar_select check --session <S>` prints a session's kept check, or checks it
+    when it has none (exit 0 clean, 6 not clean, 1 no run). `--again` rewrites it; after a config or code change
+    the replay of an old run differs, so it would then read not clean;
+  - `.venv/bin/python -m wt.options.radar_select replay --session <S>` prints `reproduces` or what differs;
+  - `systemctl status wt-options-select.service` shows exit 0.
 
-- the job exited 0;
-- `run.json` exists and is not `late`;
-- the replay reproduces;
-- `radar_status` is recorded.
+A **clean session** (DEC-0070 section 11) has all of these:
 
-It is an operational gate, not evidence of skill. A session on the 12 alone (the Radar missing or stale) is still
-clean, and says so.
+- the run folder exists (the job exited 0) and `run.json` is not `late`;
+- `radar_status` is `ok` and the edition gave at least one name new to the desk;
+- those names' bars were fetched;
+- every gate verdict carries its facts (`universe.json` version 2);
+- the replay reproduces.
+
+| Code | Meaning | Do |
+|---|---|---|
+| `radar_not_ok` | the edition was missing, stale or invalid by 07:45; the run used the 12 | Check the Radar's build and catch-up routines |
+| `no_radar_candidates` | the edition held no in-scope name new to the desk | Check the edition's lists (a renamed list is out of scope) |
+| `late` | the run finished after 08:40 New York | Check the job's log for slow reads or fetches |
+| `radar_bars_failed` | the candidates' bars could not be fetched | Check the broker's data status; the desk's 12 still ran |
+| `facts_missing` | a verdict has no gate facts | A code regression in `universe.py`: open an issue before the next run |
+| `replay_differs` | the saved run does not reproduce | Run `replay --session <S>` for the list; the code or config changed, or a file was edited |
+| `replay_error` | the replay could not run | Run `replay --session <S>`; a file is missing or unreadable |
+
+It is an operational gate, not evidence of skill. The overlap count with the published four is a record only: no
+outcome of either list is read.
 
 ## Setting the gate's thresholds (DEC-0070 section 3)
 

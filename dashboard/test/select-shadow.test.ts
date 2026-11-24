@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { pipelineView, RadarPipelineView } from "@/components/client/radar-pipeline";
 import type { SelectSession } from "@/lib/paper-options.types";
 import { fixturePipeline } from "@/lib/radar-pipeline-fixture";
-import { RADAR_STATUS_WORDS, type SelectBlock, shadowView, topRejects } from "@/lib/select-shadow";
+import { CLEAN_NEEDED, NOT_CLEAN_WORDS, progressView, publishedWords, RADAR_STATUS_WORDS, type SelectBlock, shadowView, topRejects } from "@/lib/select-shadow";
 import { validatePaperOptions } from "@/lib/validate";
 import paperV2 from "./fixtures/paper-options.v2.json";
 
@@ -85,5 +85,72 @@ describe("the Radar status words", () => {
   it("call a stale edition not fresh, whatever made it stale (date, store time or another check)", () => {
     expect(RADAR_STATUS_WORDS.radar_stale).toBe("Radar not fresh: ran on the desk's 12");
     expect(Object.values(RADAR_STATUS_WORDS).join(" ")).not.toContain("not this session's");
+  });
+});
+
+describe("the shadow's progress (version 5)", () => {
+  const html = (shadow: SelectBlock | null) =>
+    renderToString(createElement(RadarPipelineView, { file: fixturePipeline(FROZEN), nowMs: FROZEN, shadow }));
+  const bad = (f: (d: any) => void) => {
+    const d = structuredClone(paperV2) as any;
+    f(d);
+    return validatePaperOptions(d).ok;
+  };
+
+  it("counts the host's clean sessions and marks each recent run clean, not clean or not checked", () => {
+    const p = progressView(block)!;
+    expect(p).toMatchObject({ clean: 1, needed: 5, tracked: true });
+    expect(p.marks.map((m) => m.mark)).toEqual(["not_clean", "clean"]);
+    expect(p.marks[0]!.reasons).toEqual(["radar_not_ok", "no_radar_candidates"]);
+    expect(progressView(null)).toBeNull();
+  });
+
+  it("reads a version 4 block (no progress, no checks) as not tracked, every run not checked", () => {
+    const v4: SelectBlock = { mode: "shadow", off: false, sessions: block.sessions.map(({ check: _c, ...s }) => s) };
+    const p = progressView(v4)!;
+    expect(p).toMatchObject({ clean: 0, needed: CLEAN_NEEDED, tracked: false });
+    expect(p.marks.every((m) => m.mark === "no_check")).toBe(true);
+    expect(html(v4)).toContain("the host does not check its runs yet");
+  });
+
+  it("draws the progress, the session's check and the overlap count, never a name", () => {
+    const out = html(block);
+    expect(out).toContain("data-shadow-progress");
+    expect(out).toMatch(/1<!-- --> of <!-- -->5<!-- --> clean/);
+    expect(out).toContain('data-shadow-check="clean"');
+    expect(out).toContain("Clean session: it counts");
+    expect(out).toContain("3 of the published 4 also picked by the shadow");
+    expect(out.match(/data-check-mark=/g)).toHaveLength(2);
+    for (const sym of ["SPY", "QQQ", "AAPL", "NVDA", "TSLA", "PLTR"]) expect(out).not.toContain(sym);
+  });
+
+  it("names every reason a session is not clean in words", () => {
+    const sessions = [{ ...block.sessions[1]!, check: { ...block.sessions[1]!.check!, clean: false, reasons: ["late", "replay_differs"] as any, replay: "differs" as const } }];
+    const out = html({ ...block, sessions });
+    expect(out).toContain('data-shadow-check="not_clean"');
+    expect(out).toContain("Not clean: late, the replay differs");
+    expect(out).toContain("Replay differs");
+    for (const code of ["radar_not_ok", "late", "radar_bars_failed", "no_radar_candidates", "facts_missing", "replay_differs", "replay_error", "check_invalid"])
+      expect(NOT_CLEAN_WORDS[code]).toBeTruthy();
+  });
+
+  it("says why the overlap is unknown instead of a number", () => {
+    const c = block.sessions[1]!.check!;
+    expect(publishedWords({ ...c, published: { status: "other_session", overlap: null, of: null } })).toContain("another session");
+    expect(publishedWords({ ...c, published: { status: "not_read", overlap: null, of: null } })).toContain("not read");
+    expect(publishedWords({ ...c, published: { status: "unreadable", overlap: null, of: null } })).toContain("unreadable");
+    expect(publishedWords(null)).toBeNull();
+  });
+
+  it("validates only codes and counts: a name, a free-text reason or an unknown status is refused", () => {
+    expect(bad(() => {})).toBe(true);
+    expect(bad((d) => (d.select.sessions[1].check.published.names = ["AAA"]))).toBe(false);
+    expect(bad((d) => (d.select.sessions[1].check.picks = ["AAA"]))).toBe(false);
+    expect(bad((d) => (d.select.sessions[1].check.reasons = ["because it broke"]))).toBe(false);
+    expect(bad((d) => (d.select.sessions[1].check.replay = "maybe"))).toBe(false);
+    expect(bad((d) => (d.select.sessions[1].check.published.status = "AAA"))).toBe(false);
+    expect(bad((d) => (d.select.progress.clean = -1))).toBe(false);
+    expect(bad((d) => (d.select.progress.extra = 1))).toBe(false);
+    expect(bad((d) => { d.schema_version = 4; delete d.select.progress; for (const s of d.select.sessions) delete s.check; })).toBe(true);
   });
 });

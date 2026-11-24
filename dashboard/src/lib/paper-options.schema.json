@@ -22,9 +22,10 @@
         1,
         2,
         3,
-        4
+        4,
+        5
       ],
-      "description": "4 adds `select`, the Radar → Options shadow's status; 3 adds each lab session's upload delay and rate-limit headroom; 2 adds `lab`, the options lab's tape status; 1 to 3 are still taken."
+      "description": "5 adds the shadow's `progress` and each shadow session's `check`; 4 adds `select`, the Radar → Options shadow's status; 3 adds each lab session's upload delay and rate-limit headroom; 2 adds `lab`, the options lab's tape status; 1 to 4 are still taken."
     },
     "run_id": {
       "type": "string",
@@ -310,6 +311,39 @@
               "maxItems": 10,
               "items": {
                 "$ref": "#/definitions/select_session"
+              }
+            },
+            "progress": {
+              "description": "Version 5: the shadow's progress toward the switch's operational gate: clean sessions (the job's own check says clean), checked sessions, runs, and how many clean sessions are needed. Counts only.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "clean",
+                "checked",
+                "runs",
+                "needed"
+              ],
+              "properties": {
+                "clean": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                },
+                "checked": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                },
+                "runs": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                },
+                "needed": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100000
+                }
               }
             }
           }
@@ -1111,6 +1145,148 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 100
+        },
+        "check": {
+          "description": "Version 5: the job's own check of this run (check.json): clean or the reason codes, the replay's word, the gate facts' coverage and how many of its picks are in the published focus (a count, never a name). Null when the run has no check.",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "checked_at",
+                "clean",
+                "reasons",
+                "replay",
+                "universe_version",
+                "verdicts",
+                "verdicts_with_facts",
+                "published"
+              ],
+              "properties": {
+                "checked_at": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/definitions/stamp"
+                    }
+                  ]
+                },
+                "clean": {
+                  "type": "boolean"
+                },
+                "reasons": {
+                  "type": "array",
+                  "maxItems": 8,
+                  "uniqueItems": true,
+                  "items": {
+                    "enum": [
+                      "radar_not_ok",
+                      "late",
+                      "radar_bars_failed",
+                      "no_radar_candidates",
+                      "facts_missing",
+                      "replay_differs",
+                      "replay_error",
+                      "check_invalid"
+                    ]
+                  }
+                },
+                "replay": {
+                  "enum": [
+                    null,
+                    "reproduces",
+                    "differs",
+                    "error"
+                  ]
+                },
+                "universe_version": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 100000
+                    }
+                  ]
+                },
+                "verdicts": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 100000
+                    }
+                  ]
+                },
+                "verdicts_with_facts": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 100000
+                    }
+                  ]
+                },
+                "published": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status",
+                    "overlap",
+                    "of"
+                  ],
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        null,
+                        "ok",
+                        "other_session",
+                        "unreadable",
+                        "not_read"
+                      ]
+                    },
+                    "overlap": {
+                      "oneOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100000
+                        }
+                      ]
+                    },
+                    "of": {
+                      "oneOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100000
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          ]
         }
       }
     }
