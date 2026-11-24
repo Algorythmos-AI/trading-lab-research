@@ -1,0 +1,33 @@
+# EXP-0055: the options clone's 5-minute time stop judged at the quote's midpoint, as a shadow arm (DEC-0079).
+# Forward only: a virtual contract beside each real fill, never an order. Frozen with DEC-0079; a changed value is a new experiment.
+experiment: EXP-0055
+status: proposed                # DEC-0079 PROPOSED 2026-11-25; registered on its acceptance; no results file until the report
+decision: DEC-0079
+hypotheses: [HYP-0073]
+trials: 1                       # family O: 51 now, 52 once DEC-0079 is accepted; the global count stays at 87
+question: >
+  On the clone's trades closed by the time stop while the quote's midpoint was above the fill, does holding on
+  under the control's other exits give a higher return on premium after fees than the real exit?
+driver: python -m wt.live.runner_o            # job paper-o; the arm is booked by wt.options.shadow after each poll
+control: the clone's trials in force under config/options_clone.yaml (EXP-0050, DEC-0064), unchanged
+inputs:
+  quotes: the runner's own option quotes at each poll (OPRA, about every 10 seconds), as the control's exits read them
+  bars: the runner's own 2-minute SIP stock bars and tapes, as the control's exits read them
+  journal: data/live/options_journal.jsonl     # PRIVATE; on the host, never in git
+  shadow: var/options/shadow/<session>.jsonl   # PRIVATE; the arm's virtual trades
+not_used: the lab tape (wt.lab): its 5-second tier holds only asks of $3.00 or less, and only the focus names
+switch: its own key, off by default, added by the code pull request; turned on by the owner
+first_session: the first session the arm books on the host after DEC-0079 is accepted and its switch is on   # none earlier counts (DEC-0079 "Disclosure")
+window_ends_if_changed: [exits, order]          # sections of config/options_clone.yaml; other changes are recorded per unit by the control's config hash
+measures:
+  primary: mean paired difference per unit (variant minus control, return on premium after fees), 95% bootstrap interval, sessions resampled (HYP-0073)
+  unit: a control trade closed by the time stop at a poll where the quote's midpoint was above the fill
+  counted_not_tested:
+    - sessions booked; control trades; control time-stop exits; units among them
+    - units by setup (retest, rejection) and by name class (index, single name)
+    - each unit's exit reason under the variant
+    - units by the control's config hash
+before_the_report: counts only; no difference, P&L or return of the arm is read or shown
+close_without_verdict: "2027-06-30"
+reports:
+  never: [a setup's source, a headline, prose from research/specs]   # AGENTS.md data classes; trials are named by id
