@@ -722,3 +722,154 @@ def test_the_journal_says_why_each_rule_had_no_order(gap):
     for r in done["rules"].values():
         assert sum(r["minutes"].values()) == 89                        # each minute decided, 09:31 to 10:59
         assert r["last"]["why"] in r["minutes"]
+
+
+# ---- the rotation shadow (DEC-0076, HYP-0072, EXP-0054): journal only, beside HYP-0071 ---------------------------------------
+THIN = (5.00, 5.05, 4.95, 5.02, 50_000)                                # a 09:30 bar under the first-minute volume
+QUIET = (5.02, 5.04, 5.00, 5.02, 30_000)                               # under the 09:30 high, closes over its open
+# ABC (rank 1): e2's 09:31 order is not reached; nothing valid 09:32-09:34; e2's five-minute order from 09:35, reached 09:37
+BACK = [OPEN] + [QUIET] * 6 + [(5.03, 5.10, 5.01, 5.08, 80_000)]
+# XYZ (rank 2): red at 09:30, so e4 rests over each newest bar from 09:31; it is never reached
+RED_XYZ = [RED, (4.98, 5.00, 4.90, 4.92, 50_000), (4.92, 4.96, 4.91, 4.95, 40_000), (4.95, 4.98, 4.93, 4.96, 40_000),
+           (4.96, 4.99, 4.94, 4.97, 40_000)] + [(4.97, 4.99, 4.95, 4.97, 30_000)] * 20
+
+
+def shadow(j: list[dict], kind: str) -> list[dict]:
+    return [r for r in events(j, "rotation_shadow") if r["kind"] == kind]
+
+
+def no_shadow_order(b: BarFillBroker, j: list[dict]) -> None:
+    """The shadow sends nothing: every order the broker saw is the desk's own, in the primary, journaled by the desk."""
+    assert {b.orders[c].symbol for c in b.placed} <= {"ABC"}
+    assert len([c for c in b.placed if b.orders[c].side == "buy"]) == len(events(j, "entry_placed"))
+    assert not events(j, "rotation_shadow_error")
+    for r in events(j, "rotation_shadow"):
+        assert r["trial"] == "HYP-0072"
+        assert not {"R", "pnl", "exit", "entry", "fill", "realised_R"} & set(r)
+
+
+def test_the_shadow_rests_in_rank_two_when_it_has_the_only_valid_order(gap):
+    tape = tape_of([THIN] + [QUIET] * 100, more={"XYZ": ORB + RUN[2:]})
+    b = session(tape)
+    j = journal(gap)
+    assert one(j, "gap_day_done")["reason"] == "no_signal"           # HYP-0071: the primary never had an order
+    assert b.placed == [] and b.fills == []
+    names = shadow(j, "names")
+    assert len(names) == 1 and names[0]["names"] == [[1, "ABC"], [2, "XYZ"]]
+    [ch] = shadow(j, "change")
+    assert (ch["minute"], ch["rank"], ch["symbol"], ch["code"], ch["trigger"], ch["stop"]) == \
+        ("09:31", 2, "XYZ", "e2", 5.06, 4.94)
+    assert ch["live"] is True and ch["nbbo"] is not None
+    [att] = shadow(j, "attempt")
+    assert (att["rank"], att["symbol"], att["code"]) == (2, "XYZ", "e2")
+    assert pd.Timestamp(att["bar"]).tz_convert("America/New_York").strftime("%H:%M") == "09:31"
+    assert att["engine_fill"] is True and att["spread_ok"] is True    # opened at 5.03: under the 5.07 collar; 2 cents
+    assert not shadow(j, "done")
+    summary = one(j, "session_end")["rotation_shadow"]
+    assert summary == {"names": 2, "changes": 1, "rank_minutes": {"2": 1}, "done": "attempt", "attempt": True,
+                       "attempt_rank": 2, "engine_fill": True, "spread_ok": True}
+    no_shadow_order(b, j)
+    flat_and_clean(b)
+
+
+def test_the_shadow_goes_back_to_the_primary_when_it_is_valid_again(gap):
+    tape = tape_of(BACK + RUN[2:], more={"XYZ": RED_XYZ})
+    b = session(tape)
+    j = journal(gap)
+    moves = [(c["minute"], c["rank"], c["code"], c["trigger"], c["stop"]) for c in shadow(j, "change")]
+    assert moves == [("09:31", 1, "e2", 5.06, 4.94),                  # the primary's one-minute order
+                     ("09:32", 2, "e4", 5.01, 4.89),                  # the primary has none: rank 2's red-to-green
+                     ("09:35", 1, "e2", 5.06, 4.94)]                  # the primary's five-minute order: back to rank 1
+    [att] = shadow(j, "attempt")
+    assert (att["rank"], att["code"]) == (1, "e2") and att["engine_fill"] is True
+    assert pd.Timestamp(att["bar"]).tz_convert("America/New_York").strftime("%H:%M") == "09:37"
+    end = one(j, "session_end")["rotation_shadow"]
+    assert end["changes"] == 3 and end["rank_minutes"] == {"1": 4, "2": 3} and end["attempt_rank"] == 1
+    no_shadow_order(b, j)
+
+
+def test_no_name_valid_is_no_change_and_no_attempt(gap):
+    tape = tape_of([THIN] + [QUIET] * 100, more={"XYZ": [THIN] + [QUIET] * 100})
+    b = session(tape)
+    j = journal(gap)
+    assert not shadow(j, "change") and not shadow(j, "attempt")
+    [done] = shadow(j, "done")
+    assert done["done"] == "no_attempt" and done["changes"] == 0
+    assert one(j, "session_end")["rotation_shadow"] == {
+        "names": 2, "changes": 0, "rank_minutes": {}, "done": "no_attempt", "attempt": False, "attempt_rank": None,
+        "engine_fill": None, "spread_ok": None}
+    assert b.placed == []
+    no_shadow_order(b, j)
+
+
+def test_the_shadow_never_sends_an_order_and_changes_nothing_the_desk_does(gap, monkeypatch):
+    """The same day with and without the shadow: the broker sees the same orders and fills, the desk journals the
+    same rows."""
+    tape = tape_of(BACK + RUN[2:], more={"XYZ": RED_XYZ})
+    with_it = session(tape)
+    rows_with = journal(gap)
+    no_shadow_order(with_it, rows_with)
+    assert shadow(rows_with, "attempt")
+
+    def orders(b: BarFillBroker) -> list[tuple]:
+        return [(b.orders[c].symbol, b.orders[c].side, b.orders[c].qty) for c in b.placed] + \
+            [(f.t, f.side, f.qty, f.price) for f in b.fills]
+
+    import shutil
+    (gap / "live" / "smallcap_journal.jsonl").unlink()                 # the same day again, from nothing
+    shutil.rmtree(gap / "var" / "smallcap")
+    monkeypatch.setattr(runner_s, "rotation_tier2", lambda day: ([], {"why": "test_off"}))
+    without = session(tape_of(BACK + RUN[2:], more={"XYZ": RED_XYZ}))
+    rows_without = journal(gap)
+    assert [r["kind"] for r in events(rows_without, "rotation_shadow")] == ["names", "done"]
+    assert orders(with_it) == orders(without)
+    assert [r["event"] for r in rows_with if not r["event"].startswith("rotation")] == \
+        [r["event"] for r in rows_without if not r["event"].startswith("rotation")]
+    placed = [{k: v for k, v in r.items() if k not in ("ts", "prev_sha256")} for r in events(rows_with, "entry_placed")]
+    assert placed == [{k: v for k, v in r.items() if k not in ("ts", "prev_sha256")}
+                      for r in events(rows_without, "entry_placed")]
+
+
+def test_a_restart_walks_the_morning_again_without_journaling_it_twice(gap):
+    tape = tape_of(BACK + RUN[2:], more={"XYZ": RED_XYZ})
+    b = crashed(tape, at(9, 36, 30))                                   # after the 09:35 change, before the attempt
+    assert [c["minute"] for c in shadow(journal(gap), "change")] == ["09:31", "09:32", "09:35"]
+    assert not shadow(journal(gap), "attempt")
+    session(tape, start=(9, 37), broker=b)
+    j = journal(gap)
+    assert [c["minute"] for c in shadow(j, "change")] == ["09:31", "09:32", "09:35"]
+    assert len(shadow(j, "names")) == 1
+    [att] = shadow(j, "attempt")
+    # the quote at the decision is the one the 09:35 change row journaled before the crash, not unknown
+    assert att["nbbo"] == shadow(j, "change")[-1]["nbbo"] and att["nbbo"] is not None and att["spread_ok"] is True
+    end = one(j, "session_end")["rotation_shadow"]
+    assert end["changes"] == 3 and end["rank_minutes"] == {"1": 4, "2": 3}
+    no_shadow_order(b, j)
+
+
+def test_a_bar_reaching_an_order_that_was_not_resting_is_no_attempt(gap):
+    # 09:31: ABC's own e2 order rests (rank 1, not reached); XYZ's 09:31 bar reaches XYZ's e2 order, which did not rest
+    tape = tape_of([OPEN] + [QUIET] * 100, more={"XYZ": ORB + RUN[2:]})
+    b = session(tape)
+    j = journal(gap)
+    assert shadow(j, "change")[0]["minute"] == "09:31" and shadow(j, "change")[0]["rank"] == 1
+    assert all(a["rank"] != 2 or pd.Timestamp(a["bar"]).tz_convert("America/New_York").strftime("%H:%M") != "09:31"
+               for a in shadow(j, "attempt"))
+    assert {c["rank"] for c in shadow(j, "change")} <= {1, None}
+    no_shadow_order(b, j)
+
+
+def test_a_one_bar_order_reads_its_quote_again_each_minute(gap, monkeypatch):
+    """XYZ's red-to-green order keeps the same price from 09:32 (one change row), but the desk would send it afresh
+    each minute: the attempt carries the newest minute's quote."""
+    reached = RED_XYZ[:5] + [(4.97, 5.05, 4.96, 5.04, 60_000)] + [(5.04, 5.06, 5.02, 5.04, 30_000)] * 20
+    tape = tape_of([THIN] + [QUIET] * 100, more={"XYZ": reached})
+    b = session(tape)
+    j = journal(gap)
+    moves = [(c["minute"], c["rank"], c["code"], c["trigger"]) for c in shadow(j, "change")]
+    assert moves == [("09:31", 2, "e2", 5.06), ("09:32", 2, "e4", 5.01)]   # 09:31: a tie, to the lower rule
+    [att] = shadow(j, "attempt")
+    assert pd.Timestamp(att["bar"]).tz_convert("America/New_York").strftime("%H:%M") == "09:35"
+    # the 09:35 decision's quote (around 4.97), not the one read at the 09:32 change (around 4.95)
+    assert att["nbbo"] == pytest.approx([4.96, 4.98]) and att["nbbo"] != shadow(j, "change")[-1]["nbbo"]
+    no_shadow_order(b, j)

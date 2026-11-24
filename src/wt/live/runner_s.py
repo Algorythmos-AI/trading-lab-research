@@ -60,6 +60,11 @@ rule, reconciliation, the end of the day, the pages. What differs:
                and out after a breakout bar without volume. R is booked against the stop the trade entered with.
   a restart    The primary, the spent attempt and the refused signals are read back from the journal; the plan,
                its rule code and the exit's state from the plan file. Nothing is chosen or attempted twice.
+  the shadow   DEC-0076 (HYP-0072, EXP-0054) runs beside it, journal only (`rotation_shadow`): each minute, the
+               order of the best-ranked tier-2 name that has a valid one, a row when that changes, and the first
+               closed bar in that name to reach it (whether the engine fills it, the NBBO read when it began to
+               rest, the spread must). It reads its own bars, places, cancels and changes no order, computes no
+               R, P&L or exit, and ends with its attempt or at 11:00. `session_end` carries its counts.
 
 The journal names a gap rule by its code and never by a setup's name; no headline or catalyst category is read into
 it. DEC-0068's note of 2026-11-20 lists the readings this mode had to choose, for the owner to confirm.
@@ -483,6 +488,134 @@ def gap_selection(day: dt.date, open_dt: dt.datetime,
             return None, None, {"why": "pm_bars_stale", **info}   # a bar of another day, or of the session itself
         pm = mine.sort_values("t")[["t", "o", "h", "l", "c", "v"]].reset_index(drop=True)
     return symbol, sl.gap_context(rows.iloc[0].to_dict(), pm), {"rank": 1, "pm_bars": len(pm), **info}
+
+
+# ---- the rotation shadow (DEC-0076, HYP-0072, EXP-0054): journal only -----------------------------------------------------
+ROTATION_TRIAL = "HYP-0072"
+
+
+def rotation_tier2(day: dt.date) -> tuple[list[tuple[int, str]], dict[str, Any]]:
+    """([(rank, symbol)] of Tier 2, counts for the journal): the 09:25 pool of `day` through
+    `wt.scanner.gap_hunter.select`, read as HYP-0071 reads it. Nothing after 09:30 changes the names or their order."""
+    from wt.scanner import gap_hunter
+    from wt.specs.loader import load_spec
+    f = POOL_DIR / f"{day}.parquet"
+    if not f.exists():
+        return [], {"why": "pool_missing"}
+    try:
+        pool = pd.read_parquet(f)
+        if not len(pool) or "symbol" not in pool:
+            return [], {"why": "pool_empty"}
+        if "date" not in pool or any(str(d)[:10] != day.isoformat() for d in pool["date"]):
+            return [], {"why": "pool_stale"}
+        sel = gap_hunter.select(pool, load_spec("SPEC-0001"))
+    except Exception as e:  # noqa: BLE001 — a pool or a spec the rule cannot read gives no names
+        return [], {"why": "selection_failed", "error": e.__class__.__name__}
+    return [(int(r["rank"]), str(r["symbol"])) for r in sel["tier2"]], {}
+
+
+@dataclass
+class Rotation:
+    """The shadow's day: which tier-2 order would rest each minute, and the day's one attempt. It places nothing.
+
+    `next_k`: the next minute to decide. `rest`: (rank, symbol, order) decided for the minute before `next_k`, whose
+    bar has not been read yet. `nbbo`: the quote at the resting order's decision: read when it changed live, and
+    again each live minute while a one-bar order rests (the desk sends those afresh each minute); after a restart,
+    the one its journaled change row holds (`known`, by minute), else unknown."""
+    names: list[tuple[int, str, dict[str, Any]]]
+    next_k: pd.Timestamp
+    rest: tuple[int, str, sl.GapOrder] | None = None
+    key: str = ""
+    nbbo: list[float] | None = None
+    done: str = ""
+    changes: int = 0
+    rank_minutes: dict[str, int] = field(default_factory=dict)
+    attempt: dict[str, Any] | None = None
+    known: dict[str, list[float] | None] = field(default_factory=dict)
+
+    def summary(self) -> dict[str, Any]:
+        """Counts only, for `session_end`: no price, no R, no P&L."""
+        a = self.attempt or {}
+        return {"names": len(self.names), "changes": self.changes, "rank_minutes": dict(sorted(self.rank_minutes.items())),
+                "done": self.done, "attempt": self.attempt is not None, "attempt_rank": a.get("rank"),
+                "engine_fill": a.get("engine_fill"), "spread_ok": a.get("spread_ok")}
+
+
+def rotation_key(rest: tuple[int, str, sl.GapOrder] | None) -> str:
+    if rest is None:
+        return ""
+    trig, stop = sl.gap_cents(rest[2])
+    return f"{rest[1]}|{rest[2].code}|{trig:.2f}|{stop:.2f}"
+
+
+def rotation_resting(names: list[tuple[int, str, dict[str, Any]]], bars: Mapping[str, pd.DataFrame],
+                     k: pd.Timestamp) -> tuple[int, str, sl.GapOrder] | None:
+    """The order that would rest during minute `k`: of the names whose own order is valid (`gap_choose` of its
+    `gap_orders`, from its bars closed before `k`), the one with the best rank."""
+    local = k.tz_convert(ET)
+    now_min = local.hour * 60 + local.minute
+    for rank, sym, ctx in sorted(names, key=lambda x: x[0]):
+        b = bars.get(sym)
+        if b is None or not len(b):
+            continue
+        b = b[b.t < k].reset_index(drop=True)
+        o = sl.gap_choose(sl.gap_orders(b, ctx, now_min)) if len(b) else None
+        if o is not None:
+            return rank, sym, o
+    return None
+
+
+def rotation_walk(rot: Rotation, bars: Mapping[str, pd.DataFrame], upto: pd.Timestamp) -> list[dict[str, Any]]:
+    """Walk the shadow forward to minute `upto` (every bar before it closed): decide each minute's resting order,
+    and read each decided minute's bar in the resting name for the attempt. Returns the rows to journal: a change of
+    the resting order ("change") and the day's end ("attempt" or "done"). Deterministic, so a restart walks the
+    morning again to the same state. Reads no bar after the attempt."""
+    out: list[dict[str, Any]] = []
+    one = pd.Timedelta(minutes=1)
+    while not rot.done:
+        k = rot.next_k
+        prev = k - one
+        if rot.rest is not None:
+            if prev >= upto:
+                break                                          # its bar has not closed yet
+            rank, sym, order = rot.rest
+            b = bars.get(sym)
+            row = b[b.t == prev] if b is not None and len(b) else None
+            if row is not None and len(row) and float(row.h.iloc[0]) >= order.trigger:
+                trig, stop = sl.gap_cents(order)
+                q = rot.nbbo
+                rot.attempt = {"rank": rank, "symbol": sym, "code": order.code, "trigger": trig, "stop": stop,
+                               "bar": prev, "engine_fill": sl.engine_entry(order, float(row.o.iloc[0]),
+                                                                           sl.MIN_SLIP) is not None,
+                               "nbbo": q, "spread_ok": sl.spread_ok(q[1] - q[0] if q else None)}
+                rot.done = "attempt"
+                out.append({"kind": "attempt", **rot.attempt})
+                break
+        if k > upto:
+            break
+        local = k.tz_convert(ET)
+        if local.hour * 60 + local.minute >= sl.GAP_LAST_MINUTE:
+            rot.done = "no_attempt"
+            out.append({"kind": "done"})
+            break
+        new = rotation_resting(rot.names, bars, k)
+        key = rotation_key(new)
+        if key != rot.key:
+            rot.key = key
+            rot.changes += 1
+            rot.nbbo = rot.known.get(k.isoformat())
+            row2: dict[str, Any] = {"kind": "change", "minute": k, "rank": new[0] if new else None,
+                                    "symbol": new[1] if new else None}
+            if new is not None:
+                trig, stop = sl.gap_cents(new[2])
+                row2.update(code=new[2].code, trigger=trig, stop=stop)
+            out.append(row2)
+        if new is not None:
+            r = str(new[0])
+            rot.rank_minutes[r] = rot.rank_minutes.get(r, 0) + 1
+        rot.rest = new
+        rot.next_k = k + one
+    return out
 
 
 # ---- the session ---------------------------------------------------------------------------------------------------
@@ -1382,6 +1515,87 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         if plan is None and want is not None and now < entry_end:
             gap_place(want, b, now, minute, now_min)
 
+    # ---- the rotation shadow (DEC-0076): beside HYP-0071, journal only. It places, cancels and changes no order,
+    # reads its own bars into its own cache, and never writes HYP-0071's state. No R, no P&L, no exit. ----
+    rot: list[Rotation | None] = [None]
+    rot_bars: dict[str, pd.DataFrame] = {}
+    rot_said: list[str] = []                                   # the error already journaled (one row a kind)
+
+    def rot_log(kind: str, **kw: Any) -> None:
+        log("rotation_shadow", day=day, trial=ROTATION_TRIAL, kind=kind, **kw)
+
+    def rot_start() -> None:
+        """The tier-2 names and their contexts, once a session. A restart reads the names back from the journal and
+        walks the morning again without journaling it twice; a day already ended stays ended."""
+        mine = [r for r in rows if r.get("event") == "rotation_shadow" and str(r.get("day")) == day.isoformat()]
+        start = pd.Timestamp(open_dt) + pd.Timedelta(minutes=1)
+        end = next((r for r in mine if r.get("kind") in ("attempt", "done")), None)
+        if end is not None:
+            rot[0] = Rotation([(int(r), str(s), {}) for r, s in (end.get("names") or [])], start,
+                              done=str(end.get("done") or end.get("kind")), changes=int(end.get("changes") or 0),
+                              rank_minutes=dict(end.get("rank_minutes") or {}),
+                              attempt={k: end.get(k) for k in ("rank", "engine_fill", "spread_ok")}
+                              if end.get("kind") == "attempt" else None)
+            return
+        said = next((r for r in mine if r.get("kind") == "names"), None)
+        if said is not None:
+            tier2 = [(int(r), str(s)) for r, s in (said.get("names") or [])]
+            info: dict[str, Any] = {}
+        else:
+            tier2, info = rotation_tier2(day)
+        names: list[tuple[int, str, dict[str, Any]]] = []
+        missing: list[int] = []
+        for rank, sym in tier2:
+            _, ctx, _ = gap_selection(day, open_dt, symbol=sym)
+            if ctx is None:
+                missing.append(rank)                           # no context: the name never has an order
+            else:
+                names.append((rank, sym, ctx))
+        r0 = rot[0] = Rotation(names, start)
+        if said is None:
+            rot_log("names", names=[[r, s] for r, s in tier2], no_context=missing, **info)
+        if not names:
+            r0.done = "no_names"
+            rot_log("done", done="no_names", names=[], changes=0, rank_minutes={})
+        done_rows = [r for r in mine if r.get("kind") == "change" and r.get("at")]
+        r0.known = {pd.Timestamp(r["at"]).isoformat(): r.get("nbbo") for r in done_rows}
+        rot_quiet[0] = max((pd.Timestamp(r["at"]) for r in done_rows), default=None)
+
+    rot_quiet: list[pd.Timestamp | None] = [None]              # changes at or before this minute are journaled already
+
+    def rot_step(now: dt.datetime) -> None:
+        """Once a minute, after the desk's own work: the shadow's bars, then its walk to the minute just closed."""
+        r = rot[0]
+        if r is None or r.done:
+            return
+        minute = (pd.Timestamp(now) - pd.Timedelta(seconds=SETTLE_S)).floor("min")
+        if pd.Timestamp(now).floor("min") != minute or r.next_k > minute:
+            return                                             # nothing new to decide, or this minute's bars not read yet
+        refresh(rot_bars, [s for _, s, _ in r.names], now, 10.0)
+        evs = rotation_walk(r, rot_bars, minute)
+        changed_now = any(e["kind"] == "change" and pd.Timestamp(e["minute"]) == minute for e in evs)
+        if not r.done and r.rest is not None and r.next_k == minute + pd.Timedelta(minutes=1) \
+                and (changed_now or r.rest[2].one_bar):
+            try:                                               # the decision is this minute's: its quote, now
+                q = with_deadline(data.quote, r.rest[1])
+            except Exception:  # noqa: BLE001 — unknown fails the spread must
+                q = None
+            r.nbbo = [q[0], q[1]] if q else None
+        for ev in evs:
+            kind = ev.pop("kind")
+            if kind == "change":
+                at_ = pd.Timestamp(ev.pop("minute"))
+                if rot_quiet[0] is not None and at_ <= rot_quiet[0]:
+                    continue                                   # walked again after a restart: journaled already
+                live = at_ == minute
+                rot_log("change", at=at_, minute=at_.tz_convert(ET).strftime("%H:%M"), live=live,
+                        **({"nbbo": r.nbbo} if live else {}), **ev)
+            else:
+                names = [[x[0], x[1]] for x in r.names]
+                if kind == "attempt":
+                    ev["bar"] = pd.Timestamp(ev["bar"])
+                rot_log(kind, done=r.done, names=names, changes=r.changes, rank_minutes=dict(r.rank_minutes), **ev)
+
     def gap_why_note(reasons: dict[str, sl.GapWhy], minute: pd.Timestamp) -> None:
         """Tally this minute's reason for each rule, and journal the reasons when one of them changed."""
         for code, w in reasons.items():
@@ -1573,6 +1787,12 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             # ---- bars ----
             if gap and not gap_selected:
                 gap_select()                                   # at the first poll of the session: the pool is 09:25's
+            if gap and rot[0] is None:
+                try:
+                    rot_start()
+                except Exception as e:  # noqa: BLE001 — the shadow must never cost the desk anything
+                    rot[0] = Rotation([], pd.Timestamp(open_dt), done="error")
+                    log("rotation_shadow_error", day=day, where="start", error=e.__class__.__name__)
             live = sorted(s for s, st in names.items() if not st.done)
             if gap:
                 live = [primary] if primary is not None and not gap_done else []
@@ -1610,6 +1830,12 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             if gap:
                 if watch:
                     gap_entries(now)
+                try:
+                    rot_step(now)                              # after the desk's own entries, never before
+                except Exception as e:  # noqa: BLE001 — the shadow must never cost the desk anything
+                    if e.__class__.__name__ not in rot_said:
+                        rot_said.append(e.__class__.__name__)
+                        log("rotation_shadow_error", day=day, where="step", error=e.__class__.__name__)
             elif now < entry_end:
                 for sym in live:
                     b = bars.get(sym)
@@ -1676,7 +1902,8 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                    "The broker could not be read after the close, or the end-of-day checks failed part way. Check "
                    "the account; the session's journal (END_OF_DAY_NOT_FLAT) has the error.", 5)
     log("session_end", trial=trial, entries_off=off, **({"primary": primary is not None, "gap_done": gap_done}
-                                                         if gap else {}), universe=len(universe.joined), scans=universe.scans,
+                                                         if gap else {}),
+        **({"rotation_shadow": rot[0].summary()} if gap and rot[0] is not None else {}), universe=len(universe.joined), scans=universe.scans,
         entries=va.trades_by_day.get(day.isoformat(), 0), closed=closed_n, realised_R=round(realised, 4),
         day_stop=day_stopped(losers, realised), blocked=dict(sorted(counts.items())),
         virtual=asdict(va) if va_ok else None)
