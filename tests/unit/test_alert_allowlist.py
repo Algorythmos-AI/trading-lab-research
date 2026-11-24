@@ -109,6 +109,24 @@ def drive_flag_chain(tmp: Path, monkeypatch: pytest.MonkeyPatch) -> list[tuple[s
     return r.sent
 
 
+def drive_gap_watch() -> list[tuple[str, str]]:
+    """Every finding of wt.ops.gap_watch, from hostile heartbeats and counts, as the watch would page it."""
+    from wt.core.clock import ET
+    from wt.ops import gap_watch as gw
+    day = dt.date(2026, 11, 24)
+    op, cl = (dt.datetime.combine(day, dt.time(h, m), tzinfo=ET) for h, m in ((9, 30), (16, 0)))
+    now = dt.datetime.combine(day, dt.time(11, 0), tzinfo=ET)
+    started = op.isoformat()
+    out = [alerts.render("Gap Hunter: running and armed", "The session is watched again.")]
+    for hb in (None, {"started": T}, {"started": started, "status": T}, {"started": started, "status": "refused"},
+               {"started": started, "status": "running"}):
+        for alive, armed in ((True, False), (False, True), (False, False)):
+            for held in (0, 1, N, T):
+                out += [alerts.render(f.title, f.message) for f in gw.findings(now, op, cl, hb, alive, armed, held)]
+    assert len(out) > 20
+    return out
+
+
 def drive_stop_page() -> list[tuple[str, str]]:
     from wt.ops import evidence
     out = []
@@ -247,6 +265,8 @@ site(f"{RS}::_session::'paper-s:stop-rule' | f'paper-s stopped by its stop rule 
 site(f"{RS}::_session.x_check::'paper-s:execution-stop' | f'Gap Hunter stopped: execution stop {{x.code}} ({{pa",
      {"x": NS(code="X3", detail=T), "xrules": NS(decision=T)})          # a code from the closed set X1 to X5
 site(f"{RS}::_session.protect::'paper-s:protect-failed' | 'Gap Hunter could not protect a position'", {})   # DEC-0077
+site("src/wt/ops/gap_watch.py::run::f'{f.key}:{day}' | f.title", lambda *_: drive_gap_watch())
+site("src/wt/ops/gap_watch.py::run::f'{key}:{day}' | 'Gap Hunter: running and armed'", lambda *_: drive_gap_watch())
 RO = "src/wt/live/runner_o.py::Runner"
 site(f"{RO}.give_up_arm::'arm-broker' | 'Options clone: broker unreachable at arm'", {"e": E})
 site(f"{RO}.connect_at_arm::'flatten-required' | 'Options clone: a position no plan knows'", {})
