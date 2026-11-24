@@ -303,6 +303,9 @@ def deploy(sha: str | None = None, stage: bool = False, by: str = "owner", own_j
     green = ci.check(target) if by == "owner" else ci.check(target, required=ci.DEFAULT_REQUIRED)
     # The overrides are the owner's, typed for one deploy: an automatic deploy never reads them.
     ci_override = os.environ.get(CI_OVERRIDE_ENV, "").strip() if by == "owner" else ""
+    if green.token_refused and not ci_override:
+        print(f"Refusing: {ci.TOKEN_REFUSED}; renew GH_TOKEN (sudo wt-set-secrets), then deploy again")
+        return 2
     if not green.green and not ci_override:
         print(f"Refusing: {target[:12]} is not green ({green.detail})\n  (owner override: {CI_OVERRIDE_ENV}='reason')")
         return 2
@@ -476,6 +479,9 @@ def ready(now: dt.datetime | None = None) -> int:
             print(f"deploy notice: {target[:12]} is {age_min:.0f} min old; waiting for main to settle")
             return 0
         green = ci.check(target)
+        if green.token_refused:
+            print(f"deploy notice: {target[:12]} waits: {ci.TOKEN_REFUSED}; renew GH_TOKEN (sudo wt-set-secrets)")
+            return 0
         if not green.green:
             print(f"deploy notice: {target[:12]} is not green ({green.detail})")
             return 0
@@ -503,6 +509,7 @@ def ready(now: dt.datetime | None = None) -> int:
 
 # ---- the host deploys itself (ADR 0008) --------------------------------------------------------------------------
 AUTO_JOB = "deploy-auto"
+TOKEN_KEY = "deploy-token"                # the once-a-day page for a refused GitHub token
 AUTO_ON = "AUTO_ON"                     # the owner's file in var/deploy/: without it a run only says what it would do
 AUTO_STATE = STATE_DIR / "deploy-auto.json"   # not in var/deploy/: every file there is read as a deploy's record
 AUTO_MARGIN_MIN = 60                    # the gate must still be open this long from now
@@ -664,6 +671,14 @@ def auto(now: dt.datetime | None = None) -> int:
         if stop := _auto_waits(target, now):
             return wait(stop)
         green = ci.check(target, required=ci.DEFAULT_REQUIRED)
+        if green.token_refused:
+            # Not a red main: nothing can be deployed until the token is replaced, so say it the first hour.
+            sent = alerts.once_per_day(
+                TOKEN_KEY, "The host's GitHub token was refused",
+                f"GitHub answered 401 to the host's token, so no deploy can read CI and {short_sha(target)} waits. "
+                "Make a new one (the gcp-host runbook, token path), then run sudo wt-set-secrets", 4)
+            print(f"auto deploy: {target[:12]} waits: {ci.TOKEN_REFUSED} ({'said' if sent else 'already said today'})")
+            return 0
         if not green.green:
             return wait(f"not green ({green.detail})")
         ok_dash, why_dash, _ = dashguard.guard(ROOT, target)
