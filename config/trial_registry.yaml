@@ -46,4 +46,4 @@ families:
   S:                                                      # Robot B sleeve S, the stock desk's paper book (DEC-0066): forward only, no development data read
     - {decision: DEC-0066, total: 2, status: accepted}    # EXP-0051: HYP-0069 S-BOOK (the book and its day stop), HYP-0070 REV-1C (the reversal rule on a causal universe)
     - {decision: DEC-0068, total: 3, status: accepted}    # EXP-0053: HYP-0071 GAP-HUNTER (the funnel with scored chart and catalyst checks, one trade a day)
-    - {decision: DEC-0076, total: 4, status: proposed}    # EXP-0054: HYP-0072 GAP-HUNTER-ROTATE (the best-ranked tier-2 name with a valid order), shadow first
+    - {decision: DEC-0076, total: 4, status: accepted}    # EXP-0054: HYP-0072 GAP-HUNTER-ROTATE (the best-ranked tier-2 name with a valid order), shadow first
