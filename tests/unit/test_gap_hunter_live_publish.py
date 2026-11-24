@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -156,3 +158,7 @@ def test_the_job_runs_every_minute_in_session_and_its_slow_rhythm_keeps_the_cade
     assert j.command == ("-m", "wt.ops.gap_live") and not j.trading and not j.preflight and j.desk == "stocks"
     assert j.interval_s == 900 and "*:05/15:30 UTC" in j.calendars
     assert any("/1:30 America/New_York" in c for c in j.calendars)
+    assert j.runtime_max_h * 60 > j.deadline_min + 1
+    if shutil.which("systemd-analyze"):                    # the Linux CI runner parses each spec as systemd will
+        for spec in j.calendars:
+            assert subprocess.run(["systemd-analyze", "calendar", spec], capture_output=True).returncode == 0, spec
