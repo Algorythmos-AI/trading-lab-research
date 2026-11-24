@@ -379,8 +379,8 @@ describe("health", () => {
     const health = async () => (await (await healthRoute.GET()).json()) as Health;
     const before = await health();
     expect(before.editions.radar_run).toEqual({ status: "missing", accepts: 1, session: null, run_id: null, as_of: null, schema_version: null });
-    // added after every older edition, so none of them moves
-    expect(Object.keys(before.editions).at(-1)).toBe("radar_run");
+    // added after every older edition, so none of them moves (only Gap Hunter's live state, DEC-0078, comes after it)
+    expect(Object.keys(before.editions).slice(-2)).toEqual(["radar_run", "gap_hunter_live"]);
     expect(before.editions.radar_desk).toMatchObject({ status: "missing", accepts: 1 });
     await send(doc());
     expect((await health()).editions.radar_run).toEqual({ status: "ok", accepts: 1, session: SESSION, run_id: doc().run_id, as_of: doc().as_of, schema_version: 1 });

@@ -1,6 +1,6 @@
 import "server-only";
 import { readText, storedAt, writeText } from "./blob";
-import { CALENDAR_PATHS, FUNNEL_PATHS, JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_CLONE_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, PAPER_OPTIONS_PATHS, RADAR_DESK_PATHS, RADAR_PATHS } from "./desk";
+import { CALENDAR_PATHS, FUNNEL_PATHS, JOURNAL_PATHS, LEDGER_PATHS, OPTIONS_CLONE_PATHS, OPTIONS_LIVE_PATHS, OPTIONS_PATHS, PAPER_OPTIONS_PATHS, GAP_HUNTER_LIVE_PATHS, RADAR_DESK_PATHS, RADAR_PATHS } from "./desk";
 import { logEvent } from "./log";
 
 // The last edition /api/ingest refused for its content, one record per kind, for the monitoring to read. PRIVATE
@@ -8,7 +8,7 @@ import { logEvent } from "./log";
 // that may be RESTRICTED), never anything from the body.
 
 /** The kinds a refusal is recorded for: every document stored as an edition (ingest.ts's storeEdition). */
-export const INGEST_REJECT_KINDS = ["radar", "options", "ledger", "journal", "options-live", "options-clone", "paper-options", "calendar", "funnel", "radar-desk"] as const;
+export const INGEST_REJECT_KINDS = ["radar", "options", "ledger", "journal", "options-live", "options-clone", "paper-options", "gap-hunter-live", "calendar", "funnel", "radar-desk"] as const;
 export type IngestRejectKind = (typeof INGEST_REJECT_KINDS)[number];
 
 /**
@@ -96,6 +96,7 @@ const LATEST_OF: Record<IngestRejectKind, string> = {
   "options-live": OPTIONS_LIVE_PATHS.latest,
   "options-clone": OPTIONS_CLONE_PATHS.latest,
   "paper-options": PAPER_OPTIONS_PATHS.latest,
+  "gap-hunter-live": GAP_HUNTER_LIVE_PATHS.latest,
   calendar: CALENDAR_PATHS.latest,
   funnel: FUNNEL_PATHS.latest,
   "radar-desk": RADAR_DESK_PATHS.latest,

@@ -296,6 +296,7 @@ export const FEEDS: readonly FeedRow[] = [
   { type: "refusal", id: "refusal-options-live", name: "Options live data", short: "Live data", kind: "options-live", severity: "display", verified: true },
   { type: "refusal", id: "refusal-options-clone", name: "Options clone", short: "Clone", kind: "options-clone", severity: "display", verified: true },
   { type: "refusal", id: "refusal-paper-options", name: "Paper options history", short: "Paper", kind: "paper-options", severity: "display", verified: true },
+  { type: "refusal", id: "refusal-gap-hunter-live", name: "Gap Hunter live state", short: "Gap Hunter", kind: "gap-hunter-live", severity: "display", verified: true },
   { type: "refusal", id: "refusal-calendar", name: "Economic calendar", short: "Calendar", kind: "calendar", severity: "display", verified: true },
   { type: "refusal", id: "refusal-funnel", name: "Selection funnel evidence", short: "Funnel", kind: "funnel", severity: "display", verified: true },
   { type: "refusal", id: "refusal-radar-desk", name: "Radar desk file", short: "Radar desk", kind: "radar-desk", severity: "display", verified: true },
