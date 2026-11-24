@@ -1,7 +1,7 @@
 # EXP-0054: Gap Hunter with rotation to the highest-ranked tier-2 name with a valid order (DEC-0076).
 # A forward experiment: in shadow (journal only) until switched on, then paper. No development-span or holdout data is read.
 experiment: EXP-0054
-status: registered              # shadow not built yet; it counts from the first session after the shadow's code reaches the host
+status: registered              # DEC-0076 accepted; the shadow (runner_s, `rotation_shadow` rows) counts from its first session on the host at or after the acceptance
 decision: DEC-0076
 hypotheses: [HYP-0072]
 trials: 1                       # family S, now 4; the global count stays at 87
@@ -15,7 +15,7 @@ inputs:
   pm_bars: data/pm_bars_live/<session>.parquet   # each tier-2 name's saved pre-market bars (runner_s.PM_BARS_DIR)
   journal: data/live/smallcap_journal.jsonl   # PRIVATE; on the host, never in git
   market_data: Alpaca, SIP named on every stock request (DEC-0064)
-first_session: the first session after the shadow's code reaches the host   # 2026-11-23 is excluded (DEC-0076 "Disclosure")
+first_session: the first session at or after DEC-0076's acceptance in which the shadow's code runs on the host   # 2026-11-23 is excluded (DEC-0076 "Disclosure")
 shadow:                         # counts only: no R, no P&L, no exit, no price after an attempt
   sessions_max: 20
   measures:

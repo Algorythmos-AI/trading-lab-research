@@ -2,7 +2,7 @@ id: HYP-0072
 trial: "GAP-HUNTER-ROTATE"
 family: S                       # the stock desk's paper book (DEC-0066): forward-only paper trials, counted apart from the global 87; total 4
 spec: SPEC-0001 v1.0.1          # the entries, the execution musts and the exit are spec.yaml's, unchanged; only which tier-2 name rests the order differs
-status: pre-registered          # DEC-0076 (PROPOSED 2026-11-23). NOT blind: chosen after 2026-11-23's session, whose counts were seen (DEC-0076 "Disclosure"); that day is not counted
+status: pre-registered          # DEC-0076 (ACCEPTED; proposed 2026-11-23). NOT blind: chosen after 2026-11-23's session, whose counts were seen (DEC-0076 "Disclosure"); that day is not counted
 arm: shadow                     # journal only, no orders, until a dated note in DEC-0076 switches it on in place of HYP-0071; then paper
 statement: "With DEC-0068's selection unchanged, resting at each minute the order of the highest-ranked tier-2 name that has a valid registered gap entry, at most one attempt and one trade a day in the US$600 book, has positive mean R per closed trade after the fills the paper broker actually gives."
 rule: gap_hunter_rotation       # DEC-0076 "The rule (frozen)"
