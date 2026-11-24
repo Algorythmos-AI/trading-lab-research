@@ -1011,10 +1011,46 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
 
     def reconciled(p: TradePlan) -> list[str]:
         """Orders and position against one plan. A plan that sells in parts settles a part sale a crash left
-        resting before its stop is sized."""
+        resting before its stop is sized. Every other active plan's symbol is kept: its orders are never this
+        plan's strays (DEC-0077)."""
+        keep = {x.symbol for x in [plan, *held] if x is not None and x.active and x is not p}
         if isinstance(p, MultiPlan):
-            return oms.reconcile_all([p])
-        return oms.reconcile({p.symbol}, {}, plan=p)
+            return oms.reconcile_all([p], keep=keep)
+        return oms.reconcile({p.symbol}, {}, plan=p, keep=keep)
+
+    def protect(p: TradePlan) -> None:
+        """Sync and protect one plan, in its own guard (DEC-0077). A refusal never leaves the poll: it is
+        journaled and paged, and when the bid is already at or under the plan's stop the plan leaves at market,
+        where the simulation is stopped out too. Otherwise the next poll tries again; the exits run either way."""
+        try:
+            oms.sync(p)
+            acts = reconciled(p)
+            if acts:
+                log("reconcile", actions=acts)
+            return
+        except Exception as e:  # noqa: BLE001 — a protect step must never cost the plan its exit management
+            err = e.__class__.__name__
+        log("protect_failed", trade_id=p.trade_id, symbol=p.symbol, error=err)
+        pager.once_per_day("paper-s:protect-failed", "Gap Hunter could not protect a position",
+                           "The broker refused or did not answer the stop for an open position. The desk keeps "
+                           "managing the exit; if the market is already under the stop it sells at market. The "
+                           "session's journal (protect_failed) names the trade.", 5)
+        if err == "TransportError" or p.state not in ACTIVE_POSITION or oms.held_for_exit(p):
+            return
+        try:
+            q = with_deadline(data.quote, p.symbol)
+        except Exception:  # noqa: BLE001
+            q = None
+        if q is not None and 0 < float(q[0]) <= p.stop:
+            if isinstance(p, GapPlan):
+                p.wt["exit"] = "stop"
+                store.save(p)
+            log("exit_signal", trade_id=p.trade_id, symbol=p.symbol, reason="stop", why="stop_under_market")
+            try:
+                oms.exit_now(p, None, reason="stop", market=True)
+            except Exception as e:  # noqa: BLE001
+                log("protect_failed", trade_id=p.trade_id, symbol=p.symbol, error=e.__class__.__name__,
+                    step="exit")
 
     try:
         sweep_positions()
@@ -1766,10 +1802,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             for p in [plan, *held]:
                 if p is None or not p.active:
                     continue
-                oms.sync(p)
-                acts = reconciled(p)
-                if acts:
-                    log("reconcile", actions=acts)
+                protect(p)
             # ---- positions no plan of today opened: out at once (retried every 5 minutes). Its own block: a
             # fault here must never cost the day's plan its exit management. ----
             try:
