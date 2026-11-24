@@ -165,7 +165,10 @@ lapses, and `sudo wt-set-secrets` with a new token is the fix. Then go to step 4
    ```
 3. **Give the host a token** for reading the checks API, pushing the weekly evidence branch and, on the token
    path, every fetch. One fine-grained token, this repository only, permissions *Contents: read and write*,
-   *Pull requests: read and write*, *Checks: read* (Metadata is implied), with an expiry. Store it under `GH_TOKEN`
+   *Pull requests: read and write*, *Actions: read* (Metadata is implied), with an expiry. A fine-grained token
+   cannot hold *Checks* (GitHub keeps it for GitHub Apps); the deploy reads the same CI jobs through the Actions
+   API instead (`src/wt/ops/ci.py`). Each token needs a new name. When it expires, the deploy refuses with
+   "GitHub API answered HTTP 401": make a new token and store it the same way. Store it under `GH_TOKEN`
    with `sudo wt-set-secrets` (Enter keeps every other value). The evidence job pushes to GitHub over HTTPS with
    this token; it never pushes through `origin`. Its pull requests target `integration`; they merge on their own
    only when the repository setting "Allow auto-merge" is on, otherwise you merge them like any other.
