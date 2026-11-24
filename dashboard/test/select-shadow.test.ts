@@ -91,8 +91,8 @@ describe("the Radar status words", () => {
 describe("the shadow's progress (version 5)", () => {
   const html = (shadow: SelectBlock | null) =>
     renderToString(createElement(RadarPipelineView, { file: fixturePipeline(FROZEN), nowMs: FROZEN, shadow }));
-  const bad = (f: (d: any) => void) => {
-    const d = structuredClone(paperV2) as any;
+  const bad = (f: (d: Record<string, any>) => void) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+    const d = structuredClone(paperV2) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
     f(d);
     return validatePaperOptions(d).ok;
   };
@@ -125,7 +125,7 @@ describe("the shadow's progress (version 5)", () => {
   });
 
   it("names every reason a session is not clean in words", () => {
-    const sessions = [{ ...block.sessions[1]!, check: { ...block.sessions[1]!.check!, clean: false, reasons: ["late", "replay_differs"] as any, replay: "differs" as const } }];
+    const sessions = [{ ...block.sessions[1]!, check: { ...block.sessions[1]!.check!, clean: false, reasons: ["late", "replay_differs"] as ("late" | "replay_differs")[], replay: "differs" as const } }];
     const out = html({ ...block, sessions });
     expect(out).toContain('data-shadow-check="not_clean"');
     expect(out).toContain("Not clean: late, the replay differs");
