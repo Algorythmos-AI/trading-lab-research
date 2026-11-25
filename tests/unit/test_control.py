@@ -306,3 +306,39 @@ def test_make_kill_refuses_an_unknown_desk_and_writes_nothing(tmp_path):
     got = _make("kill", "gap", tmp_path)
     assert got.returncode != 0 and "unknown DESK=gap" in got.stderr
     assert not any(tmp_path.rglob("KILL"))
+
+
+# ---------------------------------------------------------------- what shows each desk's kill file
+@pytest.fixture
+def desk_files(tmp_path, monkeypatch):
+    s, o = tmp_path / "smallcap" / "KILL", tmp_path / "options" / "KILL"
+    monkeypatch.setattr(control, "KILL_S", s)
+    monkeypatch.setattr(control, "KILL_OPTIONS", o)
+    monkeypatch.setattr(control, "DESK_KILLS", {"root": None, "options": o, "s": s})
+    return {"root": tmp_path / "KILL", "s": s, "options": o}
+
+
+def test_kill_states_read_every_desk_file(tmp_path, desk_files):
+    assert control.kill_states(tmp_path) == {"root": False, "options": False, "s": False}
+    assert control.paused_note(tmp_path) == ""
+    desk_files["s"].parent.mkdir()
+    desk_files["s"].write_text("x")
+    assert control.kill_states(tmp_path) == {"root": False, "options": False, "s": True}
+    assert control.paused_note(tmp_path) == " Kill switch on: Gap Hunter. New entries there are paused."
+
+
+def test_make_status_shows_gap_hunter_on_when_only_its_file_is(tmp_path, desk_files, monkeypatch, capsys):
+    """The audit's case: the root file off, Gap Hunter's on. Status used to print one `off`."""
+    from wt.ops import jobs
+    desk_files["s"].parent.mkdir()
+    desk_files["s"].write_text("x")
+    monkeypatch.setattr(jobs, "last_runs", lambda: {})
+    monkeypatch.setattr(jobs, "cadence", lambda: [])
+    monkeypatch.setattr("wt.ops.alerts.Alerts.firing", lambda self: {})
+    monkeypatch.setattr("wt.ops.preflight.run_checks", lambda root: [])
+    assert jobs.status(tmp_path) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert out[0].startswith("KILL switches")
+    assert out[1].split() == ["Gap", "Hunter", "ON", "(no", "new", "entries)"]
+    assert out[2].split() == ["Options", "clone", "off"]
+    assert out[3].split() == ["Options", "clone", "(root", "KILL)", "off"]

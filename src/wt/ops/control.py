@@ -45,6 +45,34 @@ KILL_OPTIONS = OPTIONS_DIR / "KILL"                              # wt.core.desk.
 # The desks `make kill DESK=...` / `make unkill DESK=...` name. The root file is the options clone's other file; no
 # DESK (or DESK=stocks) means the root file. The audit row's detail carries this name, which stays on the host.
 DESK_KILLS = {"root": None, "options": KILL_OPTIONS, "s": KILL_S}
+# How `make status`, the forward summary and the dashboard name each file. The root file is the options clone's too.
+KILL_LABELS = {"s": "Gap Hunter", "options": "Options clone", "root": "Options clone (root KILL)"}
+
+
+def kill_states(root: Path = ROOT) -> dict[str, bool]:
+    """Is each desk's kill file on? Keys as DESK_KILLS: `s` (Gap Hunter), `options` (the clone's own file) and
+    `root` (the root KILL, which the clone also reads). A file that can't be checked counts as on: a status line
+    must never say a desk can enter when it can't tell."""
+    out: dict[str, bool] = {}
+    for desk, f in DESK_KILLS.items():
+        path = f or root / "KILL"
+        try:
+            out[desk] = path.exists()
+        except OSError:
+            out[desk] = True
+    return out
+
+
+def kill_lines(root: Path = ROOT) -> list[str]:
+    """`make status`'s kill switch lines: one per desk's file."""
+    states = kill_states(root)
+    return [f"  {KILL_LABELS[d]:27} {'ON (no new entries)' if states[d] else 'off'}" for d in ("s", "options", "root")]
+
+
+def paused_note(root: Path = ROOT) -> str:
+    """The forward summary's note on which desks' kill files are on, or "" when none is."""
+    on = [KILL_LABELS[d] for d, v in kill_states(root).items() if v]
+    return f" Kill switch on: {', '.join(on)}. New entries there are paused." if on else ""
 
 
 BUSY_UNKILL = ("paper B is running (its lock is held): removing KILL now would re-enable entries mid-session. "

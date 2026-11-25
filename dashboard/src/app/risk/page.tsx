@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AlertHistoryPanel } from "@/components/v3/audit";
 import { accountRisk } from "@/lib/account-risk";
 import { newYork, shortDate, sydney, txt } from "@/lib/format";
+import { anyKillOn, deskKills, killOverall } from "@/lib/kill";
 import { activeWindow } from "@/lib/freshness";
 import { moneyView, type JournalDoc } from "@/lib/journal";
 import type { OptionsClone } from "@/lib/options-clone.types";
@@ -67,16 +68,16 @@ function AccountSection({ doc, now }: { doc: JournalDoc; now: Date }) {
 
 /** True when a robot has something that needs a look: then the section opens by itself. */
 function robotsNeedLook(s: Snapshot): boolean {
-  return s.kill?.on === true || list(s.alerts?.firing).some((a) => isRedAlert(a.key));
+  return anyKillOn(s) === true || list(s.alerts?.firing).some((a) => isRedAlert(a.key));
 }
 
 /**
  * The paper robots' side of risk: the three of them in a line each, then what the host reports about them all (the
- * alerts that have not cleared, the lab's kill switch, when it expects to be awake). No money is shown here.
+ * alerts that have not cleared, each desk's kill switch, when it expects to be awake). No money is shown here.
  */
 function RobotsSection({ s, clone, now }: { s: Snapshot; clone: OptionsClone | null; now: Date }) {
   const alerts = list(s.alerts?.firing).length;
-  const kill = s.kill?.on;
+  const kill = anyKillOn(s);                      // every desk's file the snapshot carries, not the root one alone
   return (
     <>
       <RobotsRow lines={robotLines(s, clone)} />
@@ -106,32 +107,31 @@ function RobotsSection({ s, clone, now }: { s: Snapshot; clone: OptionsClone | n
 
 function KillPanel({ s }: { s: Snapshot }) {
   const k = s.kill;
+  const rows = deskKills(s);
+  const on = killOverall(rows);
+  const word = (v: boolean | null) => (v === true ? "On: no new entries" : v === false ? "Off" : "Not sent");
   return (
     <Panel
-      title="Kill switch"
+      title="Kill switches"
       icon={Power}
-      means="The lab's kill switch. When on, the options clone opens no new paper trades but keeps managing open ones. Gap Hunter has its own switch, which the host does not send to this site yet. Both are switched on the host, never from this page."
+      means="Each desk has its own kill file, and no single file stops every desk. Gap Hunter reads only its own; the options clone reads the root file and its own, which this site is not sent (make status on the host shows every file). A desk whose file is on opens no new trades but keeps managing open ones. They are switched on the host, never from this page."
       action={
-        k?.on === true ? (
+        on === true ? (
           <StatusBadge tone="warn">On</StatusBadge>
-        ) : k?.on === false ? (
+        ) : on === false ? (
           <StatusBadge tone="good">Off</StatusBadge>
         ) : (
           <StatusBadge tone="neutral">Unknown</StatusBadge>
         )
       }
     >
-      {k?.on ? (
-        <KeyValues
-          className="sm:grid-cols-1"
-          items={[
-            { label: "Since", value: `${sydney(k.since)} Sydney` },
-            { label: "Reason", value: txt(k.reason) },
-          ]}
-        />
-      ) : (
-        <p className="text-muted-foreground text-sm">New entries are allowed.</p>
-      )}
+      <KeyValues
+        className="sm:grid-cols-1"
+        items={[
+          ...rows.map((r) => ({ label: r.label, value: word(r.on) })),
+          ...(k?.on ? [{ label: "Root KILL since", value: `${sydney(k.since)} Sydney` }] : []),
+        ]}
+      />
     </Panel>
   );
 }

@@ -94,7 +94,16 @@ def drive_summary(tmp: Path) -> list[tuple[str, str]]:
         {"session": T, "session_marker": True}]))
     line = jobs.forward_summary(led)
     assert line
-    return [alerts.render("Trading Lab daily summary", line + " The KILL file is present: new entries are paused.")]
+    from wt.ops import control                     # every desk's kill file on: the longest note the page can carry
+    with pytest.MonkeyPatch.context() as mp:
+        s, o = tmp / "s" / "KILL", tmp / "o" / "KILL"
+        for f in (tmp / "KILL", s, o):
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text("x")
+        mp.setattr(control, "DESK_KILLS", {"root": None, "options": o, "s": s})
+        note = control.paused_note(tmp)
+    assert note.count(",") == 2
+    return [alerts.render("Trading Lab daily summary", line + note)]
 
 
 def drive_flag_chain(tmp: Path, monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:

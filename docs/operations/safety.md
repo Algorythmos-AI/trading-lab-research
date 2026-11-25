@@ -55,13 +55,18 @@ Either way, a change takes effect without a restart.
   check, and each runner logs the change.
 - **Not audited.** A file written or removed by hand (`echo … > var/smallcap/KILL`, `rm`) writes no audit entry. Gap
   Hunter logs `kill_state` in its own journal either way.
-- **`make status` reads only the root file.** It prints `KILL switch: ON (no new entries)` when only the root file
-  exists (`src/wt/ops/jobs.py`, `status`), even while Gap Hunter can still enter.
-- **The forward-test summary's "new entries are paused" line** also reads only the root file.
-- **The dashboard.** Its top-level kill flag reads the root file (`src/wt/ops/publish.py`); Gap Hunter's own panel
-  shows its own file.
+- **`make status` shows every desk's file.** One line each for Gap Hunter, the clone's own file and the root file,
+  `ON (no new entries)` or `off` (`src/wt/ops/jobs.py`, `status`; the files are named in `src/wt/ops/control.py`,
+  `kill_states`). A file it cannot check counts as on.
+- **The forward-test summary** names each desk whose file is on ("Kill switch on: Gap Hunter. New entries there are
+  paused.").
+- **The dashboard.** The snapshot carries the root file (`kill.on`) and Gap Hunter's own file (`gap_hunter.kill`,
+  `src/wt/ops/publish.py`). The Risk page's kill panel lists both, and the health banner turns amber for each one
+  that is on (`dashboard/src/lib/kill.ts`). The clone's own `var/options/KILL` is not sent to the site: adding it
+  changes the snapshot types, which sit inside the Options desk's frozen code hashes (DEC-0051). Use `make status`.
 
-**Check each desk's file before you trust a stop.**
+These read the files the code names. A desk can also be stopped by its other gates (a latch, a stop rule); the kill
+files are only one of them.
 
 ## 3. Loss latches
 
