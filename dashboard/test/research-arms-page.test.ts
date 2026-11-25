@@ -160,6 +160,31 @@ describe("the shadow arms' figures", () => {
   });
 });
 
+describe("the page's wording and layout details", () => {
+  const html = render(ok(doc(paperV2, intoWindow))).replace(/<!-- -->/g, "");
+
+  it("puts a space on both sides of the dot between a trial's base and its test", () => {
+    const cards = html.split("data-trial=").slice(1).map((c) => c.slice(0, c.indexOf("</li>")));
+    expect(cards).toHaveLength(14);
+    for (const c of cards) expect(c, c.slice(0, 40)).toMatch(/\S \u00b7 tests the /);
+    expect(html).not.toMatch(/[^\s>]\u00b7 tests/);
+  });
+
+  it("says a rate or an average is shown from 8 trades, not that it was taken from 8", () => {
+    expect(text(html)).not.toMatch(/(^|[^n] )From 8 trades/);
+    expect(text(html)).toContain("Shown from 8 trades");
+  });
+
+  it("says the stage-2 tables are locked until 20 counted sessions, not that they come next", () => {
+    expect(text(html)).not.toContain("Coming next");
+    expect(count(html, /Locked until 20 counted sessions/g)).toBe(4);
+  });
+
+  it("keeps each arm's id on one line in the session grid", () => {
+    expect(count(html, /<th scope="row" class="[^"]*whitespace-nowrap/g)).toBe(4);
+  });
+});
+
 describe("the calendar", () => {
   it("has a row per shadow arm, a cell per window session and the 11 sessions never booked", () => {
     const d = doc(paperV2, intoWindow);
