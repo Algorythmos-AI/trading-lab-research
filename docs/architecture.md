@@ -8,9 +8,12 @@ Checked against the code at `9441a547` and the live services on 2026-11-25. Name
 ```
                     ┌──────────────────────── GCP VM trading-lab-host (us-east1-b) ────────────────────────┐
  GitHub             │ /home/wt/trading = live checkout of main (production), user wt, systemd timers       │
- integration ──PR──►│   jobs (src/wt/ops/schedule.py) ── market data ──► Alpaca data API                    │
- main ──deploy─────►│   paper-s (Gap Hunter), paper-o (options clone) ── paper orders ──► 3 Alpaca paper    │
-  (wt-deploy /      │                                                                       accounts        │
+ feature PR         │   jobs (src/wt/ops/schedule.py) ── market data ──► Alpaca data API                    │
+  ▼ squash          │                                                                                       │
+ integration        │   paper-s (Gap Hunter), paper-o (options clone) ── paper orders ──► 3 Alpaca paper    │
+  ▼ release PR      │                                                                       accounts        │
+ main ──deploy─────►│                                                                                       │
+  (wt-deploy /      │                                                                                       │
    deploy-auto)     │   publishers ── signed POST (HMAC) ──────────────────────────┐                        │
                     │   backups, lease, lab tape ──► Cloudflare R2                  │                        │
                     │   wt-webull-pull (user wt-webull) ──► Webull AU, read only    │                        │
@@ -26,6 +29,9 @@ Checked against the code at `9441a547` and the live services on 2026-11-25. Name
    cloud routines (Radar build, options edition, daily review)  ·  trading-options-funnel (private repo)
    focus-card-ledger (private repo)                             ·  see runbooks/cloud-routines.md
 ```
+
+Only `main` reaches the host: `integration` goes to `main` through a release PR (ADR 0009), and a push to
+`integration` deploys at most the staging dashboard. See [operations/deploy.md](operations/deploy.md).
 
 | Piece | Canonical page |
 |---|---|
