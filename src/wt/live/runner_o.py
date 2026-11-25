@@ -1405,11 +1405,23 @@ def load_events() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     return rows(CONFIG_DIR / "events" / "macro_events.csv"), rows(CONFIG_DIR / "events" / "earnings.csv")
 
 
+ROLES = ("primary", "shadow")
+
+
+def host_role() -> str:
+    """WT_ROLE (unset is primary). Anything else refuses the session: a mistyped `shadow` must never trade as a
+    primary host would."""
+    role = env("WT_ROLE", "primary").strip()
+    if role not in ROLES:
+        raise SystemExit(f"runner_o refuses to start: WT_ROLE must be one of {', '.join(ROLES)}")
+    return role
+
+
 def for_role(broker: Any, exits_only: str | None) -> tuple[Any, str | None]:
     """On a shadow host (WT_ROLE=shadow) the clone sends nothing, as Gap Hunter (wt.live.runner_s): its broker is
     wrapped in ShadowBroker, whose every order, cancel and replace raises, and the session is exits-only so it never
-    tries an entry. Reads pass through. Any other role (the default is primary) changes nothing."""
-    if env("WT_ROLE", "primary") != "shadow":
+    tries an entry. Reads pass through. On a primary host nothing changes; any other value refuses (host_role)."""
+    if host_role() != "shadow":
         return broker, exits_only
     from wt.brokers.shadow import ShadowBroker
     return ShadowBroker(broker), "shadow host: this session never places orders"
@@ -1420,6 +1432,7 @@ def run(day: dt.date | None = None) -> int:
     from wt.brokers.alpaca_options_paper import AlpacaOptionsPaperBroker, keys
     if env("MODE", "backtest") != "paper":
         raise SystemExit("runner_o refuses to start: MODE must be 'paper'")
+    host_role()                         # before any broker is built: an unknown role never reaches one
     now = dt.datetime.now(NEW_YORK)
     day = day or now.date()
     if not lv.is_session(day.isoformat()):

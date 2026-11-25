@@ -105,3 +105,14 @@ def test_the_shadow_broker_passes_only_named_reads():
     assert not hasattr(b, "placed")                   # not a listed read: the inner adapter's state stays hidden
     assert not hasattr(ShadowBroker(object()), "marks")   # an adapter without marks: hasattr stays False
     assert {"place", "cancel", "replace_stop"}.isdisjoint(ShadowBroker.READS)
+
+
+@pytest.mark.parametrize("role", ["shdow", "Shadow", "", "secondary"])
+def test_an_unknown_role_refuses_before_any_broker_is_built(monkeypatch, role):
+    """Fail closed: a mistyped shadow role must not run as a primary host would."""
+    import wt.brokers.alpaca_options_paper as aop
+    monkeypatch.setenv("MODE", "paper")
+    monkeypatch.setenv("WT_ROLE", role)
+    monkeypatch.setattr(aop, "AlpacaOptionsPaperBroker", lambda *a: pytest.fail("no broker for an unknown role"))
+    with pytest.raises(SystemExit, match="WT_ROLE must be one of primary, shadow"):
+        runner_o.run(dt.date(2026, 11, 25))
