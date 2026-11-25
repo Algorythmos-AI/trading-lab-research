@@ -193,6 +193,21 @@ wt.ops.publish                            POST /api/ingest            (productio
   `src/lib/robot-b.ts`). What the host still publishes about it is left out by id (`RETIRED_*` in
   `src/lib/robots.ts`): its scoreboard rows, the G2 tile and progress line, three digest lines and the host's
   "best candidate" line. Its `paper-b` job has no lane on Today and is never expected: absent is normal.
+- **Research arms** (`/research/arms`, `/research-arms` redirects there; `src/app/research/arms/page.tsx`,
+  `src/components/research-arms/`, `src/lib/research-arms.ts`): the story of the options clone's fourteen research
+  arms (DEC-0041, EXP-0030), from registration to the no-verdict close on 2027-11-05, and the options lab that replaced
+  them (DEC-0060, DEC-0067, EXP-0052). The dates and rules are fixed facts of those records, in `lib/research-arms.ts`;
+  the figures are read from the paper options document only: the four shadow arms' simulated trades, cut again to
+  sessions up to 2026-11-17, one panel per arm in one `shadow` frame and never added together, with the `paper.ts`
+  helpers; and the lab block's shadow and counted sessions. The tag arms show no figure. Arms are named by hypothesis
+  id and short neutral words of the page's own, never a registered trial name. Each record id links to the Reference
+  Registry's drill-down (`/research/records/<id>`). Also drawn from the same data: the record lineage (ids only,
+  `src/lib/research-lineage.ts`, for the Registry to replace), the pipeline with each box's last sign of life (stale
+  amber, switched off grey), a calendar of the 9 window sessions (from `market-calendar.json`) against the 20 each
+  trial needed, and the lab's gate to its first tables (5 shadow sessions, then 20 counted) with EXP-0052's four
+  tables locked. The verdict section draws the method with no numbers; a descriptive band on two shadow arms' real
+  trades (DEC-0080, EXP-0056, `src/lib/research-arms-band.ts`) is built and switched off until DEC-0080 is accepted.
+  Display only: no field is added to any document.
 - **Paper options** (`/paper`, `stocksdelta/paper-options`, schema `src/lib/paper-options.schema.json`;
   `paper-options.types.ts` is generated; DEC-0057): every closed paper option trade, from two books that are
   shown apart and never added together. The options clone's trades come from its journal and the research arms'

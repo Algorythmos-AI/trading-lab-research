@@ -32,6 +32,11 @@ export const NON_REAL_FRAMES = {
   ],
   /** /risk: the owner's own account, then the robots' alerts and the kill switch. No paper money, so no frame. */
   risk: [],
+  /**
+   * /research/arms: the research arms' story. Its only money is the four shadow arms' simulated trades, one panel each,
+   * in one frame (the same figures the Paper page's "Research arms" frame shows, cut to the arms' window).
+   */
+  "research-arms": [{ env: "shadow", label: "Research arms, simulated detail" }],
   /** /gap-hunter: the stock robot's own page, all of it its paper desk. The frame Robot B's page had, under the robot's new name. */
   "gap-hunter": [{ env: "paper", label: "Gap Hunter" }],
 } as const satisfies Record<string, readonly NonRealFrame[]>;

@@ -5,6 +5,17 @@ import { describe, expect, it } from "vitest";
 // The desk shows the study's practices in our own words only (AGENTS.md data classes): no handle, no setup name from
 // the record's glossary, in the source text of the files that write the desk's copy.
 const FILES = [
+  "../src/lib/research-arms.ts",
+  "../src/components/research-arms/arms-story.tsx",
+  "../src/components/research-arms/pipeline.tsx",
+  "../src/components/research-arms/verdict-test.tsx",
+  "../src/app/research/arms/page.tsx",
+  "../src/lib/research-arms-band.ts",
+  "../src/lib/research-lineage.ts",
+  "../src/components/research-arms/band.tsx",
+  "../src/components/research-arms/gate-tracker.tsx",
+  "../src/components/research-arms/heatmap.tsx",
+  "../src/components/research-arms/lineage.tsx",
   "../src/lib/entry-checks.ts",
   "../src/lib/trade-state.ts",
   "../src/lib/trade-now.ts",

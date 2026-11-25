@@ -11,7 +11,11 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: process.cwd(),
   // The stock robot was renamed Gap Hunter (2026-11-20): its page moved, and the old address still lands on it.
   async redirects() {
-    return [{ source: "/robot-b", destination: "/gap-hunter", permanent: true }];
+    return [
+      { source: "/robot-b", destination: "/gap-hunter", permanent: true },
+      // The research arms' story lives under Research; the short address lands on it.
+      { source: "/research-arms", destination: "/research/arms", permanent: false },
+    ];
   },
 };
 
