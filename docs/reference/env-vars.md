@@ -31,7 +31,7 @@ reads through a variable (for example a key pair chosen per desk) are listed her
 | `APCA_CLONE_KEY_ID`, `APCA_CLONE_SECRET_KEY` | The options clone (`brokers/alpaca_options_paper.py`, `options/paper_site.py`); the lab's key prefix | Host secrets |
 | `APCA_S_KEY_ID`, `APCA_S_SECRET_KEY` | Gap Hunter (`live/runner_s.py`); `paper-s` is refused without them (`ops/jobs.py`) | Host secrets (see [safety.md](../operations/safety.md) on whether the host holds them); Mac |
 | `APCA_OPTIONS_KEY_ID`, `APCA_OPTIONS_SECRET_KEY` | **Legacy.** The clone's fallback when `APCA_CLONE_*` is missing, and `options/live.py`'s positions read. [paper-accounts.md](../runbooks/paper-accounts.md) says the account was deleted | Host secrets (passed if present; not set when last checked, 2026-11-20) |
-| `WT_ROLE` | `live/runner_s.py`, `live/runner_b.py`, `ops/backup.py`, …: `shadow` makes Gap Hunter's broker refuse orders ([safety.md](../operations/safety.md)) | Host secrets. `wt-set-secrets` offers `shadow` as its default, the code defaults to `primary` |
+| `WT_ROLE` | `live/runner_s.py`, `live/runner_o.py`, `live/runner_b.py`, `ops/backup.py`, …: `shadow` makes Gap Hunter's and the options clone's brokers refuse orders ([safety.md](../operations/safety.md)) | Host secrets (`primary` on the host, checked 2026-11-25). `wt-set-secrets` offers `shadow` as its default, the code defaults to `primary` |
 | `WT_EXITS_ONLY` | `live/runner_o.py`, `live/runner_b.py`. Read, but nothing sets it any more | — |
 
 ## Host identity and runtime

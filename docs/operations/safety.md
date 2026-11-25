@@ -13,11 +13,11 @@ Three layers keep orders away from a live account.
 | The paper-only lock | Refuses unless `MODE` is `paper`, `LIVE_TRADING_ENABLED` is not true, the trading URL (and `APCA_API_BASE_URL` if set) is exactly `https://paper-api.alpaca.markets`, and the account number starts with `PA`. All four are checked when an adapter is built; before every order, `place()` checks the environment part again (`MODE`, `LIVE_TRADING_ENABLED`, `APCA_API_BASE_URL`) | `src/wt/core/safety.py` |
 | `MODE` is set per job | `wt.ops.jobs` starts each job's process with that job's `MODE`. The runners also refuse to start unless `MODE=paper` | `src/wt/ops/jobs.py` (`run_child`), `src/wt/live/runner_s.py`, `src/wt/live/runner_o.py` |
 
-On a host with `WT_ROLE=shadow`, Gap Hunter (and the retired QQQ runner) wrap their broker in `ShadowBroker`, which
-raises on every order, cancel and replace call (`src/wt/brokers/shadow.py`, `runner_s.py`). **The options clone does
-not read `WT_ROLE`.** On a shadow host its kill file blocks only new entries; a plan it already holds still manages
-its exits and can send paper exit orders. A shadow run is order-free for the clone only if the clone holds nothing,
-or if `wt-paper-o` is not running.
+On a host with `WT_ROLE=shadow`, Gap Hunter, the options clone (and the retired QQQ runner) wrap their broker in
+`ShadowBroker`, which raises on every order, cancel and replace call (`src/wt/brokers/shadow.py`; `runner_s.py`,
+`runner_o.py` `for_role`). The clone's session is also exits-only there, so it tries no entry. A plan it already
+holds is still read and its exits are still worked out, but no exit order can leave: manage such a position by hand.
+The host runs `WT_ROLE=primary` (checked 2026-11-25), where none of this applies.
 
 `MODE`, `LIVE_TRADING_ENABLED` and any live key belong to the owner alone ([AGENTS.md](../../AGENTS.md), rule 1).
 
