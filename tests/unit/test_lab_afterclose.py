@@ -113,3 +113,20 @@ def test_a_listed_contract_without_open_interest_is_counted_as_null(tmp_path: Pa
     c = afterclose.open_interest(api, {}, ["AAA"], dt.date(2026, 11, 19), dt.date(2026, 11, 27),
                                  {"AAA261127C00100000"}, ow, gw, time.monotonic() + 60)
     assert c["contracts"] == 1 and c["null_open_interest"] == 1 and c["missing"] == 0 and c["dates"] == {"none": 1}
+
+
+def test_open_interest_counts_tier1_contracts_and_their_nulls_apart(tmp_path: Path) -> None:
+    class NoValue(Api):
+        def __call__(self, url: str, params: Mapping[str, str], headers: Mapping[str, str], timeout: float) -> Answer:
+            a = super().__call__(url, params, headers, timeout)
+            if url.endswith("/v2/options/contracts") and isinstance(a.body, dict):
+                a.body["option_contracts"][1].pop("open_interest")                # Alpaca sends no value
+            return a
+
+    ow, gw = PartWriter(tmp_path, "open_interest"), PartWriter(tmp_path, "gap")
+    keep = {"AAA261119C00100000", "AAA261119C00200000", "BBB261119C00100000"}
+    c = afterclose.open_interest(NoValue(), {}, ["AAA", "BBB"], dt.date(2026, 11, 19), dt.date(2026, 11, 27), keep, ow, gw,
+                                 time.monotonic() + 60, session=dt.date(2026, 11, 19),
+                                 tier1={"AAA261119C00200000", "BBB261119C00100000"})
+    assert c["contracts"] == 3 and c["null_open_interest"] == 1
+    assert c["contracts_tier1"] == 2 and c["null_open_interest_tier1"] == 1        # the null one is tier 1

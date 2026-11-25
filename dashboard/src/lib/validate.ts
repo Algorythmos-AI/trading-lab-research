@@ -27,6 +27,9 @@ import type { RadarDeskDoc } from "./radar-desk.types";
 import radarRunSchema from "./radar-run.schema.json";
 import type { RadarRunDoc } from "./radar-run.types";
 import radarSchema from "./radar.schema.json";
+import registryPolicy from "./registry-policy.json";
+import registrySchema from "./registry.schema.json";
+import type { RegistryIndex } from "./registry.types";
 import type { RadarEdition } from "./radar.types";
 import schema from "./snapshot.schema.json";
 import type { Snapshot } from "./types";
@@ -48,6 +51,7 @@ const validateLedgerSchema = ajv.compile<LedgerEdition>(ledgerSchema);
 const validateFunnelSchema = ajv.compile<FunnelDoc>(funnelSchema);
 const validateRadarDeskSchema = ajv.compile<RadarDeskDoc>(radarDeskSchema);
 const validateRadarRunSchema = ajv.compile<RadarRunDoc>(radarRunSchema);
+const validateRegistrySchema = ajv.compile<RegistryIndex>(registrySchema);
 
 export const STOCKS_SCHEMA = "trading-lab/snapshot";
 export const CRYPTO_SCHEMA = "trading-lab/crypto-snapshot";
@@ -529,4 +533,62 @@ function radarDeskMeaning(doc: RadarDeskDoc): string[] {
     if (m.date < doc.session || m.date > doc.next_session) errors.push(`/macro_in_hold/${i}/date: outside the hold`);
   });
   return errors;
+}
+
+/** The Reference Registry's index (stocksdelta/registry), built in CI by scripts/build_registry.py. */
+export const REGISTRY_SCHEMA = "stocksdelta/registry";
+
+export function isRegistry(data: unknown): boolean {
+  return data !== null && typeof data === "object" && (data as { schema?: unknown }).schema === REGISTRY_SCHEMA;
+}
+
+/**
+ * The one gate on what the registry may carry (AGENTS.md data classes, the RECORD class): registry-policy.json, which
+ * the builder reads too. While its prose is off, no key that could hold a record's words is taken at any depth, even
+ * if a later schema allowed it.
+ */
+export const REGISTRY_PROSE: boolean = (registryPolicy as { prose?: unknown }).prose === true;
+export const REGISTRY_PROSE_KEYS: ReadonlySet<string> = new Set(["title", "summary", "statement", "name", "path", "paths", "question", "text", "body", "note"]);
+
+function proseKeys(data: unknown): string[] {
+  const hits: string[] = [];
+  const walk = (node: unknown, pointer: string) => {
+    if (hits.length >= MAX_ERRORS) return;
+    if (Array.isArray(node)) return node.forEach((c, i) => walk(c, `${pointer}/${i}`));
+    if (node === null || typeof node !== "object") return;
+    for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+      const at = `${pointer}/${k.slice(0, 60)}`;
+      if (REGISTRY_PROSE_KEYS.has(k)) hits.push(at);
+      walk(v, at);
+    }
+  };
+  walk(data, "");
+  return hits;
+}
+
+export type RegistryValidationResult = { ok: true; doc: RegistryIndex } | { ok: false; errors: string[] };
+
+/** A registry index: the denylist, the prose gate, its own closed schema, then what the schema cannot say. */
+export function validateRegistry(data: unknown): RegistryValidationResult {
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    return { ok: false, errors: ["/: must be an object"] };
+  }
+  const errors = findDenied(data).map((p) => `${p}: key is not allowed to be published`);
+  if (!REGISTRY_PROSE) errors.push(...proseKeys(data).map((p) => `${p}: record text is off (registry-policy.json)`));
+  if (!validateRegistrySchema(data)) {
+    errors.push(...(validateRegistrySchema.errors ?? []).map(describe));
+  }
+  if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
+  const doc = data as RegistryIndex;
+  if (doc.run_id !== `${doc.branch}@${doc.sha}`) errors.push("/run_id: must be <branch>@<sha>");
+  const seen = new Set<string>();
+  doc.records.forEach((r, i) => {
+    if (seen.has(r.id)) errors.push(`/records/${i}/id: appears twice`);
+    seen.add(r.id);
+  });
+  doc.tombstones.forEach((t, i) => {
+    if (seen.has(t.id)) errors.push(`/tombstones/${i}/id: is also a live record`);
+  });
+  if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
+  return { ok: true, doc };
 }

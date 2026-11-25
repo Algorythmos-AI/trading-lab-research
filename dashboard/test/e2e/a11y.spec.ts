@@ -21,6 +21,8 @@ const PAGES = [
   "/strategies",
   "/research",
   "/research/arms",
+  "/research/records",
+  "/research/records/DEC-9001",
   "/operations",
   "/risk",
   "/engineering",

@@ -20,6 +20,8 @@
 //                                                                 trading-options-funnel desk step builds to it)
 //   src/lib/radar-run.schema.json -> src/lib/radar-run.types.ts (root type RadarRunDoc; owned here; the pre-market
 //                                                                 Radar routine's run beacon is built to it)
+//   src/lib/registry.schema.json -> src/lib/registry.types.ts   (root type RegistryIndex; owned here; the CI builder
+//                                                                 scripts/build_registry.py is tested against it)
 //   src/lib/hft.schema.json      -> src/lib/hft.types.ts        (root type HftSnapshot; vendored from hft-lab and
 //                                                                 pinned by hft.contract.lock.json, not by Python)
 // Run with `pnpm gen:types` after `make schema` changes a schema. The output is committed.
@@ -58,6 +60,7 @@ for (const [file, out, name, options = {}] of [
   ["options-clone.schema.json", "options-clone.types.ts", "OptionsClone", { maxItems: -1 }],
   ["paper-options.schema.json", "paper-options.types.ts", "PaperOptions", { maxItems: -1 }],
   ["gap-hunter-live.schema.json", "gap-hunter-live.types.ts", "GapHunterLive", { maxItems: -1 }],
+  ["registry.schema.json", "registry.types.ts", "RegistryIndex", { maxItems: -1 }],
   ["journal.schema.json", "journal.types.ts", "JournalDoc", { maxItems: -1 }],
   ["calendar.schema.json", "calendar.types.ts", "CalendarDoc", { maxItems: -1 }],
   ["ledger.schema.json", "ledger.types.ts", "LedgerEdition", { maxItems: -1 }],

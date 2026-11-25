@@ -20,9 +20,9 @@ export type CountOrNull = null | number;
 export interface PaperOptions {
   schema: "stocksdelta/paper-options";
   /**
-   * 5 adds the shadow's `progress` and each shadow session's `check`; 4 adds `select`, the Radar → Options shadow's status; 3 adds each lab session's upload delay and rate-limit headroom; 2 adds `lab`, the options lab's tape status; 1 to 4 are still taken.
+   * 6 adds each lab session's stale split (slow start, mid-session) and tier-1 open-interest null share; 5 adds the shadow's `progress` and each shadow session's `check`; 4 adds `select`, the Radar → Options shadow's status; 3 adds each lab session's upload delay and rate-limit headroom; 2 adds `lab`, the options lab's tape status; 1 to 5 are still taken.
    */
-  schema_version: 1 | 2 | 3 | 4 | 5;
+  schema_version: 1 | 2 | 3 | 4 | 5 | 6;
   run_id: string;
   /**
    * When the host built it: an ISO time with its zone.
@@ -283,6 +283,14 @@ export interface LabSession {
   stale_ticks: null | number;
   stale_names: number;
   longest_stale_s: null | number;
+  /**
+   * Stale name-ticks before each name's first fresh tick (version 6). Null on older manifests.
+   */
+  stale_slow_start?: null | number;
+  /**
+   * Stale name-ticks after the name was already fresh (version 6). Null on older manifests.
+   */
+  stale_mid_session?: null | number;
   ticks_down: null | number;
   restarts: number;
   stopped:
@@ -293,6 +301,10 @@ export interface LabSession {
   prints: null | number;
   after_close_ok: boolean;
   oi_null_share: null | number;
+  /**
+   * Share of tier-1 contracts with no open interest value (version 6). Null before the field existed.
+   */
+  oi_null_share_tier1?: null | number;
   archived: boolean;
   /**
    * Minutes from the close to the verified upload; null until archived.
