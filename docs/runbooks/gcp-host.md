@@ -91,6 +91,21 @@ Rebuilds come from code. Turn off deletion protection
 instance, run the create command in step 1 again, then step 2 again. A primary host restores `var/` from R2 first
 ([backups-and-lease.md](backups-and-lease.md)).
 
+**Use the current size, not the free-tier one.** Step 1's command creates the original e2-micro with a 30 GB
+`pd-standard` disk. The production host is an e2-standard-2 with a 60 GB `pd-balanced` disk under the `wt-daily`
+snapshot schedule (read live 2026-11-25). For a rebuild, run step 1's command with these flags changed:
+
+```bash
+--machine-type e2-standard-2 --boot-disk-size 60GB --boot-disk-type pd-balanced
+```
+
+Then attach the snapshot schedule:
+`gcloud compute disks add-resource-policies trading-lab-host --zone us-east1-b --resource-policies wt-daily`.
+The e2-standard-2 is outside the free tier; it is the size the jobs were moved to for memory ("Primary host", below).
+The new boot disk takes the instance's name, `trading-lab-host`. A detached disk of that name, the original
+free-tier boot disk, was still in the project on 2026-11-25. Delete it first (**owner**, after checking it holds
+nothing you need), or the create fails on the name.
+
 ## Deploying (owner)
 
 A deploy is one command on the host, run as the job user. It checks the gate and the commit's CI, runs the
