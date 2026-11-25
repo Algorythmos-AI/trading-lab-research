@@ -9,8 +9,9 @@ specific to this repository. Where the two conflict, the org file's "Never" sect
    - The broker adapter hard-codes paper access.
    - `MODE`, `LIVE_TRADING_ENABLED` and any live keys belong to the owner alone.
    - Never submit orders outside `wt.live` / `wt.oms`.
-   - The crypto desk (`wt.crypto`, ADR 0005) books simulated fills on public market data only. It has no venue
-     credentials, no private endpoint and no order route, and none may be added.
+   - The crypto desk is closed (DEC-0036) and its code (`wt.crypto`) was deleted (ADR 0005, addendum). If it ever
+     returns, it books simulated fills on public market data only: no venue credentials, no private endpoint and no
+     order route, and none may be added.
    - **Three paper accounts, no more** (`docs/runbooks/paper-accounts.md`): "Robot B stocks (host)" (`APCA_API_*`,
      market data, places no order), "Clone options (host)" (`APCA_CLONE_*`, the options clone) and "Gap Hunter"
      (`APCA_S_*`, the stock desk). There is no "QQQ account": QQQ is a ticker. Never create, delete, rename or reset
@@ -88,7 +89,8 @@ and dates are synthetic.
 ## Layout
 
 ```
-src/wt/        data · scanner · signals · backtest · risk · oms · brokers · live · crypto · ops · knowledge · specs
+src/wt/        core · data · scanner · signals · backtest · risk · oms · brokers · live · options · lab · analytics ·
+               ops · research · specs · webull · owner · knowledge
 scripts/       research drivers and nightly jobs (forward_test, premarket_routine, status_dashboard, ...)
 research/      hypotheses/ experiments/ decisions/ active_strategies/ lessons_learned/ specs/ forward/
 config/        ranking and catalyst configs, macro-event calendar, dashboard config
@@ -105,9 +107,11 @@ Git-ignored: `data/` (market caches and `data/live/`), `knowledge/`, `logs/`, `v
 
 ```
 make bootstrap     # .venv from requirements.lock.txt
-make ci            # ruff + mypy (typed modules) + pytest; the same as the required CI check
+make ci            # ruff + mypy (typed modules) + restricted paths + pytest; most of the required `test` check, not all
+                   #   (CI also runs actionlint, the ARM64 install, the schema diff and the per-commit restricted check)
 make hooks         # pre-commit: gitleaks, restricted-path guard, ruff
 ```
 
-The kill switch is the file `~/trading/KILL`. While it exists, the paper runner makes no new entries; it keeps
-managing exits.
+Each desk has its own kill file; no single file stops every desk. On the host (`/home/wt/trading`), the options
+clone reads the root `KILL` and `var/options/KILL`, and Gap Hunter reads only `var/smallcap/KILL`. While a desk's file
+exists, it makes no new entries and keeps managing exits. See `docs/operations/safety.md`.
