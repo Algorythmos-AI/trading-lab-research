@@ -110,6 +110,7 @@ export interface GapHunterLive {
     rotation?: {
       names?: number | null;
       changes?: number | null;
+      live?: boolean | null;
       done?: string | null;
     } | null;
   };

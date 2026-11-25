@@ -106,7 +106,23 @@ def test_the_day_is_read_from_todays_arm_with_its_pick_rules_and_timeline(tmp_pa
     assert "too_early" not in events                                   # before the arm: not today's session
     assert v["timeline"][-1] == {"t": "2026-11-24T14:36:00+00:00", "event": "trade_closed", "code": "e2",
                                  "why": "time_stop_5m", "symbol": "MEDS", "r": -0.08}
-    assert v["rotation"] == {"names": 2, "changes": 1, "done": None}
+    assert v["rotation"] == {"names": 2, "changes": 1, "live": False, "done": None}
+
+
+
+def test_the_rotation_counts_come_from_the_live_rows_when_hyp_0072_trades(tmp_path):
+    # trading HYP-0072 the runner journals `gap_names` and `rotation_live`, never `rotation_shadow`
+    rows = [{"ts": "2026-11-24T13:30:00+00:00", "event": "armed", "day": "2026-11-24", "trial": "HYP-0072"},
+            {"ts": "2026-11-24T14:25:00+00:00", "event": "gap_primary", "day": "2026-11-24", "symbol": "MEDS"},
+            {"ts": "2026-11-24T14:25:01+00:00", "event": "gap_names", "day": "2026-11-24", "trial": "HYP-0072",
+             "names": [[1, "MEDS"], [2, "DWTX"], [3, "ABCD"]]},
+            {"ts": "2026-11-24T14:31:00+00:00", "event": "rotation_live", "kind": "change", "symbol": "MEDS"},
+            {"ts": "2026-11-24T14:33:00+00:00", "event": "rotation_live", "kind": "change", "symbol": "DWTX"},
+            {"ts": "2026-11-24T14:34:00+00:00", "event": "rotation_shadow", "kind": "change", "symbol": "ABCD"},
+            {"ts": "2026-11-24T21:00:00+00:00", "event": "session_end", "trial": "HYP-0072",
+             "rotation": {"names": 3, "changes": 2, "done": "attempt"}}]
+    v = live(tmp_path, rows)
+    assert v["rotation"] == {"names": 3, "changes": 2, "live": True, "done": "attempt"}
 
 
 def test_no_free_text_reaches_the_block(tmp_path):

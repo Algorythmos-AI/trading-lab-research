@@ -105,6 +105,7 @@ export interface SnapshotExtra {
     rotation?: {
       names?: number | null;
       changes?: number | null;
+      live?: boolean | null;
       done?: string | null;
     } | null;
   } | null;

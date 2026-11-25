@@ -1153,6 +1153,16 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             else:
                 named.append((rank, sym, ctx))
         return Rotation(named, pd.Timestamp(open_dt) + pd.Timedelta(minutes=1)), missing
+
+    def rot_select() -> None:
+        """HYP-0072: the day's tier-2 names from the 09:25 pool, journaled once as `gap_names`. No names: no entry."""
+        try:
+            tier2, info2 = rotation_tier2(day)
+        except Exception as e:  # noqa: BLE001 — no names: no entry this session
+            tier2, info2 = [], {"why": "selection_failed", "error": e.__class__.__name__}
+        grot[0], missing = rot_names(tier2)
+        log("gap_names", day=day, trial=trial, names=[[k, s] for k, s in tier2], no_context=missing, **info2)
+        allow({s for _, s, _ in grot[0].names})
     gap_n = max((p.attempt for p in today if p.origin == "entry"), default=0)
     wt: sl.WTState | None = None    # the exit's state for the plan in play
     wt_tries: dict[float, int] = {}
@@ -1179,6 +1189,10 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             allow({primary})
         if grot[0] is not None:
             allow({s for _, s, _ in grot[0].names})
+        elif rotate and gap_selected and not gap_done:
+            # a restart between `gap_primary` and `gap_names`: the names come from the same 09:25 pool, so choose them
+            # now (and journal them, for X4) rather than watch no names for the rest of the day
+            rot_select()
         if isinstance(plan, GapPlan):                          # the order (or position) this restart found in play
             gap_rested[0] = (f"{plan.symbol}|" if rotate else "") + \
                 f"{plan.code}|{plan.signal_t}|{plan.trigger:.2f}|{plan.initial_stop:.2f}"
@@ -1458,13 +1472,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         if primary is not None:
             allow({primary})
         if rotate:
-            try:
-                tier2, info2 = rotation_tier2(day)
-            except Exception as e:  # noqa: BLE001 — no names: no entry this session
-                tier2, info2 = [], {"why": "selection_failed", "error": e.__class__.__name__}
-            grot[0], missing = rot_names(tier2)
-            log("gap_names", day=day, trial=trial, names=[[k, s] for k, s in tier2], no_context=missing, **info2)
-            allow({s for _, s, _ in grot[0].names})
+            rot_select()
 
     def gap_key(o: sl.GapOrder, b: pd.DataFrame, sym: str | None = None) -> str:
         trig, stop0 = sl.gap_cents(o)

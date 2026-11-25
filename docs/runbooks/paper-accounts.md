@@ -8,7 +8,7 @@ owner named them in Alpaca, with the last three characters of the account number
 |---|---|---|---|---|
 | Robot B stocks (host) | …Y7I | `APCA_API_KEY_ID` / `APCA_API_SECRET_KEY` | the market-data jobs (routine, forward test, pipeline check, deploy gate), `options-live`'s market data (never its positions), research scripts, hand-run tools on the Mac | no job, since the QQQ rule was retired (DEC-0069) |
 | Clone options (host) | …3VG | `APCA_CLONE_KEY_ID` / `APCA_CLONE_SECRET_KEY` | the options clone (`paper-o`) | yes: the clone's option orders |
-| Gap Hunter | …JU0 | `APCA_S_KEY_ID` / `APCA_S_SECRET_KEY` | the stock desk, Gap Hunter (`paper-s`, `wt.live.runner_s`) | only once a rule is in `S.switched_on` (none is) |
+| Gap Hunter | …JU0 | `APCA_S_KEY_ID` / `APCA_S_SECRET_KEY` | the stock desk, Gap Hunter (`paper-s`, `wt.live.runner_s`) | yes, for the rule in `S.switched_on`: HYP-0072 (DEC-0076, the rotation) since 2026-11-25, in place of HYP-0071 |
 
 Where each pair lives (host checked 2026-11-25, read-only; Mac 2026-11-20):
 

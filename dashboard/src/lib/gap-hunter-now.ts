@@ -129,7 +129,7 @@ export interface Live {
   closed: Closed[];
   xLatched: string[];
   stopRule: StopRule | null;
-  rotation: { names: number | null; changes: number | null; done: string | null } | null;
+  rotation: { names: number | null; changes: number | null; live: boolean; done: string | null } | null;
 }
 
 export function readLive(raw: Raw | null): Live | null {
@@ -177,7 +177,7 @@ export function readLive(raw: Raw | null): Live | null {
     ),
     xLatched: arr(saf?.x_latched).filter((x): x is string => typeof x === "string" && /^X[1-9]$/.test(x)),
     stopRule: sr ? { decision: typeof sr.decision === "string" && /^DEC-\d{4}$/.test(sr.decision) ? sr.decision : null, trades: count(sr.trades), sumR: num(sr.sum_r), maxLossR: num(sr.max_loss_r), reviewAt: count(sr.review_at), stopDate: day(sr.stop_date) } : null,
-    rotation: rot ? { names: count(rot.names), changes: count(rot.changes), done: day(rot.done) } : null,
+    rotation: rot ? { names: count(rot.names), changes: count(rot.changes), live: bool(rot.live) === true, done: code(rot.done) } : null,
   };
 }
 
