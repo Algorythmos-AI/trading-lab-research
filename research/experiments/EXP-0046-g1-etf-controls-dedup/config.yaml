@@ -5,7 +5,7 @@ decision: DEC-0061
 carries_out: DEC-0011 section 2 (data-only re-run of EXP-0006/0006b)
 trials: 0                         # a correction of existing trials (DEC-0011 section 5); the global count stays at 87
 baseline: EXP-0006b-g1-etf-controls-realcost
-change: only the data: duplicated (symbol, t) rows removed by wt.data.etf_minutes.load
+change: 'only the data: duplicated (symbol, t) rows removed by wt.data.etf_minutes.load'
 driver: python scripts/g1_etf_control.py EXP-0046-g1-etf-controls-dedup
 data: data/minute_etf (SPY, QQQ), snapshot hash in manifest.json
 span: [2019-01-02, 2025-09-25]
