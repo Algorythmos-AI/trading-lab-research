@@ -93,9 +93,9 @@ const CHIP: Record<ChipTone, string> = {
 function Fact({ label, value, hint, tone = "neutral" }: { label: string; value: React.ReactNode; hint?: string; tone?: ChipTone }) {
   return (
     <div className={cn("grid content-start gap-0.5 rounded-lg px-3 py-2.5", CHIP[tone])}>
-      <dt className="text-[0.6875rem] font-medium tracking-wide uppercase opacity-80 max-sm:text-xs">{label}</dt>
+      <dt className="text-[0.6875rem] font-medium tracking-wide uppercase max-sm:text-xs">{label}</dt>
       <dd className="text-base font-semibold">{value}</dd>
-      {hint ? <dd className="text-[0.75rem] leading-snug opacity-80">{hint}</dd> : null}
+      {hint ? <dd className="text-[0.75rem] leading-snug">{hint}</dd> : null}
     </div>
   );
 }
