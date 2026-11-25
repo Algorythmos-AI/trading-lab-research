@@ -76,10 +76,8 @@ A latch stops entries until it is cleared on purpose. Only the owner clears one.
 See [latch-reset.md](../runbooks/latch-reset.md) and [options-clone.md](../runbooks/options-clone.md).
 
 Gap Hunter trades on the host only while the host holds its `APCA_S_*` keys. Without them, `paper-s` is refused at
-its preflight (`src/wt/ops/jobs.py`). The last recorded check of the host's keys, on 2026-11-20
-([paper-accounts.md](../runbooks/paper-accounts.md)), found them not set. Release #589 of 2026-11-22 is titled
-"Gap Hunter goes live", so treat Gap Hunter as **able to trade** until you have checked. **(host state, unverified
-2026-11-25)**
+its preflight (`src/wt/ops/jobs.py`). A read-only check of the host on 2026-11-25 found them set
+([paper-accounts.md](../runbooks/paper-accounts.md)), with `WT_ROLE=primary`: Gap Hunter **can trade** there.
 
 ## 4. Flatten
 

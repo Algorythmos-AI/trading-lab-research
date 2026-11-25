@@ -518,11 +518,11 @@ def test_rollback_cleanup_ignores_positions_outside_bs_mandate_and_restores_mode
     b = SimBroker()
     b.pos["AAPL"] = Position("AAPL", 1, 200.0)                 # a manual test buy: not B's
     b.place(Order("wt-B-20260929-aaaaaaaaaaaa", "QQQM", "sell", 2, "stop", stop_price=240.0, tif="gtc"))
-    assert deploy.broker_cleanup_before_rollback(lambda: b) is None
+    assert deploy.broker_cleanup_before_rollback(lambda: b, []) is None
     assert b.open_orders() == []                                # our GTC stop is gone
     assert "MODE" not in __import__("os").environ               # nothing leaks into the smoke test or venv sync
     b.pos["QQQM"] = Position("QQQM", 2, 250.0)
-    assert "strategy B holds a position" in deploy.broker_cleanup_before_rollback(lambda: b)
+    assert "strategy B holds a position" in deploy.broker_cleanup_before_rollback(lambda: b, [])
 
 
 def test_alert_transitions_are_logged_for_the_dashboard(tmp_path, monkeypatch):
@@ -564,3 +564,74 @@ def test_the_daily_summary_is_the_forward_line_and_names_no_retired_desk(jobroot
                                                       "Forward 2026-10-06: 1 trade(s), -0.18R total.")
     for gone in ("paper_summary", "daily_summary", "crypto_summary", "journal_since", "JOURNAL"):
         assert not hasattr(jobs, gone), gone
+
+
+# ---------------------------------------------------------------- the rollback checks every desk's account (audit 2026-11-25)
+def _sim(**pos):
+    from wt.brokers.sim import SimBroker
+    from wt.core.types import Position
+    b = SimBroker()
+    for sym, qty in pos.items():
+        b.pos[sym] = Position(sym, qty, 10.0)
+    return b
+
+
+def _resting(b, cid, sym="SPY"):
+    from wt.core.types import Order
+    b.place(Order(cid, sym, "sell", 1, "stop", stop_price=1.0, tif="gtc"))
+
+
+@pytest.mark.parametrize("desk", ["Gap Hunter", "the options clone"])
+def test_rollback_refuses_while_a_desk_account_holds_a_position_and_cancels_nothing(monkeypatch, desk):
+    """The audit's gap: the check read only the APCA_API_ account, which no desk trades since DEC-0069. Any
+    position on a desk's own account is the desk's, so it blocks, and nothing is cancelled anywhere."""
+    from wt.ops import deploy
+    monkeypatch.delenv("MODE", raising=False)
+    b, held = _sim(), _sim(AAPL=5)
+    _resting(b, "wt-B-20261125-aaaaaaaaaaaa")
+    why = deploy.broker_cleanup_before_rollback(lambda: b, [(desk, lambda: held)])
+    assert why == f"{desk}'s paper account holds a position: flatten it (or let the session finish) before rolling back"
+    assert len(b.open_orders()) == 1                              # refused before any cancel
+    assert "MODE" not in __import__("os").environ
+
+
+def test_rollback_cancels_our_resting_orders_on_every_flat_account_and_leaves_others(monkeypatch):
+    from wt.ops import deploy
+    monkeypatch.delenv("MODE", raising=False)
+    b, s, o = _sim(), _sim(), _sim()
+    _resting(s, "wt-S-20261125-bbbbbbbbbbbb")
+    _resting(s, "manual-order-1")                                 # not ours: left alone
+    _resting(o, "wt-O-20261125-cccccccccccc", "SPY261127C00600000")
+    assert deploy.broker_cleanup_before_rollback(lambda: b, [("Gap Hunter", lambda: s),
+                                                             ("the options clone", lambda: o)]) is None
+    assert [x.client_order_id for x in s.open_orders()] == ["manual-order-1"]
+    assert o.open_orders() == []
+
+
+def test_rollback_refuses_when_a_desk_account_cannot_be_read(monkeypatch):
+    from wt.ops import deploy
+
+    def down():
+        raise ConnectionError("no route")
+    why = deploy.broker_cleanup_before_rollback(lambda: _sim(), [("Gap Hunter", down)])
+    assert why == "Gap Hunter's paper account could not be checked (ConnectionError): try again"
+
+
+def test_rollback_finds_the_desk_accounts_by_their_key_pairs(capsys):
+    from wt.ops import deploy
+    got = deploy._desk_keys({"APCA_S_KEY_ID": "k", "APCA_S_SECRET_KEY": "s", "APCA_CLONE_KEY_ID": "only-half"})
+    assert got == [("Gap Hunter", ("k", "s"))]
+    assert "the options clone: no APCA_CLONE_KEY_ID key pair on this checkout" in capsys.readouterr().out
+    from wt.brokers.alpaca_options_paper import CLONE_KEYS
+    from wt.live import runner_s
+    assert [a[1:] for a in deploy.DESK_ACCOUNTS] == [(runner_s.KEY_ID, runner_s.KEY_SECRET), CLONE_KEYS]
+
+
+def test_rollback_never_retries_past_a_live_account(monkeypatch):
+    from wt.core.safety import PaperOnlyError
+    from wt.ops import deploy
+
+    def live():
+        raise PaperOnlyError("not a paper account")
+    with pytest.raises(PaperOnlyError):
+        deploy.broker_cleanup_before_rollback(lambda: _sim(), [("Gap Hunter", live)])
