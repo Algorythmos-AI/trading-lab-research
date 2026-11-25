@@ -300,3 +300,10 @@ Written before Gap Hunter's first session; no Gap Hunter trade exists. At the ra
 6.5 trades close by 2027-03-31, so no test of R can judge the rule by then. DEC-0073 keeps section 4 as written. It
 proposes stops on execution faults that carry over to the next session, and fixes what the date stop means when
 there are fewer than 30 trades. Section 4 changes only once the owner accepts DEC-0073.
+
+### 2026-11-25: HYP-0072 (Gap Hunter with rotation) is switched on in place of HYP-0071
+
+The owner switched DEC-0076's rotation rule on in chat on 2026-11-25. `S.switched_on` is `[HYP-0072]`; HYP-0071 is
+off and HYP-0070 stays paused. The book, its limits, the day stop and the stop rule (section 4) are this record's,
+unchanged, and keep counting sleeve S's journal across the switch. The conditions, the waived shadow wait and what the
+runner now does are in DEC-0076's note of the same date. It takes effect once released to `main` and deployed.

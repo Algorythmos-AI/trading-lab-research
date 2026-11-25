@@ -1,10 +1,11 @@
 """Paper runner for Gap Hunter, the stock desk (DEC-0066, where it is "sleeve S"). MODE must be 'paper'.
 
-One US$600 virtual book (HYP-0069) and two rules, of which a session runs one: the one listed in `S.switched_on`
-of config/risk.yaml (`session_trial`). Nothing is listed, so nothing trades.
+One US$600 virtual book (HYP-0069) and three rules, of which a session runs one: the one listed in `S.switched_on`
+of config/risk.yaml (`session_trial`). With none or more than one listed, no entry is placed.
 
   HYP-0070  the reversal rule on a universe known at scan time (the first slice; paused by the owner).
   HYP-0071  Gap Hunter (DEC-0068): one trade a day in the primary name of the 09:25 pool. See "Gap Hunter" below.
+  HYP-0072  Gap Hunter with rotation (DEC-0076): the same entries, in the best-ranked tier-2 name with a valid order.
 
 What it shares with the retired QQQ rule's runner (wt.live.runner_b; DEC-0069): four pure helpers it imports, and
 nothing at run time. Its own paper account and key pair (APCA_S_KEY_ID, APCA_S_SECRET_KEY), journal
@@ -60,7 +61,13 @@ rule, reconciliation, the end of the day, the pages. What differs:
                and out after a breakout bar without volume. R is booked against the stop the trade entered with.
   a restart    The primary, the spent attempt and the refused signals are read back from the journal; the plan,
                its rule code and the exit's state from the plan file. Nothing is chosen or attempted twice.
-  the shadow   DEC-0076 (HYP-0072, EXP-0054) runs beside it, journal only (`rotation_shadow`): each minute, the
+  rotation     When HYP-0072 is the trial (DEC-0076), the names are the tier-2 names of the same selection (ranks
+               1 to 4, journaled once as `gap_names`), and each minute `rotation_walk` says which one order rests:
+               of the names whose own lowest valid order exists, the best-ranked. The desk's one resting order
+               follows it, in that name, replaced after a confirmed cancel (`rotation_live` rows); the first closed
+               bar in the resting name to reach its trigger spends the day. Everything else (gates, spread must,
+               collar, size, exit, 11:00, one trade a day, the book) is HYP-0071's. The shadow does not run then.
+  the shadow   DEC-0076 (HYP-0072, EXP-0054) runs beside HYP-0071, journal only (`rotation_shadow`): each minute, the
                order of the best-ranked tier-2 name that has a valid one, a row when that changes, and the first
                closed bar in that name to reach it (whether the engine fills it, the NBBO read when it began to
                rest, the spread must). It reads its own bars, places, cancels and changes no order, computes no
@@ -139,8 +146,8 @@ PM_FROM = "04:00"
 GAP_ENTRY_ORDERS_MAX = 40       # entry orders a day; the rest of S.max_orders_per_day (60) is left to the exit
 STOP_MOVE_TRIES = 3             # a stop the broker will not take at one price is not asked for a fourth time
 # the journal rows the execution stops read (wt.risk.execution_stops, DEC-0073)
-X_EVENTS = frozenset({"short_position", "END_OF_DAY_NOT_FLAT", "unprotected", "gap_primary", "entry_filled",
-                      "trade_closed"})
+X_EVENTS = frozenset({"short_position", "END_OF_DAY_NOT_FLAT", "unprotected", "gap_primary", "gap_names",
+                      "entry_filled", "trade_closed"})
 
 
 # ---- journal ------------------------------------------------------------------------------------------------------
@@ -220,13 +227,14 @@ def switched_on(path: Path | None = None) -> frozenset[str]:
 def session_trial(on: frozenset[str]) -> tuple[str, str | None]:
     """(the trial this session runs, why it may place no entry or None). The desk trades one rule a session: the
     one that is switched on. With none switched on it runs the reversal rule with entries off, as it did before
-    Gap Hunter existed; with both, Gap Hunter with entries off, because nothing says which of the two the day's
-    one position belongs to."""
-    known = [t for t in (sl.GAP_TRIAL, sl.TRIAL) if t in on]
+    Gap Hunter existed; with more than one, the first of them (Gap Hunter, then its rotation, then the reversal
+    rule) with entries off, because nothing says which of them the day's one position belongs to."""
+    known = [t for t in (sl.GAP_TRIAL, sl.ROTATION_TRIAL, sl.TRIAL) if t in on]
     if len(known) == 1:
         return known[0], None
     if known:
-        return sl.GAP_TRIAL, f"{sl.GAP_TRIAL} and {sl.TRIAL} are both switched on: the desk trades one rule a session"
+        return known[0], f"{' and '.join(known)} are {'both' if len(known) == 2 else 'all'} switched on: " \
+                         "the desk trades one rule a session"
     return sl.TRIAL, f"{sl.TRIAL} is not switched on (config/risk.yaml S.switched_on; DEC-0066 section 2)"
 
 
@@ -493,7 +501,7 @@ def gap_selection(day: dt.date, open_dt: dt.datetime,
 
 
 # ---- the rotation shadow (DEC-0076, HYP-0072, EXP-0054): journal only -----------------------------------------------------
-ROTATION_TRIAL = "HYP-0072"
+ROTATION_TRIAL = sl.ROTATION_TRIAL
 
 
 def rotation_tier2(day: dt.date) -> tuple[list[tuple[int, str]], dict[str, Any]]:
@@ -693,7 +701,8 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
     if not accepted():
         refuse("DEC-0066 does not read ACCEPTED")
     trial, why_not = session_trial(switched_on())
-    gap = trial == sl.GAP_TRIAL          # Gap Hunter's day (HYP-0071); otherwise the reversal rule's (HYP-0070)
+    gap = trial in sl.GAP_TRIALS         # Gap Hunter's day (HYP-0071 or HYP-0072); otherwise the reversal rule's
+    rotate = trial == ROTATION_TRIAL     # DEC-0076: the day's name is the best-ranked tier-2 name with a valid order
     if why_not:
         refuse(why_not)
     role = env("WT_ROLE", "primary")
@@ -916,7 +925,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         stop0 = p.initial_stop if isinstance(p, MultiPlan) else p.stop
         px = px if px is not None else p.stop
         entry = p.avg_entry or 0.0
-        own = (sl.GAP_TRIAL if isinstance(p, GapPlan) else sl.TRIAL) if p.origin == "entry" else None
+        own = ((trial if gap else sl.GAP_TRIAL) if isinstance(p, GapPlan) else sl.TRIAL) if p.origin == "entry" else None
         more: dict[str, Any] = {}
         if isinstance(p, GapPlan):
             if p.exit_reason == "stop" and p.wt.get("stop_reason") == "runner_prior_5m_low":
@@ -1126,6 +1135,24 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
     gap_why_tally: dict[str, dict[str, int]] = {}
     gap_why_last: dict[str, dict[str, Any]] = {}
     gap_rested = [""]               # the signal whose order the desk last had resting
+    # HYP-0072 (DEC-0076): the day's tier-2 names and the walk that says, each minute, which one order rests. The walk
+    # is deterministic, so a restart walks the morning again from the names the journal holds (`gap_names`).
+    grot: list[Rotation | None] = [None]
+
+    def rot_names(tier2: list[tuple[int, str]]) -> tuple[Rotation, list[int]]:
+        """The names with their own context (pool row and pre-market bars), and the ranks that have none."""
+        named: list[tuple[int, str, dict[str, Any]]] = []
+        missing: list[int] = []
+        for rank, sym in tier2:
+            try:
+                _, ctx, _ = gap_selection(day, open_dt, symbol=sym)
+            except Exception:  # noqa: BLE001 — no context: the name never has an order
+                ctx = None
+            if ctx is None:
+                missing.append(rank)
+            else:
+                named.append((rank, sym, ctx))
+        return Rotation(named, pd.Timestamp(open_dt) + pd.Timedelta(minutes=1)), missing
     gap_n = max((p.attempt for p in today if p.origin == "entry"), default=0)
     wt: sl.WTState | None = None    # the exit's state for the plan in play
     wt_tries: dict[float, int] = {}
@@ -1142,14 +1169,19 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                         primary, gctx, _ = gap_selection(day, open_dt, symbol=str(r["symbol"]))
                     except Exception as e:  # noqa: BLE001 — no context: no entry; a position is still managed
                         log("gap_context_unreadable", day=day, error=e.__class__.__name__)
+            elif r.get("event") == "gap_names" and rotate and grot[0] is None:
+                grot[0] = rot_names([(int(k), str(s)) for k, s in (r.get("names") or [])])[0]
             elif r.get("event") == "gap_day_done" and not gap_done:
                 gap_done = str(r.get("reason") or "done")
             elif r.get("event") in ("signal_blocked", "entry_not_placed") and r.get("dead"):
                 gap_dead.add(str(r["dead"]))
         if primary is not None:
             allow({primary})
+        if grot[0] is not None:
+            allow({s for _, s, _ in grot[0].names})
         if isinstance(plan, GapPlan):                          # the order (or position) this restart found in play
-            gap_rested[0] = f"{plan.code}|{plan.signal_t}|{plan.trigger:.2f}|{plan.initial_stop:.2f}"
+            gap_rested[0] = (f"{plan.symbol}|" if rotate else "") + \
+                f"{plan.code}|{plan.signal_t}|{plan.trigger:.2f}|{plan.initial_stop:.2f}"
 
     kill_on = KILL.exists()
     log("armed", day=day, trial=trial, entries_off=off, kill=kill_on, flatten=flatten_dt, symbols=len(symbols),
@@ -1412,7 +1444,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             gap_done = reason
             if gap_why_tally:
                 kw = {**kw, "rules": {c: {"minutes": gap_why_tally[c], "last": gap_why_last.get(c)} for c in sorted(gap_why_tally)}}
-            log("gap_day_done", day=day, symbol=primary, reason=reason, **kw)
+            log("gap_day_done", **{"day": day, "symbol": primary, **kw, "reason": reason})   # HYP-0072 names its own
 
     def gap_select() -> None:
         """Choose the day's primary from the 09:25 pool, once. No pool, or none of today: no entry this session."""
@@ -1425,16 +1457,28 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         log("gap_primary", day=day, symbol=primary, **info)
         if primary is not None:
             allow({primary})
+        if rotate:
+            try:
+                tier2, info2 = rotation_tier2(day)
+            except Exception as e:  # noqa: BLE001 — no names: no entry this session
+                tier2, info2 = [], {"why": "selection_failed", "error": e.__class__.__name__}
+            grot[0], missing = rot_names(tier2)
+            log("gap_names", day=day, trial=trial, names=[[k, s] for k, s in tier2], no_context=missing, **info2)
+            allow({s for _, s, _ in grot[0].names})
 
-    def gap_key(o: sl.GapOrder, b: pd.DataFrame) -> str:
+    def gap_key(o: sl.GapOrder, b: pd.DataFrame, sym: str | None = None) -> str:
         trig, stop0 = sl.gap_cents(o)
-        return f"{o.code}|{pd.Timestamp(b.t.iloc[o.signal_i]).isoformat()}|{trig:.2f}|{stop0:.2f}"
+        key = f"{o.code}|{pd.Timestamp(b.t.iloc[o.signal_i]).isoformat()}|{trig:.2f}|{stop0:.2f}"
+        return f"{sym}|{key}" if rotate else key                # HYP-0072: a signal is a name's
 
-    def gap_place(want: sl.GapOrder, b: pd.DataFrame, now: dt.datetime, minute: pd.Timestamp, now_min: int) -> None:
-        """The lowest valid order becomes a resting stop-limit, or a journaled reason why not."""
+    def gap_place(want: sl.GapOrder, b: pd.DataFrame, now: dt.datetime, minute: pd.Timestamp, now_min: int,
+                  sym: str | None = None, rank: int | None = None) -> None:
+        """The lowest valid order becomes a resting stop-limit, or a journaled reason why not. `sym`: the name it is
+        in (HYP-0072's resting name; the primary otherwise), `rank` its tier-2 rank."""
         nonlocal plan, staged, gap_n
-        assert primary is not None
-        key = gap_key(want, b)
+        sym = sym or primary
+        assert sym is not None
+        key = gap_key(want, b, sym)
         if key in gap_dead:
             return
         sent = orders_before + sum(orders_sent(x) for x in made)
@@ -1446,7 +1490,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             blockers.append("stale_bar")                       # no print in the minute just ended: treated as halted
         q = None
         try:
-            q = with_deadline(data.quote, primary)
+            q = with_deadline(data.quote, sym)
         except Exception:  # noqa: BLE001 — unknown fails the spread must below
             q = None
         quote_age = (pd.Timestamp(now) - q[2]).total_seconds() if q else None
@@ -1454,9 +1498,10 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             blockers.append("no_quote")
         elif quote_age is not None and quote_age > guard.limits.max_quote_age_s:
             blockers.append("quote_age")
-        s, why = sl.gap_stage(primary, gap_n + 1, want, b, day, (q[1] - q[0]) if q else None, now_min)
+        s, why = sl.gap_stage(sym, gap_n + 1, want, b, day, (q[1] - q[0]) if q else None, now_min)
         trig, stop0 = sl.gap_cents(want)
-        row: dict[str, Any] = {"day": day, "symbol": primary, "trial": trial, "code": want.code,
+        row: dict[str, Any] = {"day": day, "symbol": sym, "trial": trial, "code": want.code,
+                               **({"rank": rank} if rank is not None else {}),
                                "signal_t": pd.Timestamp(b.t.iloc[want.signal_i]), "nbbo": [q[0], q[1]] if q else None,
                                "quote_age_s": quote_age, "trigger": trig, "stop": stop0}
         if s is None:
@@ -1495,7 +1540,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                                f"The local clock is {page.ratio(skew, '+.1f')} s off the broker's (limit 2 s).", 4)
             return
         gap_n += 1                                             # each order is its own plan, with its own block of ids
-        p = GapPlan(date=day.isoformat(), strategy=STRATEGY, symbol=primary, qty=qty, trigger=s.trigger, limit=s.limit,
+        p = GapPlan(date=day.isoformat(), strategy=STRATEGY, symbol=sym, qty=qty, trigger=s.trigger, limit=s.limit,
                     stop=s.stop, target=0.0, attempt=gap_n, seq=plan_seq(gap_n), code=want.code,
                     signal_t=s.signal_t.isoformat(), expires=s.expires_at.isoformat(), spread=s.spread, bv=want.bv)
         made.append(p)
@@ -1516,14 +1561,16 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         """Once for each minute, after its bars are read: has a valid order's trigger been reached (then the day's
         attempt is spent, filled or not); otherwise, which one order should rest now."""
         nonlocal gap_walked
-        if primary is None or gctx is None or gap_done:
+        if gap_done or (grot[0] is None if rotate else (primary is None or gctx is None)):
             return
         if plan is not None and plan.filled_qty:
-            gap_end("traded", code=plan.code if isinstance(plan, GapPlan) else None)
+            gap_end("traded", code=plan.code if isinstance(plan, GapPlan) else None,
+                    **({"symbol": plan.symbol, "rank": next((k for k, s, _ in grot[0].names if s == plan.symbol), None)}
+                       if rotate and grot[0] is not None else {}))
             return
         minute = (pd.Timestamp(now) - pd.Timedelta(seconds=SETTLE_S)).floor("min")
-        b = bars.get(primary)
-        if minute == gap_minute[0] or b is None or not len(b):
+        b = bars.get(primary) if primary is not None else None
+        if minute == gap_minute[0] or (not rotate and (b is None or not len(b))):
             return
         if pd.Timestamp(now).floor("min") != minute:
             return      # the first seconds of a minute, whose predecessor's bar is not read yet: nothing is decided
@@ -1547,6 +1594,10 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             finish(resting, now)
             return True
 
+        if rotate:
+            rotation_entries(now, minute, now_min, resting, withdraw)
+            return
+        assert b is not None and gctx is not None
         hit = sl.gap_walk(b, gctx, start=gap_walked)
         if hit is not None:
             # a closed bar reached the order that should have been resting: the attempt is spent, whatever rested
@@ -1573,6 +1624,49 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                 return
         if plan is None and want is not None and now < entry_end:
             gap_place(want, b, now, minute, now_min)
+
+    def rotation_entries(now: dt.datetime, minute: pd.Timestamp, now_min: int, resting: GapPlan | None,
+                         withdraw: Callable[[str], bool]) -> None:
+        """HYP-0072 (DEC-0076), once for each minute: walk the tier-2 names to this minute (`rotation_walk`, the
+        rule the shadow ran), then do what it says. An attempt in the name whose order was resting spends the day,
+        filled or not; otherwise the order it says rests is the desk's one resting order, in its name, replaced
+        after a confirmed cancel when it changes. Every order still goes through `gap_place` and its gates."""
+        r0 = grot[0]
+        assert r0 is not None
+        pb = bars.get(primary) if primary is not None else None
+        if gctx is not None and pb is not None and len(pb):
+            gap_why_note(sl.gap_reasons(pb, gctx, now_min), minute)   # the pick's own rules, for the journal only
+        for ev in rotation_walk(r0, bars, minute):
+            kind = ev.pop("kind")
+            if kind == "change" and pd.Timestamp(ev["minute"]) == minute:   # a restart's walk is journaled already
+                at_ = pd.Timestamp(ev.pop("minute"))
+                log("rotation_live", day=day, trial=trial, kind="change", at=at_,
+                    minute=at_.tz_convert(ET).strftime("%H:%M"), **ev)
+        if r0.done == "attempt":
+            assert r0.rest is not None
+            rank, sym, order = r0.rest                         # the order whose bar reached its trigger
+            if resting is not None and not withdraw("reached"):
+                return
+            sb = bars[sym]
+            why = "no_fill" if gap_rested[0] == gap_key(order, sb, sym) else "missed"
+            bump(why)
+            att = r0.attempt or {}
+            gap_end(why, code=order.code, symbol=sym, rank=rank,
+                    **({"bar": pd.Timestamp(att["bar"])} if att.get("bar") is not None else {}))
+            return
+        if r0.done:                                            # 11:00: the entry windows are over
+            if resting is None or withdraw("windows_closed"):
+                gap_end("no_signal")
+            return
+        want = r0.rest
+        if resting is not None:
+            if want is not None and want[1] == resting.symbol \
+                    and sl.gap_cents(want[2]) == (resting.trigger, resting.initial_stop):
+                return                                         # the same order in the same name: it keeps resting
+            if not withdraw("replaced" if want is not None else "withdrawn"):
+                return
+        if plan is None and want is not None and now < entry_end:
+            gap_place(want[2], bars[want[1]], now, minute, now_min, sym=want[1], rank=want[0])
 
     # ---- the rotation shadow (DEC-0076): beside HYP-0071, journal only. It places, cancels and changes no order,
     # reads its own bars into its own cache, and never writes HYP-0071's state. No R, no P&L, no exit. ----
@@ -1846,14 +1940,16 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             # ---- bars ----
             if gap and not gap_selected:
                 gap_select()                                   # at the first poll of the session: the pool is 09:25's
-            if gap and rot[0] is None:
+            if gap and not rotate and rot[0] is None:            # HYP-0072 trading is the rule itself: no shadow
                 try:
                     rot_start()
                 except Exception as e:  # noqa: BLE001 — the shadow must never cost the desk anything
                     rot[0] = Rotation([], pd.Timestamp(open_dt), done="error")
                     log("rotation_shadow_error", day=day, where="start", error=e.__class__.__name__)
             live = sorted(s for s, st in names.items() if not st.done)
-            if gap:
+            if gap and rotate:
+                live = [s for _, s, _ in grot[0].names] if grot[0] is not None and not gap_done else []
+            elif gap:
                 live = [primary] if primary is not None and not gap_done else []
             watch = sorted(set(live) | ({plan.symbol} if plan is not None else set()))
             seen = {s: (bars[s].t.iloc[-1] if s in bars and len(bars[s]) else None) for s in watch}
@@ -1969,7 +2065,8 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
                    "the account; the session's journal (END_OF_DAY_NOT_FLAT) has the error.", 5)
     log("session_end", trial=trial, entries_off=off, **({"primary": primary is not None, "gap_done": gap_done}
                                                          if gap else {}),
-        **({"rotation_shadow": rot[0].summary()} if gap and rot[0] is not None else {}), universe=len(universe.joined), scans=universe.scans,
+        **({"rotation_shadow": rot[0].summary()} if gap and rot[0] is not None else {}),
+        **({"rotation": grot[0].summary()} if rotate and grot[0] is not None else {}), universe=len(universe.joined), scans=universe.scans,
         entries=va.trades_by_day.get(day.isoformat(), 0), closed=closed_n, realised_R=round(realised, 4),
         day_stop=day_stopped(losers, realised), blocked=dict(sorted(counts.items())),
         virtual=asdict(va) if va_ok else None)

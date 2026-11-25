@@ -224,3 +224,22 @@ def test_the_scorecard_prints_the_stock_desks_stops_from_its_own_files(tmp_path,
     lines = wsc.s_stop_lines(dt.date(2026, 11, 27))
     assert lines[0].startswith("- Stop rule (DEC-0066)")
     assert "most 1 of 2" in lines[1] and "slip 1 of 2" in lines[1] and "since the reset of 2026-11-20" in lines[1]
+
+
+def rotation_day(*fills: tuple[str, str]) -> list[dict]:
+    """A day that traded HYP-0072 (DEC-0076): its `gap_names` row holds the tier-2 names it may trade."""
+    return [row("gap_primary", day=DAY, symbol="AAA"), row("gap_names", day=DAY, names=[[1, "AAA"], [2, "BBB"]]),
+            *(row("entry_filled", trade_id=tid, symbol=sym) for tid, sym in fills)]
+
+
+def test_x4_on_a_rotation_day_any_of_its_tier2_names_once_is_on_rule():
+    assert xs.evaluate(RULES, rotation_day((f"{DAY}-S-BBB-1", "BBB"))) is None
+
+
+@pytest.mark.parametrize("rows, said", [
+    (rotation_day((f"{DAY}-S-CCC-1", "CCC")), "outside the day's tier-2 names"),
+    (rotation_day((f"{DAY}-S-AAA-1", "AAA"), (f"{DAY}-S-BBB-2", "BBB")), "2 entries"),
+])
+def test_x4_on_a_rotation_day_another_name_or_a_second_entry(rows, said):
+    x = xs.evaluate(RULES, rows)
+    assert x is not None and x.code == "X4" and said in x.detail and "CCC" not in x.detail
