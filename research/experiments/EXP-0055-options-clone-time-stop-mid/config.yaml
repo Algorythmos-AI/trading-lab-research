@@ -15,7 +15,7 @@ inputs:
   bars: the runner's own 2-minute SIP stock bars and tapes, as the control's exits read them
   journal: data/live/options_journal.jsonl     # PRIVATE; on the host, never in git
   shadow: var/options/shadow/<session>.jsonl   # PRIVATE; the arm's virtual trades
-not_used: the lab tape (wt.lab): its 5-second tier holds only asks of $3.00 or less, and only the focus names
+not_used: 'the lab tape (wt.lab): its 5-second tier holds only asks of $3.00 or less, and only the focus names'
 switch: its own key, off by default, added by the code pull request; turned on by the owner
 first_session: the first session the arm books on the host after DEC-0079 is accepted and its switch is on   # none earlier counts (DEC-0079 "Disclosure")
 window_ends_if_changed: [exits, order]          # sections of config/options_clone.yaml; other changes are recorded per unit by the control's config hash
