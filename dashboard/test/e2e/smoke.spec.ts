@@ -200,10 +200,10 @@ test("the stock robot's old address lands on the Gap Hunter page, which shows th
   await expect(page.getByRole("heading", { level: 1, name: "Gap Hunter" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Robot B" })).toHaveCount(0);
   await expect(page.getByRole("group", { name: "Paper account (Alpaca): Gap Hunter", exact: true })).toHaveAttribute("data-env", "paper");
-  const glance = page.getByRole("region", { name: "Gap Hunter at a glance" });
-  await expect(glance).toContainText("Paper money only");
-  await expect(glance).toContainText("Rule DEC-0068");
-  for (const name of ["Where it stands", "Morning funnel", "Trades and results", "Session runs", "Alerts"]) {
+  // DEC-0078: what it is doing now leads the page, in the paper frame
+  await expect(page.getByRole("region", { name: "What Gap Hunter is doing now" })).toContainText("Paper money only");
+  await expect(page.getByRole("region", { name: "Gap Hunter at a glance" })).toContainText("Rule DEC-0068");
+  for (const name of ["Its day", "Position", "Today's name and its rules", "What it did", "Safety", "Orders", "Closed trades", "Where it stands", "Morning funnel", "Trades and results", "Session runs", "Alerts"]) {
     await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
   }
   await expect(page.getByText("First pick: Yes")).toBeVisible();                   // the fixture's gap_hunter block
