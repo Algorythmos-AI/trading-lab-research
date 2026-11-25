@@ -1,6 +1,8 @@
 # ADR 0001: Status dashboard on Vercel, fed by a signed push from the Mac
 
 - **Status:** accepted, 2026-09-29
+- **Amended (2026-11-25, docs only):** the push now comes from the GCP host's `wt-dashboard` unit, not from the Mac
+  (ADR 0010). Control actions (`make kill`, latch resets) run on the host. See [docs/README.md](../README.md).
 - **Context:** September 2026 audit, plan v2
 
 ## Context
