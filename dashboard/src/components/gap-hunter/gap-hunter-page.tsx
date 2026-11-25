@@ -1,7 +1,9 @@
-// The Gap Hunter page's body. Server-rendered; reads the stocks snapshot passed in through lib/gap-hunter.ts, which
-// derives every state. Counts, ids, dates, statuses and R only: no symbol and no record's prose is shown.
+// The Gap Hunter page's body. Server-rendered; reads the stocks snapshot through lib/gap-hunter.ts and the robot's
+// own block (the newer of the snapshot's copy and its live document) through lib/gap-hunter-now.ts.
 //
-// What the host does not publish yet is said to be missing, in the panel it belongs to. Nothing here is filled in.
+// Since DEC-0078 the page shows the day's symbols and the open position (PRIVATE, behind the owner's login, in the
+// paper frame). No record's prose, setup name or journal free text is shown. What the host does not publish yet is
+// said to be missing, in the panel it belongs to. Nothing here is filled in.
 import { BellRing, CalendarClock, Filter, Inbox, ScrollText, Signpost, Target } from "lucide-react";
 import { Funnel } from "@/components/charts/funnel";
 import { Empty } from "@/components/empty";
@@ -28,6 +30,9 @@ import { humanize, jobTone } from "@/lib/labels";
 import { GAP_HUNTER } from "@/lib/robots";
 import type { Snapshot } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { clockAt, pickSource, readLive } from "@/lib/gap-hunter-now";
+import type { GapHunterLiveResult } from "@/lib/snapshot";
+import { ClosedPanel, DayPanel, HowItWorks, NowHero, OrdersPanel, PickPanel, PositionPanel, SafetyPanel, TimelinePanel } from "./live-panels";
 
 /** A snapshot older than this is called stale on the page (two missed hourly publishes and a margin). */
 const STALE_HOURS = 3;
@@ -36,11 +41,26 @@ const NOT_SENT = "Not sent yet";
 const yesNo = (v: boolean | null) => (v === true ? "Yes" : v === false ? "No" : NOT_SENT);
 const countText = (v: number | null) => (v === null ? NOT_SENT : num(v));
 
-export function GapHunterBody({ s, now }: { s: Snapshot | null; now: Date }) {
+export function GapHunterBody({ s, now, live = null }: { s: Snapshot | null; now: Date; live?: GapHunterLiveResult | null }) {
   const block = gapHunterBlock(s);
+  const src = pickSource(s, live);
+  const l = readLive(src.raw);
+  const clock = clockAt(now);
   return (
     <div className="grid gap-5">
+      <NowHero live={l} src={src} clock={clock} now={now} />
       <Glance s={s} now={now} />
+      <DayPanel live={l} clock={clock} />
+      <div className="grid gap-5 lg:grid-cols-2">
+        <PositionPanel live={l} />
+        <PickPanel live={l} />
+      </div>
+      <div className="grid gap-5 lg:grid-cols-2">
+        <TimelinePanel live={l} />
+        <SafetyPanel live={l} />
+      </div>
+      <OrdersPanel live={l} />
+      <ClosedPanel live={l} />
       <StandingPanel s={s} block={block} />
       <FunnelPanel s={s} />
       <div className="grid gap-5 lg:grid-cols-2">
@@ -48,6 +68,7 @@ export function GapHunterBody({ s, now }: { s: Snapshot | null; now: Date }) {
         <SessionsPanel s={s} />
       </div>
       <AlertsPanel s={s} />
+      <HowItWorks />
     </div>
   );
 }
@@ -68,7 +89,6 @@ function Glance({ s, now }: { s: Snapshot | null; now: Date }) {
   const stale = ageHours !== null && ageHours > STALE_HOURS;
   return (
     <section aria-label="Gap Hunter at a glance" className="bg-card flex flex-wrap items-center gap-2 rounded-xl border px-4 py-3 shadow-sm" data-gap-hunter-state={st.word}>
-      <StatusBadge tone="warn">Paper money only</StatusBadge>
       <StatusBadge tone={st.tone}>{st.word}</StatusBadge>
       <StatusBadge tone={recordTone(r.decision)}>
         Rule {r.decision.id} · {r.decision.status ?? "not in the registry yet"}
@@ -77,7 +97,7 @@ function Glance({ s, now }: { s: Snapshot | null; now: Date }) {
       {runWords(job) === st.word ? null : <StatusBadge tone={job ? jobTone(job.status) : "neutral"}>{runWords(job)}</StatusBadge>}
       <StatusBadge tone={alerts.length === 0 ? "good" : alerts.some((a) => a.red) ? "bad" : "warn"}>{alerts.length === 0 ? "No alerts" : `${alerts.length} alert${alerts.length === 1 ? "" : "s"}`}</StatusBadge>
       <span className={cn("ml-auto text-xs", stale ? "text-warn font-medium" : "text-muted-foreground")}>
-        {s?.as_of ? `Host data ${newYork(s.as_of)} New York${stale ? ` · stale (${Math.round(ageHours ?? 0)} h old)` : ""}` : "No host data"}
+        {s?.as_of ? `Status snapshot ${newYork(s.as_of)} New York${stale ? ` · stale (${Math.round(ageHours ?? 0)} h old)` : ""}` : "No host data"}
       </span>
     </section>
   );

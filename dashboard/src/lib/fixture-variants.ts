@@ -2,6 +2,7 @@
 // down, a sparse edition, a corrupt one, the live feed off or failing). They exist only in fixture mode
 // (DASHBOARD_FIXTURE=1, refused in production) and are chosen per request by the `fx` cookie, so the browser tests
 // can put any page into any state. Pure: no I/O.
+import type { GapHunterLive } from "./gap-hunter-live.types";
 import type { CalendarDoc } from "./calendar.types";
 import { settledSlotEnd } from "./desk-eval";
 import { adjacentSession, type DocFeed, FEEDS, slotsAround, type StampedInputs } from "./feed-watch";
@@ -38,6 +39,9 @@ export const VARIANT_COOKIE = "fx";
  * - `paper-off`: the paper options history has not been published. With `partial` it carries the clone's trades
  *   only (no arms); with `poison` one clone row names a contract that cannot be read.
  * - `gap-live-off`: Gap Hunter's live state (DEC-0078) has not been published; the page falls back to the snapshot.
+ * - `gap-watch`, `gap-resting`, `gap-flat`, `gap-latched`, `gap-nopick`, `gap-stale` (use with `frozen`): Gap Hunter's
+ *   live state moved to FROZEN_NOW's session: watching with an order ready, an entry order resting, flat after a
+ *   trade closed, latched by its safety stops, no pick, and a live document 20 minutes old.
  * - `clone-off`: the options clone has published nothing. `clone-latched`: its document on a bad day.
  * - `journal-poison`: a stored trade journal with a null trade, as after corruption. The panes drawn from the trades
  *   must fail alone; the rest of each page keeps working.
@@ -96,6 +100,12 @@ export const VARIANT_FLAGS = [
   "clone-latched",
   "paper-off",
   "gap-live-off",
+  "gap-watch",
+  "gap-resting",
+  "gap-flat",
+  "gap-latched",
+  "gap-nopick",
+  "gap-stale",
   "calendar-off",
   "calendar-stale",
   "calendar-poison",
@@ -762,4 +772,41 @@ export function fixtureOptionLot(e: OptionsEdition, now: Date, openedAt: number,
   const step = spot < 50 ? 0.5 : spot < 300 ? 1 : 5;
   const strike = Math.round((Math.round(spot / step) * step) * 100) / 100;
   return { symbol: "QQQ", kind: "call", strike, expiry: addDays(nyNow(now).day, 21), side: "long", qty: fill.qty, entry: fill.entry, opened_at: new Date(openedAt).toISOString() };
+}
+
+const GAP_STATES = ["gap-watch", "gap-resting", "gap-flat", "gap-latched", "gap-nopick", "gap-stale"] as const;
+
+/**
+ * Gap Hunter's live document in one of its states, for the page and its tests. Pure: anchored to FROZEN_NOW (Monday
+ * 12 Oct, 11:01 New York), never to the wall clock. With no state flag the document is returned as it is (its last
+ * session, 8 Oct, with a trade still held).
+ */
+export function fixtureGapLive(doc: GapHunterLive, flags: ReadonlySet<VariantFlag> = new Set()): GapHunterLive {
+  const state = GAP_STATES.find((f) => flags.has(f));
+  if (!state) return doc;
+  const moved = JSON.parse(JSON.stringify(doc).replaceAll("2026-10-08", "2026-10-12")) as GapHunterLive;
+  const age = state === "gap-stale" ? 20 * 60_000 : 30_000;
+  const asOf = new Date(Date.parse(FROZEN_NOW) - age).toISOString().replace(".000Z", "+00:00");
+  const g = { ...moved.gap_hunter, as_of: asOf } as GapHunterLive["gap_hunter"] & Record<string, unknown>;
+  const rows = (g.timeline ?? []) as Array<Record<string, unknown>>;
+  const upTo = (...events: string[]) => {
+    const last = rows.findIndex((r) => events.includes(String(r.event)));
+    return last < 0 ? [] : rows.slice(0, last + 1);
+  };
+  const rules = (g.rules ?? []) as Array<Record<string, unknown>>;
+  if (state === "gap-watch") Object.assign(g, { position: null, open: 0, timeline: upTo("gap_primary") });
+  if (state === "gap-resting") Object.assign(g, { position: { ...(g.position as object), state: "entry_working", shares: 0, sold_at_target: 0, entry: null, stop: 4.94 }, open: 0, timeline: upTo("entry_placed") });
+  if (state === "gap-flat") {
+    const closed = { t: "2026-10-12T14:20:00+00:00", event: "trade_closed", code: "e2", why: "stop", symbol: "AAAA", r: 0.5 };
+    Object.assign(g, {
+      position: null,
+      open: 0,
+      timeline: [...rows, closed, { t: "2026-10-12T14:21:00+00:00", event: "gap_day_done", code: null, why: null, symbol: null, r: null }],
+      closed: [...((g.closed ?? []) as object[]), { day: "2026-10-12", symbol: "AAAA", code: "e2", reason: "stop", r: 0.5, booked: true, h1_r: 0.38, h2_r: 0.22 }],
+      rules: rules.map((r) => ({ ...r, why: "spent", trigger: null, stop: null })),
+    });
+  }
+  if (state === "gap-latched") Object.assign(g, { safety: { ...(g.safety as object), x_latched: ["X3"] } });
+  if (state === "gap-nopick") Object.assign(g, { pick: { symbol: null, rank: null, why: "no_name_passed", tier2: [] }, position: null, open: 0, rules: [], timeline: upTo("armed") });
+  return { ...moved, as_of: asOf, gap_hunter: g };
 }
