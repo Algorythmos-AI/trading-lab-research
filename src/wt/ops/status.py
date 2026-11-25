@@ -632,7 +632,7 @@ def _systemd_jobs(ctx: Ctx, jobs_cfg: list[dict]) -> dict[str, dict]:
     return out
 
 
-_STEP = re.compile(r"/(\d+):00")
+_STEP = re.compile(r"/(\d+):\d\d")
 _FIXED = re.compile(r"^(?P<days>\S+) (?P<h>\d\d):(?P<m>\d\d):00 America/New_York$")
 
 

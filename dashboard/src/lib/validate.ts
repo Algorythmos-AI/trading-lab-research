@@ -7,6 +7,8 @@ import type { CryptoSnapshot } from "./crypto.types";
 import hftSchema from "./hft.schema.json";
 import type { HftSnapshot } from "./hft.types";
 import funnelSchema from "./funnel.schema.json";
+import gapHunterLiveSchema from "./gap-hunter-live.schema.json";
+import type { GapHunterLive } from "./gap-hunter-live.types";
 import type { FunnelDoc } from "./funnel.types";
 import journalSchema from "./journal.schema.json";
 import ledgerSchema from "./ledger.schema.json";
@@ -41,6 +43,7 @@ const validateJournalSchema = ajv.compile<JournalDoc>(journalSchema);
 const validateCalendarSchema = ajv.compile<CalendarDoc>(calendarSchema);
 const validateOptionsCloneSchema = ajv.compile<OptionsClone>(optionsCloneSchema);
 const validatePaperOptionsSchema = ajv.compile<PaperOptions>(paperOptionsSchema);
+const validateGapHunterLiveSchema = ajv.compile<GapHunterLive>(gapHunterLiveSchema);
 const validateLedgerSchema = ajv.compile<LedgerEdition>(ledgerSchema);
 const validateFunnelSchema = ajv.compile<FunnelDoc>(funnelSchema);
 const validateRadarDeskSchema = ajv.compile<RadarDeskDoc>(radarDeskSchema);
@@ -85,6 +88,14 @@ export const PAPER_OPTIONS_SCHEMA = "stocksdelta/paper-options";
 /** True when the signed body names the paper options history schema. */
 export function isPaperOptions(data: unknown): boolean {
   return data !== null && typeof data === "object" && (data as { schema?: unknown }).schema === PAPER_OPTIONS_SCHEMA;
+}
+
+/** Gap Hunter's live state (DEC-0078), from the trading host every minute in session. PRIVATE, behind the login. */
+export const GAP_HUNTER_LIVE_SCHEMA = "stocksdelta/gap-hunter-live";
+
+/** True when the signed body names the Gap Hunter live schema. */
+export function isGapHunterLive(data: unknown): boolean {
+  return data !== null && typeof data === "object" && (data as { schema?: unknown }).schema === GAP_HUNTER_LIVE_SCHEMA;
 }
 
 /** The owner's trade journal: their own broker's closed trades. A record, not research; no desk, no watchdog. */
@@ -390,6 +401,22 @@ export function validatePaperOptions(data: unknown): PaperOptionsValidationResul
   }
   if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
   return { ok: true, doc: data as PaperOptions };
+}
+
+export type GapHunterLiveValidationResult = { ok: true; doc: GapHunterLive } | { ok: false; errors: string[] };
+
+/** Gap Hunter's live state: its own schema (generated from the same allow-list as the snapshot's block), the same
+ * denylist. Paper only, by the schema's own `paper: true`. */
+export function validateGapHunterLive(data: unknown): GapHunterLiveValidationResult {
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    return { ok: false, errors: ["/: must be an object"] };
+  }
+  const errors = findDenied(data).map((p) => `${p}: key is not allowed to be published`);
+  if (!validateGapHunterLiveSchema(data)) {
+    errors.push(...(validateGapHunterLiveSchema.errors ?? []).map(describe));
+  }
+  if (errors.length > 0) return { ok: false, errors: errors.slice(0, MAX_ERRORS) };
+  return { ok: true, doc: data as GapHunterLive };
 }
 
 export type LedgerValidationResult = { ok: true; edition: LedgerEdition } | { ok: false; errors: string[] };

@@ -46,6 +46,7 @@ MEMORY: dict[str, tuple[str | None, str, str | None]] = {
     "weekly": ("1536M", "2G", "512M"),
     "dashboard": (None, "1G", "256M"),
     "options-live": (None, "512M", "128M"),
+    "gap-hunter-publish": (None, "512M", "128M"),
     "deploy-notify": (None, "256M", "64M"),
     "lab-tape": ("768M", "1G", "0"),
     "lab-archive-check": (None, "512M", "0"),

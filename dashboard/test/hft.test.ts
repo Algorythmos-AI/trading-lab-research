@@ -561,6 +561,7 @@ describe("GET /api/health", () => {
     radar_desk: { status: "missing", accepts: 1, session: null, run_id: null, as_of: null, schema_version: null },
     paper_options: { status: "missing", accepts: 5, run_id: null, as_of: null, schema_version: null },
     radar_run: { status: "missing", accepts: 1, session: null, run_id: null, as_of: null, schema_version: null },
+    gap_hunter_live: { status: "missing", accepts: 1, run_id: null, as_of: null, schema_version: null },
   };
 
   beforeEach(() => {

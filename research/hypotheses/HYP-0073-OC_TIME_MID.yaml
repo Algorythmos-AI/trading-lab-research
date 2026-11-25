@@ -1,0 +1,13 @@
+id: HYP-0073
+trial: "OC-TIME-MID"
+family: O                       # options desk (DEC-0028); counted in family O by DEC-0079 (52 once accepted)
+status: pre-registered          # DEC-0079 (PROPOSED 2026-11-25). NOT blind: written after the clone's time-stop exits were seen (DEC-0079 "Disclosure"); forward only, no earlier session counts
+arm: shadow                     # a virtual contract in wt.options.shadow on the runner's own quotes: never an order
+statement: "On the options clone's trades closed by the 5-minute time stop at a poll where the quote's midpoint was above the fill, a virtual second contract bought at the same fill and managed by the control's exits, except that the time stop fires only when, five minutes or more after the fill, the quote's midpoint ((bid + ask) / 2) is at or below the fill, has a higher return on premium after fees than the real contract. Every exit of the virtual contract is priced at the bid of the quote the runner read at the poll it fired on; a safety exit of the control closes it with the control at the control's price. Virtual only: never an order."
+rule: time_mid                  # DEC-0079 "Decision" points 1 to 3; both setups (retest and rejection), pooled
+frozen: {same_contract_and_fill: true, time_stop_min: 5, time_stop_price: mid, mid: "(bid + ask) / 2", time_stop_fires: "mid <= fill, from five minutes after the fill, at any poll", other_exits: control, exit_price: bid_at_poll, safety_exits: wt.options.shadow.SAFETY_EXITS, unit: control_time_stop_exit_with_mid_above_fill, measure: mean_paired_difference_return_on_premium, fee_per_contract_each_way: 0.03, interval: [2.5, 97.5], resample_unit: session, resamples: 10000, seed: 20261179, too_few: {trades: 30, sessions: 20}, window_ends_if_changed: [exits, order]}
+config: config/options_clone.yaml
+evidence: {decision: DEC-0079, experiments: [EXP-0055-options-clone-time-stop-mid], base: [HYP-0029, HYP-0030]}
+since: "the first session the arm books on the host after DEC-0079 is accepted and the owner turns its switch on; never backfilled. Ends early, with whatever it has, if the control's exits or order section of config/options_clone.yaml changes"
+close_without_verdict: "2027-06-30"
+falsified_if: "With at least 30 trades (units, as defined in DEC-0079 point 3) and 20 sessions with a unit: the lower end of the 95% bootstrap range of the mean paired difference per unit (variant minus control, return on premium after $0.03 a contract each way), resampled by session, is at or below 0, or the mean difference is at or below 0 in either half of the units taken in order. Fewer than 30 units by 2027-06-30 closes the trial with no verdict. A pass places no order: trading the rule needs its own record and new trials."

@@ -705,8 +705,11 @@ def test_a_clock_skew_block_pages_and_a_good_reading_clears_it(env, monkeypatch,
 def test_a_clean_session_fires_nothing(env):
     rec = Rec()
     session(tape_of({"ABC": day_rows(TO_TARGET)}), alerts=rec)
-    assert rec.keys("fire") == [] and rec.keys("once_per_day") == []
-    assert set(rec.keys("resolve")) == {"paper-s:clock-skew", "paper-s:not-flat", "paper-s:short-at-close"}
+    # the trade's own information page (priority 3), fired at the fill and resolved at the close, and nothing else
+    assert rec.keys("fire") == ["paper-s:position"] and rec.page("paper-s:position", "fire")[2] == 3
+    assert rec.keys("once_per_day") == []
+    assert set(rec.keys("resolve")) == {"paper-s:clock-skew", "paper-s:not-flat", "paper-s:short-at-close",
+                                        "paper-s:position"}
 
 
 def test_sleeve_qs_files_are_never_created_or_changed(env):

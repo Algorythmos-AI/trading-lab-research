@@ -1,0 +1,583 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "stocksdelta/gap-hunter-live",
+  "title": "Gap Hunter live state (generated from wt.ops.gap_live.LIVE_ALLOW)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "stocksdelta/gap-hunter-live"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "run_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 200
+    },
+    "as_of": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 200
+    },
+    "paper": {
+      "const": true
+    },
+    "gap_hunter": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "kill": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "latched": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "sessions": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "last_session": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "trades": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "total_r": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "mean_r": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "open": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "funnel": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "session": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "kept": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "passed": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "tier1": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "tier2": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "primary": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        },
+        "as_of": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200
+        },
+        "heartbeat": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "session": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "armed_at": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "last_row": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "rows_today": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "ended": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        },
+        "pick": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "symbol": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "rank": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "why": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "tier2": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "maxItems": 2000
+            }
+          }
+        },
+        "rules": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "rule": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "why": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "trigger": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "stop": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
+        },
+        "timeline": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "t": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "event": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "code": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "why": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "symbol": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "r": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
+        },
+        "position": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "symbol": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "code": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "state": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "origin": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            },
+            "shares": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "sold_at_target": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "entry": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "trigger": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "stop": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "stop0": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "target": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          }
+        },
+        "closed": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "day": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "symbol": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "code": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "r": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "booked": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "h1_r": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "h2_r": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            }
+          },
+          "maxItems": 2000
+        },
+        "safety": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "x_latched": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 200
+              },
+              "maxItems": 2000
+            },
+            "stop_rule": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "decision": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                },
+                "trades": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "sum_r": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "max_loss_r": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "review_at": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "stop_date": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "maxLength": 200
+                }
+              }
+            }
+          }
+        },
+        "rotation": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "names": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "changes": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "done": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 200
+            }
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "run_id",
+    "as_of",
+    "paper",
+    "gap_hunter"
+  ]
+}

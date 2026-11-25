@@ -306,7 +306,8 @@ def test_status_flags_an_interval_job_that_is_not_being_started(tmp_path, monkey
 
     from wt.core import desk as desks
     runs([3, 18, 33, 48])
-    expected = ["  [ok] dashboard cadence", "  [FAIL] options-live cadence", "  [FAIL] deploy-notify cadence",
+    expected = ["  [ok] dashboard cadence", "  [FAIL] options-live cadence", "  [FAIL] gap-hunter-publish cadence",
+                "  [FAIL] deploy-notify cadence",
                 "  [ok] deploy-auto cadence"]        # hourly: one missed run is allowed, so it is never late within the hour
     assert [x.split(":")[0] for x in jobs.cadence(now, tmp_path)] == expected
     (tmp_path / "crypto").mkdir()

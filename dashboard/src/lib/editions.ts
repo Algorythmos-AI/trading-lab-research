@@ -1,5 +1,5 @@
 // What /api/health says about the research editions on file. Pure: no I/O.
-import type { CalendarResult, FunnelResult, JournalResult, LedgerResult, OptionsCloneResult, OptionsLiveResult, OptionsResult, PaperOptionsResult, RadarDeskResult, RadarResult, RadarRunLatestResult } from "./snapshot";
+import type { CalendarResult, FunnelResult, JournalResult, LedgerResult, OptionsCloneResult, OptionsLiveResult, OptionsResult, PaperOptionsResult, GapHunterLiveResult, RadarDeskResult, RadarResult, RadarRunLatestResult } from "./snapshot";
 
 /**
  * The newest edition format this build's schema validates. A publisher reads it from /api/health and sends
@@ -13,6 +13,8 @@ export const OPTIONS_LIVE_ACCEPTS = 3;
 export const OPTIONS_CLONE_ACCEPTS = 1;
 /** The paper options history (DEC-0057): the newest format this build validates. */
 export const PAPER_OPTIONS_ACCEPTS = 5;                     // 2: the options lab's tape status (`lab`); 3: upload delay and rate-limit headroom; 4: the Radar → Options shadow (`select`); 5: its progress and each run's check
+/** Gap Hunter's live state (DEC-0078): the newest format this build validates. */
+export const GAP_HUNTER_LIVE_ACCEPTS = 1;
 /** 2 adds `money`: deposits, withdrawals and the account value. */
 export const JOURNAL_ACCEPTS = 2;
 export const LEDGER_ACCEPTS = 1;
@@ -116,6 +118,18 @@ export function paperOptionsHealth(r: PaperOptionsResult): EditionHealth {
   return {
     status: r.status,
     accepts: PAPER_OPTIONS_ACCEPTS,
+    run_id: d?.run_id ?? null,
+    as_of: d?.as_of ?? null,
+    schema_version: d?.schema_version ?? null,
+  };
+}
+
+/** The stored Gap Hunter live state: the run that built it and when. Nothing about its trades. */
+export function gapHunterLiveHealth(r: GapHunterLiveResult): EditionHealth {
+  const d = r.status === "ok" ? r.doc : null;
+  return {
+    status: r.status,
+    accepts: GAP_HUNTER_LIVE_ACCEPTS,
     run_id: d?.run_id ?? null,
     as_of: d?.as_of ?? null,
     schema_version: d?.schema_version ?? null,

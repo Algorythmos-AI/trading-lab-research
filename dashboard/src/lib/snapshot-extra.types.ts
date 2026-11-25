@@ -19,5 +19,93 @@ export interface SnapshotExtra {
       tier2?: number | null;
       primary?: boolean | null;
     } | null;
+    as_of?: string | null;
+    heartbeat?: {
+      session?: string | null;
+      armed_at?: string | null;
+      last_row?: string | null;
+      rows_today?: number | null;
+      ended?: boolean | null;
+    } | null;
+    pick?: {
+      symbol?: string | null;
+      rank?: number | null;
+      why?: string | null;
+      /**
+       * @maxItems 2000
+       */
+      tier2?: (string | null)[] | null;
+    } | null;
+    /**
+     * @maxItems 2000
+     */
+    rules?:
+      | ({
+          rule?: string | null;
+          why?: string | null;
+          trigger?: number | null;
+          stop?: number | null;
+        } | null)[]
+      | null;
+    /**
+     * @maxItems 2000
+     */
+    timeline?:
+      | ({
+          t?: string | null;
+          event?: string | null;
+          code?: string | null;
+          why?: string | null;
+          symbol?: string | null;
+          r?: number | null;
+        } | null)[]
+      | null;
+    position?: {
+      symbol?: string | null;
+      code?: string | null;
+      state?: string | null;
+      origin?: string | null;
+      shares?: number | null;
+      sold_at_target?: number | null;
+      entry?: number | null;
+      trigger?: number | null;
+      stop?: number | null;
+      stop0?: number | null;
+      target?: number | null;
+    } | null;
+    /**
+     * @maxItems 2000
+     */
+    closed?:
+      | ({
+          day?: string | null;
+          symbol?: string | null;
+          code?: string | null;
+          reason?: string | null;
+          r?: number | null;
+          booked?: boolean | null;
+          h1_r?: number | null;
+          h2_r?: number | null;
+        } | null)[]
+      | null;
+    safety?: {
+      /**
+       * @maxItems 2000
+       */
+      x_latched?: (string | null)[] | null;
+      stop_rule?: {
+        decision?: string | null;
+        trades?: number | null;
+        sum_r?: number | null;
+        max_loss_r?: number | null;
+        review_at?: number | null;
+        stop_date?: string | null;
+      } | null;
+    } | null;
+    rotation?: {
+      names?: number | null;
+      changes?: number | null;
+      done?: string | null;
+    } | null;
   } | null;
 }

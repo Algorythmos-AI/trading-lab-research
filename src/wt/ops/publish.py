@@ -202,7 +202,21 @@ ALLOW: dict[str, Any] = {
     # ---- Gap Hunter, the stock robot (HYP-0071): counts, dates and R only, never a symbol ----
     "gap_hunter": {"enabled": B, "kill": B, "latched": B, "sessions": I, "last_session": S, "trades": I,
                    "total_r": N, "mean_r": N, "open": I,
-                   "funnel": {"session": S, "kept": I, "passed": I, "tier1": I, "tier2": I, "primary": B}},
+                   "funnel": {"session": S, "kept": I, "passed": I, "tier1": I, "tier2": I, "primary": B},
+                   # DEC-0078: what it is doing, symbols included (PRIVATE, behind the login); codes, never text
+                   "as_of": S,
+                   "heartbeat": {"session": S, "armed_at": S, "last_row": S, "rows_today": I, "ended": B},
+                   "pick": {"symbol": S, "rank": I, "why": S, "tier2": [S]},
+                   "rules": [{"rule": S, "why": S, "trigger": N, "stop": N}],
+                   "timeline": [{"t": S, "event": S, "code": S, "why": S, "symbol": S, "r": N}],
+                   "position": {"symbol": S, "code": S, "state": S, "origin": S, "shares": I,
+                                "sold_at_target": I, "entry": N, "trigger": N, "stop": N, "stop0": N, "target": N},
+                   "closed": [{"day": S, "symbol": S, "code": S, "reason": S, "r": N, "booked": B, "h1_r": N,
+                               "h2_r": N}],
+                   "safety": {"x_latched": [S],
+                              "stop_rule": {"decision": S, "trades": I, "sum_r": N, "max_loss_r": N,
+                                            "review_at": I, "stop_date": S}},
+                   "rotation": {"names": I, "changes": I, "done": S}},
 }
 REQUIRED = ("schema", "schema_version", "run_id", "as_of")
 _KEY = re.compile(r"^[\w.:+\- /|]{1,64}$")
@@ -525,6 +539,127 @@ def gap_hunter_view(journal: Path | None = None, state_dir: Path | None = None,
         "funnel": None if pick is None else {
             "session": pick.get("day"), "kept": pick.get("kept"), "passed": pick.get("passed"),
             "tier1": pick.get("tier1"), "tier2": pick.get("tier2"), "primary": pick.get("symbol") is not None},
+        **gap_hunter_live(rows, folder, days[-1] if days else None, latched),
+    }
+
+
+# DEC-0078: the journal events the page's timeline shows, and the plan states that hold or wait on shares
+GAP_TIMELINE = ("armed", "refuse_to_arm", "gap_primary", "entry_placed", "entry_not_placed", "entry_cancelled",
+                "entry_filled", "partial_filled", "exit_signal", "stop_moved", "stop_move_failed", "trade_closed",
+                "signal_blocked", "data_timeout", "loop_error", "protect_failed", "unprotected", "execution_stop",
+                "adopted_orphan", "gap_day_done", "kill_state", "END_OF_DAY_NOT_FLAT", "session_end")
+GAP_LIVE_STATES = ("entry_working", "in_position", "exiting")
+_CODE = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
+
+
+def _code(x: Any) -> str | None:
+    """A code the robot itself defines (a rule code, a reason, a why): lowercase words only, never free text."""
+    return x if isinstance(x, str) and _CODE.fullmatch(x) else None
+
+
+def _num(x: Any) -> float | None:
+    return float(x) if isinstance(x, int | float) and not isinstance(x, bool) else None
+
+
+def gap_hunter_live(rows: list[dict[str, Any]], folder: Path, session: str | None,
+                    latched: bool | None) -> dict[str, Any]:
+    """DEC-0078: what Gap Hunter is doing, for its page. The day's pick and tier-2 symbols, the live position, each
+    rule's state this minute, the session's timeline (a closed set of events, codes only, never a row's free
+    text), closed trades with their DEC-0074 haircut R, the safety state and the rotation shadow's counts. PRIVATE
+    data behind the owner's login: symbols and prices, never a setup name or a headline."""
+    from wt.live.setups_live import GAP_TRIAL
+    from wt.risk import cost_haircut, stop_rule
+
+    start = next((i for i, r in enumerate(rows)
+                  if r.get("event") == "armed" and r.get("trial") == GAP_TRIAL and str(r.get("day")) == session),
+                 len(rows)) if session else len(rows)
+    today = rows[start:]
+    armed = today[0] if today else None
+    pick_row = next((r for r in reversed(today) if r.get("event") == "gap_primary"), None)
+    names = next((r.get("names") for r in today if r.get("event") == "rotation_shadow" and r.get("kind") == "names"),
+                 None)
+    tier2 = [str(n[1]) for n in names if isinstance(n, list | tuple) and len(n) == 2] if isinstance(names, list) \
+        else []
+    rules_row = next((r for r in reversed(today) if r.get("event") == "gap_rules"), None)
+    rules = []
+    if rules_row and isinstance(rules_row.get("rules"), dict):
+        for code, v in sorted(rules_row["rules"].items()):
+            if _code(code) and isinstance(v, dict):
+                rules.append({"rule": code, "why": _code(v.get("why")), "trigger": _num(v.get("trigger")),
+                              "stop": _num(v.get("stop"))})
+    timeline = []
+    for r in today:
+        e = r.get("event")
+        if e in GAP_TIMELINE:
+            timeline.append({"t": r.get("ts"), "event": e, "code": _code(r.get("code")),
+                             "why": _code(r.get("why")) or _code(r.get("reason")) or _code(r.get("kind")),
+                             "symbol": r.get("symbol") if isinstance(r.get("symbol"), str) else None,
+                             "r": _num(r.get("R"))})
+    position = None
+    plans = folder / "plans"
+    for f in sorted(plans.glob("*.json")) if plans.exists() else []:
+        try:
+            p = json.loads(f.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(p, dict) or p.get("state") not in GAP_LIVE_STATES:
+            continue
+        raw_wt = p.get("wt")
+        wt: dict[str, Any] = raw_wt if isinstance(raw_wt, dict) else {}
+        position = {"symbol": p.get("symbol"), "code": _code(p.get("code")), "state": p.get("state"),
+                    "origin": _code(p.get("origin")), "shares": p.get("filled_qty") or p.get("qty"),
+                    "sold_at_target": p.get("partial_qty") or 0, "entry": _num(p.get("avg_entry")),
+                    "trigger": _num(p.get("trigger")), "stop": _num(p.get("stop")),
+                    "stop0": _num(p.get("stop0")) or _num(wt.get("stop0")) or _num(p.get("stop")),
+                    "target": _num(wt.get("t1")) or _num(p.get("target"))}
+        if p.get("state") != "entry_working":
+            break                                       # a held position wins over a resting entry
+    hc = {}
+    try:
+        hc = {h.trade_id: h for h in cost_haircut.haircuts(rows)[0]}
+    except Exception:  # noqa: BLE001 - the haircut is a report; the page lives without it
+        pass
+    closed, seen = [], set()
+    for r in rows:
+        tid = str(r.get("trade_id"))
+        if r.get("event") != "trade_closed" or r.get("trial") != GAP_TRIAL or tid in seen:
+            continue
+        seen.add(tid)
+        h = hc.get(tid)
+        closed.append({"day": r.get("day"), "symbol": r.get("symbol"), "code": _code(r.get("code")),
+                       "reason": _code(r.get("reason")), "r": _num(r.get("R")), "booked": bool(r.get("booked")),
+                       "h1_r": round(h.h1_r, 4) if h else None, "h2_r": round(h.h2_r, 4) if h else None})
+    rule = None
+    try:
+        rule = stop_rule.load("S")
+    except Exception:  # noqa: BLE001
+        pass
+    counted = stop_rule.rs_of(rows)
+    xs = sorted({str(r.get("code")) for r in rows if r.get("event") == "execution_stop" and r.get("new_latch")
+                 and isinstance(r.get("code"), str) and re.fullmatch(r"X[1-9]", str(r.get("code")))}) \
+        if latched else []
+    shadow = next((r.get("rotation_shadow") for r in reversed(today) if r.get("event") == "session_end"), None)
+    rot_names = len(tier2)
+    rot_changes = sum(1 for r in today if r.get("event") == "rotation_shadow" and r.get("kind") == "change")
+    return {
+        "as_of": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
+        "heartbeat": {"session": session, "armed_at": armed.get("ts") if armed else None,
+                      "last_row": rows[-1].get("ts") if rows else None, "rows_today": len(today),
+                      "ended": any(r.get("event") == "session_end" for r in today)},
+        "pick": None if pick_row is None else {
+            "symbol": pick_row.get("symbol") if isinstance(pick_row.get("symbol"), str) else None,
+            "rank": pick_row.get("rank"), "why": _code(pick_row.get("why")), "tier2": tier2[:8]},
+        "rules": rules,
+        "timeline": timeline[-60:],
+        "position": position,
+        "closed": closed[-30:],
+        "safety": {"x_latched": xs,
+                   "stop_rule": None if rule is None else {
+                       "decision": rule.decision, "trades": len(counted), "sum_r": round(sum(counted), 4),
+                       "max_loss_r": rule.cum_r_max_loss, "review_at": rule.review_at_trades,
+                       "stop_date": rule.stop_date.isoformat()}},
+        "rotation": {"names": rot_names, "changes": rot_changes,
+                     "done": _code(shadow.get("done")) if isinstance(shadow, dict) else None},
     }
 
 
@@ -823,7 +958,20 @@ def main(argv: list[str] | None = None) -> int:
         rc = _publish(a)
     if not a.dry_run:
         webull_watch()
+        gap_hunter_watch()
     return rc
+
+
+def gap_hunter_watch() -> None:
+    """Gap Hunter's watch from outside its process (wt.ops.gap_watch): not started, ended early, process gone, or
+    up but not armed, in the session. Here because this job runs every 5 minutes in the trading window whatever the
+    runner does. Never fails this job."""
+    try:
+        from wt.ops.gap_watch import run
+        if fired := run():
+            print(f"gap hunter watch: {', '.join(fired)}")
+    except Exception as e:  # noqa: BLE001 - the dashboard must never fail over the Gap Hunter watch
+        print(f"gap hunter watch: could not run ({e.__class__.__name__})")
 
 
 def webull_watch() -> None:

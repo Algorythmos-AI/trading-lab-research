@@ -423,8 +423,11 @@ class OMS:
         return False
 
     # ---- reconciliation -------------------------------------------------------------------------
-    def reconcile(self, managed: set[str], stop_for: dict[str, float], plan: TradePlan | None = None) -> list[str]:
-        """Broker = source of truth for this strategy's symbols. Returns actions taken or flagged."""
+    def reconcile(self, managed: set[str], stop_for: dict[str, float], plan: TradePlan | None = None,
+                  keep: set[str] | frozenset[str] = frozenset()) -> list[str]:
+        """Broker = source of truth for this strategy's symbols. Returns actions taken or flagged. `keep`: symbols
+        whose orders belong to another active plan; this call does not manage them and never cancels them as
+        strays (DEC-0077)."""
         acts: list[str] = []
         orders = self._live(self.b.open_orders())
         positions = {p.symbol: p.qty for p in self.b.positions()}
@@ -465,7 +468,7 @@ class OMS:
             except GuardRejected as e:
                 acts.append(f"UNPROTECTED {sym} x{q}: stop deferred ({e})")
         for o in ours:
-            if o.symbol not in managed:
+            if o.symbol not in managed and o.symbol not in keep:
                 self.b.cancel(o.client_order_id)
                 acts.append(f"cancelled stray order {o.client_order_id} {o.symbol}")
         return acts

@@ -14,6 +14,7 @@ import {
   OPTIONS_LIVE_PATHS,
   OPTIONS_PATHS,
   PAPER_OPTIONS_PATHS,
+  GAP_HUNTER_LIVE_PATHS,
   RADAR_DESK_PATHS,
   RADAR_PATHS,
   RADAR_RUN_PATHS,
@@ -44,6 +45,7 @@ import type { OptionsClone } from "./options-clone.types";
 import type { OptionsLive } from "./options-live.types";
 import type { OptionsEdition } from "./options.types";
 import type { PaperOptions } from "./paper-options.types";
+import type { GapHunterLive } from "./gap-hunter-live.types";
 import { withStoredPremarket } from "./premarket";
 import { radarDates } from "./radar";
 import type { RadarDeskDoc } from "./radar-desk.types";
@@ -477,6 +479,44 @@ export const loadPaperOptions = cache(async (): Promise<PaperOptionsResult> => {
     return { status: "ok", doc: parsed as PaperOptions, source: "blob" };
   } catch (e) {
     logEvent("snapshot.read", { outcome: "error", desk: "paper-options", error: e instanceof Error ? e.name : "unknown" });
+    return { status: "error" };
+  }
+});
+
+export type GapHunterLiveResult =
+  | { status: "ok"; doc: GapHunterLive; source: "fixture" | "blob" }
+  | { status: "missing" }
+  | { status: "error" };
+
+/**
+ * Gap Hunter's live state (DEC-0078): the snapshot's `gap_hunter` block, every minute in session. "missing" until
+ * the trading host has sent it once. In fixture mode it is the fixture snapshot's own block, so the two agree.
+ */
+export const loadGapHunterLive = cache(async (): Promise<GapHunterLiveResult> => {
+  if (fixtureMode()) {
+    const flags = await fixtureFlags();
+    if (flags.has("gap-live-off") || flags.has("empty")) return { status: "missing" };
+    if (flags.has("error")) return { status: "error" };
+    const mod = await import("../../test/fixtures/snapshot.v3.json");
+    const snap = (mod.default ?? mod) as unknown as { as_of?: string; gap_hunter?: GapHunterLive["gap_hunter"] };
+    if (!snap.gap_hunter) return { status: "missing" };
+    return {
+      status: "ok",
+      doc: { schema: "stocksdelta/gap-hunter-live", schema_version: 1, run_id: "fixture-gap-live", as_of: snap.as_of ?? FROZEN_NOW, paper: true, gap_hunter: snap.gap_hunter },
+      source: "fixture",
+    };
+  }
+  try {
+    const stored = await readText(GAP_HUNTER_LIVE_PATHS.latest);
+    if (!stored) return { status: "missing" };
+    const parsed: unknown = JSON.parse(stored.text);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      logEvent("snapshot.read", { outcome: "not-an-object", desk: "gap-hunter-live" });
+      return { status: "error" };
+    }
+    return { status: "ok", doc: parsed as GapHunterLive, source: "blob" };
+  } catch (e) {
+    logEvent("snapshot.read", { outcome: "error", desk: "gap-hunter-live", error: e instanceof Error ? e.name : "unknown" });
     return { status: "error" };
   }
 });

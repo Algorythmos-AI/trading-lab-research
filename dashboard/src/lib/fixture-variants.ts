@@ -37,6 +37,7 @@ export const VARIANT_COOKIE = "fx";
  * - `positions-old`: the document is three hours old.
  * - `paper-off`: the paper options history has not been published. With `partial` it carries the clone's trades
  *   only (no arms); with `poison` one clone row names a contract that cannot be read.
+ * - `gap-live-off`: Gap Hunter's live state (DEC-0078) has not been published; the page falls back to the snapshot.
  * - `clone-off`: the options clone has published nothing. `clone-latched`: its document on a bad day.
  * - `journal-poison`: a stored trade journal with a null trade, as after corruption. The panes drawn from the trades
  *   must fail alone; the rest of each page keeps working.
@@ -94,6 +95,7 @@ export const VARIANT_FLAGS = [
   "clone-off",
   "clone-latched",
   "paper-off",
+  "gap-live-off",
   "calendar-off",
   "calendar-stale",
   "calendar-poison",

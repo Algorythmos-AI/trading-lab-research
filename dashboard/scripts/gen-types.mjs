@@ -57,6 +57,7 @@ for (const [file, out, name, options = {}] of [
   ["options-live.schema.json", "options-live.types.ts", "OptionsLive"],
   ["options-clone.schema.json", "options-clone.types.ts", "OptionsClone", { maxItems: -1 }],
   ["paper-options.schema.json", "paper-options.types.ts", "PaperOptions", { maxItems: -1 }],
+  ["gap-hunter-live.schema.json", "gap-hunter-live.types.ts", "GapHunterLive", { maxItems: -1 }],
   ["journal.schema.json", "journal.types.ts", "JournalDoc", { maxItems: -1 }],
   ["calendar.schema.json", "calendar.types.ts", "CalendarDoc", { maxItems: -1 }],
   ["ledger.schema.json", "ledger.types.ts", "LedgerEdition", { maxItems: -1 }],
