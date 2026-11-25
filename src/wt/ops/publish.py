@@ -505,16 +505,16 @@ def gap_hunter_view(journal: Path | None = None, state_dir: Path | None = None,
     kill file and latch, its armed sessions, its booked trades, its open positions and the newest morning's
     selection. Never a symbol, a setup or a headline (the page's GapHunterBlock, dashboard/src/lib/gap-hunter.ts)."""
     from wt.live import runner_s
-    from wt.live.setups_live import GAP_TRIAL
+    from wt.live.setups_live import GAP_TRIALS
     from wt.risk.virtual_account import VirtualAccount
 
     rows = _read_jsonl(journal or runner_s.JOURNAL)
     folder = state_dir or runner_s.DIR
-    days = sorted({str(r.get("day")) for r in rows if r.get("event") == "armed" and r.get("trial") == GAP_TRIAL})
+    days = sorted({str(r.get("day")) for r in rows if r.get("event") == "armed" and r.get("trial") in GAP_TRIALS})
     seen: set[str] = set()
     rs: list[float] = []
     for r in rows:
-        if r.get("event") != "trade_closed" or r.get("trial") != GAP_TRIAL or not r.get("booked") \
+        if r.get("event") != "trade_closed" or r.get("trial") not in GAP_TRIALS or not r.get("booked") \
                 or str(r.get("trade_id")) in seen or not isinstance(r.get("R"), int | float):
             continue
         seen.add(str(r.get("trade_id")))
@@ -529,7 +529,7 @@ def gap_hunter_view(journal: Path | None = None, state_dir: Path | None = None,
             continue
     pick = next((r for r in reversed(rows) if r.get("event") == "gap_primary"), None)
     return {
-        "enabled": GAP_TRIAL in runner_s.switched_on(risk_yaml),
+        "enabled": bool(set(GAP_TRIALS) & runner_s.switched_on(risk_yaml)),   # HYP-0071 or HYP-0072
         "kill": (folder / "KILL").exists(),
         "latched": latched,
         "sessions": len(days), "last_session": days[-1] if days else None,
@@ -567,17 +567,17 @@ def gap_hunter_live(rows: list[dict[str, Any]], folder: Path, session: str | Non
     rule's state this minute, the session's timeline (a closed set of events, codes only, never a row's free
     text), closed trades with their DEC-0074 haircut R, the safety state and the rotation shadow's counts. PRIVATE
     data behind the owner's login: symbols and prices, never a setup name or a headline."""
-    from wt.live.setups_live import GAP_TRIAL
+    from wt.live.setups_live import GAP_TRIALS
     from wt.risk import cost_haircut, stop_rule
 
     start = next((i for i, r in enumerate(rows)
-                  if r.get("event") == "armed" and r.get("trial") == GAP_TRIAL and str(r.get("day")) == session),
+                  if r.get("event") == "armed" and r.get("trial") in GAP_TRIALS and str(r.get("day")) == session),
                  len(rows)) if session else len(rows)
     today = rows[start:]
     armed = today[0] if today else None
     pick_row = next((r for r in reversed(today) if r.get("event") == "gap_primary"), None)
-    names = next((r.get("names") for r in today if r.get("event") == "rotation_shadow" and r.get("kind") == "names"),
-                 None)
+    names = next((r.get("names") for r in today if r.get("event") == "gap_names"          # HYP-0072 trading
+                  or (r.get("event") == "rotation_shadow" and r.get("kind") == "names")), None)
     tier2 = [str(n[1]) for n in names if isinstance(n, list | tuple) and len(n) == 2] if isinstance(names, list) \
         else []
     rules_row = next((r for r in reversed(today) if r.get("event") == "gap_rules"), None)
@@ -622,7 +622,7 @@ def gap_hunter_live(rows: list[dict[str, Any]], folder: Path, session: str | Non
     closed, seen = [], set()
     for r in rows:
         tid = str(r.get("trade_id"))
-        if r.get("event") != "trade_closed" or r.get("trial") != GAP_TRIAL or tid in seen:
+        if r.get("event") != "trade_closed" or r.get("trial") not in GAP_TRIALS or tid in seen:
             continue
         seen.add(tid)
         h = hc.get(tid)

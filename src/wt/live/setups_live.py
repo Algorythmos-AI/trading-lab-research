@@ -310,6 +310,8 @@ def wt_step(bars: pd.DataFrame, s: WTState, warm_c5: list[float] | None = None) 
 
 # ---- the registered gap entries, one closed bar at a time -------------------------------------------------------------
 GAP_TRIAL = "HYP-0071"
+ROTATION_TRIAL = "HYP-0072"                # DEC-0076: the same entries, in the best-ranked tier-2 name with a valid order
+GAP_TRIALS = (GAP_TRIAL, ROTATION_TRIAL)   # the gap trials of the desk; a session trades at most one of them
 GAP_CODES = ("e1", "e2", "e3", "e4")       # ENT-GG-1 .. ENT-GG-4; a journal row or a page carries the code only
 GAP_FIRST_MIN_VOL = 100_000.0
 GAP_MIN_RR = 2.0
