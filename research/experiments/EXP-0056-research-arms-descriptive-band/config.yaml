@@ -1,0 +1,27 @@
+# EXP-0056: frozen with DEC-0080 before any band number is shown. A changed value is a new experiment.
+experiment: EXP-0056
+decision: DEC-0080
+status: registered                  # PROPOSED with DEC-0080; the page shows nothing until it is accepted
+family: none                        # descriptive: no hypothesis, no trial
+arms: [HYP-0046, HYP-0047]          # quantity: own mean (arms_verdict kind "own")
+not_banded:
+  HYP-0044: paired with the control's real trade; the document carries no pairing
+  HYP-0045: paired with the control's real trade; the document carries no pairing
+  tag_arms: sealed (DEC-0041 point 7)
+data:
+  source: paper options document, arms[].trades
+  last_session: "2026-11-17"        # review.SPREAD5_END, DEC-0059 point 2
+  session: New York day of opened_at
+  unit: rop as the document carries it (after $0.03 a contract each way, over premium plus one fee)
+method:                             # wt.options.arms_verdict.bootstrap and decide, ported
+  resample: whole sessions with replacement, as many as there are sessions
+  draws: 5000
+  statistic: mean
+  range: [2.5, 97.5]                # percentiles, linear interpolation
+  halves: units in session order (then close time), split at n // 2
+  min_sessions_for_a_range: 2
+  rng: {kind: mulberry32, seed: 7}
+display:
+  label: "Descriptive, not a verdict: 9 of 20 sessions at most"
+  counts_shown_against: {units: 30, sessions: 20}
+  no_pass_or_fail_word: true
