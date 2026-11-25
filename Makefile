@@ -182,15 +182,18 @@ vm-deploy: ## OCI host only, through its Access tunnel (the GCP host is deployed
 	  -o ProxyCommand="$${CLOUDFLARED:-cloudflared} access ssh --hostname %h --id $$CF_ACCESS_CLIENT_ID --secret $$CF_ACCESS_CLIENT_SECRET" \
 	  "wt@$$VM_SSH_HOST" "$${VERB:-status}"
 
-kill: ## Stop new entries on a desk (exits keep being managed): make kill [DESK=options] REASON="..."
-	@if [ "$(DESK)" = "options" ]; then f="$$($(PY) -c 'import sys; from wt.core.desk import DESKS; print(DESKS[sys.argv[1]].kill_file)' $(DESK))"; \
-	  mkdir -p "$$(dirname "$$f")"; printf '%s\n' "$${REASON:-paused by make kill} ($$(date '+%Y-%m-%d %H:%M %Z'))" > "$$f" && echo "$(DESK) KILL switch ON" && cat "$$f"; \
-	else printf '%s\n' "$${REASON:-paused by make kill} ($$(date '+%Y-%m-%d %H:%M %Z'))" > KILL && echo "KILL switch ON" && cat KILL; \
-	  $(PY) -m wt.ops.audit kill_on || true; fi
+kill: ## Stop new entries on a desk (exits keep being managed): make kill [DESK=s|options] REASON="..." (no DESK: the root file)
+	@case "$(DESK)" in \
+	  ""|stocks) f=KILL; d=root;; \
+	  s|S) f="$${WT_STATE:-var}/smallcap/KILL"; d=s;; \
+	  options) f="$${WT_STATE:-var}/options/KILL"; d=options;; \
+	  *) echo "unknown DESK=$(DESK): use DESK=s (Gap Hunter), DESK=options, or no DESK for the root KILL file" >&2; exit 2;; \
+	esac; mkdir -p "$$(dirname "$$f")"; \
+	printf '%s\n' "$${REASON:-paused by make kill} ($$(date '+%Y-%m-%d %H:%M %Z'))" > "$$f" && echo "$$d KILL switch ON ($$f)" && cat "$$f" || exit 1; \
+	$(PY) -m wt.ops.audit kill_on "$$d" || echo "audit log not written" >&2
 
-unkill: ## Allow entries again: remove the root KILL file (the options clone reads it), or make unkill DESK=options
-	@if [ "$(DESK)" = "options" ]; then rm -f var/options/KILL && echo "options KILL switch off"; \
-	else $(PY) -m wt.ops.control unkill; fi
+unkill: ## Allow entries again: make unkill [DESK=s|options] (no DESK: the root file, which the options clone reads)
+	@$(PY) -m wt.ops.control unkill $(DESK)
 
 reset-options-latch: ## OWNER: clear an options clone latch: make reset-options-latch KIND=day|week|drawdown REASON="..."
 	@PYTHONPATH=src $(PY) -m wt.live.runner_o reset-latch "$(KIND)" "$(REASON)"
