@@ -56,9 +56,17 @@ The repo is **restricted**: it holds specifications and research notes derived f
 
 | Class | Examples | May be published (dashboard, issues, logs) |
 |---|---|---|
-| RESTRICTED | `research/specs/**`, decision and hypothesis prose, report.md files, spec requirement text, setup names, news headlines, `knowledge/` | Never |
+| RESTRICTED | `research/specs/**`, `research/external/**`, report.md files, spec requirement text, setup names, news headlines, `knowledge/`; decision and hypothesis prose anywhere but the Reference Registry (below) | Never |
+| RECORD | the titles and prose of the records in `research/decisions/`, `research/hypotheses/`, `research/experiments/` (their `config.*` and `README.md`, never a `report.md`) and `research/lessons_learned/` | Only on the owner-only dashboard's Reference Registry, behind Vercel Authentication, sent by the registry job alone (below). Never in issues, logs, alerts or any other page |
 | PRIVATE | account balances, host details, log lines, commit subjects, owner notes | Only behind the owner's login, redacted |
 | SAFE | counts, IDs, statuses, dates, R-multiples and statistics | Yes, behind the owner's login |
+
+The Reference Registry (`stocksdelta/registry`, key id `registry`, owner decision of 2026-11-25) is the dashboard's
+index of the research records, built in CI from the repository and sent through the signed ingest. It may carry
+RECORD text: each record's title and a capped summary of its own prose, never a whole file. It never carries anything
+RESTRICTED: no file under `research/specs/` or `research/external/`, nothing from `knowledge/`, and no `report.md`.
+Its CI job prints counts and hashes only and keeps no artifact. Until the pull request that turns its prose on is
+merged (`dashboard/src/lib/registry-policy.json`, `"prose": true`), it carries SAFE fields only.
 
 The dashboard's Radar page (`stocksdelta/radar`, key id `radar`) carries the owner's own pre-market research from
 public sources, not material derived from this repo. It is PRIVATE: owner-only, behind the login. The denylist still
