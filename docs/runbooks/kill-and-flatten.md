@@ -23,8 +23,8 @@ Exits and stops keep being managed.
   `options` or `stocks` is refused and writes nothing.
 - Every `make kill` and `make unkill` above writes a `kill_on` or `kill_off` entry to the audit log.
 - The runners re-read their files while running, so this takes effect at once.
-- `make status` and the dashboard's top-level kill flag show only the root file. Check `var/smallcap/KILL` yourself
-  before you trust that Gap Hunter is stopped.
+- `make status` shows each desk's file on its own line. The dashboard's Risk page lists Gap Hunter's file and the
+  root file, but not the clone's own `var/options/KILL`. Check the line for the desk you meant to stop.
 
 ## Flatten now
 

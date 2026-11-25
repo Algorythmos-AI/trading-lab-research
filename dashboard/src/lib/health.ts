@@ -1,4 +1,5 @@
 import { freshness, type Freshness } from "./freshness";
+import { deskKills } from "./kill";
 import { num } from "./format";
 import { alertTitle, isGapHunterAlert, isRedAlert, jobName, sortJobKeys } from "./robots";
 import { DISK_FLOOR_GB, DISK_TARGET_GB } from "./thresholds.gen";
@@ -90,6 +91,8 @@ export function computeHealth(s: Snapshot | null, now: Date): Health {
     }
   }
   if (s.kill?.on === true) amber("kill", "Kill switch is on: the options clone opens no new paper trades.");
+  // Gap Hunter reads only its own file, never the root one (no single file stops every desk).
+  if (deskKills(s).find((r) => r.key === "s")?.on === true) amber("kill:s", "Gap Hunter's kill switch is on: it opens no new entries.");
   const last = Object.fromEntries(entries(s.jobs?.last));
   for (const key of sortJobKeys(Object.keys(last))) {
     const job = last[key];

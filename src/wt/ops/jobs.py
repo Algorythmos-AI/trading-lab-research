@@ -34,7 +34,7 @@ from typing import Any
 from wt.core.clock import ET, et
 from wt.core.config import FORWARD_LEDGER, ROOT
 from wt.core.desk import DESKS, installed, moved, moved_marker
-from wt.ops import hc, host, preflight
+from wt.ops import control, hc, host, preflight
 from wt.ops.alerts import Alerts, count, ratio, word
 from wt.ops.alerts import day as page_day
 from wt.ops.heartbeat import Heartbeat, last_runs, ok_runs_since
@@ -42,7 +42,6 @@ from wt.ops.locks import DEPLOY_LOCK, job_lock
 from wt.ops.schedule import JOBS, PY, SYDNEY, Job
 from wt.ops.window import CalendarFault, Session, forward_wait_until, load_sessions
 
-KILL = ROOT / "KILL"
 WEEKLY_WAIT_S = 3 * 3600
 DEPLOY_WAIT_S = 30 * 60           # a job due while a deploy switches the checkout waits for it, then starts
 KILL_GRACE_S = 30
@@ -347,7 +346,7 @@ def run_job(job: Job, root: Path = ROOT, preflight_only: bool = False, alerts: A
             alerts.resolve(key, f"{word(job.name, KNOWN_JOBS, 'a job')} recovered",
                            f"{word(job.name, KNOWN_JOBS, 'a job')} completed normally.")
             if job.name == "forward" and (line := forward_summary()):
-                paused = " The KILL file is present: new entries are paused." if KILL.exists() else ""
+                paused = control.paused_note()
                 alerts.once_per_day("summary", "Trading Lab daily summary", line + paused, 2)
             if job.name == "weekly":
                 publish_evidence(root, log, alerts)
@@ -375,8 +374,10 @@ def cadence(now: dt.datetime | None = None, heartbeats: Path | None = None) -> l
 
 
 def status(root: Path = ROOT) -> int:
-    """What's going on, in the terminal: last runs, firing alerts, kill switch, preflight."""
-    print(f"KILL switch: {'ON (no new entries)' if (root / 'KILL').exists() else 'off'}")
+    """What's going on, in the terminal: last runs, firing alerts, each desk's kill switch, preflight."""
+    print("KILL switches (each desk reads its own file; none stops every desk):")
+    for line in control.kill_lines(root):
+        print(line)
     print("Last runs:")
     for name, r in last_runs().items():
         print(f"  {name:8} {r.get('status', '?'):8} exit={r.get('exit')} started={r.get('started')} "

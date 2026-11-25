@@ -558,7 +558,7 @@ def test_the_daily_summary_is_the_forward_line_and_names_no_retired_desk(jobroot
     """DEC-0069: the QQQ rule's line left the summary with its job (as the crypto desk's did, DEC-0036)."""
     root, a, box, tmp = jobroot
     monkeypatch.setattr(jobs, "forward_summary", lambda: "Forward 2026-10-06: 1 trade(s), -0.18R total.")
-    monkeypatch.setattr(jobs, "KILL", tmp / "KILL")
+    monkeypatch.setattr("wt.ops.control.kill_states", lambda root=None: {"root": False, "options": False, "s": False})
     assert jobs.run_job(_job("pass", name="forward"), root, alerts=a) == 0
     assert (box[-1]["title"], box[-1]["message"]) == ("Trading Lab daily summary",
                                                       "Forward 2026-10-06: 1 trade(s), -0.18R total.")
