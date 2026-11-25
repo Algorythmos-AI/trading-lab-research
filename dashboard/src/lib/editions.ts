@@ -12,7 +12,7 @@ export const RADAR_ACCEPTS = 1;
 export const OPTIONS_LIVE_ACCEPTS = 3;
 export const OPTIONS_CLONE_ACCEPTS = 1;
 /** The paper options history (DEC-0057): the newest format this build validates. */
-export const PAPER_OPTIONS_ACCEPTS = 5;                     // 2: the options lab's tape status (`lab`); 3: upload delay and rate-limit headroom; 4: the Radar → Options shadow (`select`); 5: its progress and each run's check
+export const PAPER_OPTIONS_ACCEPTS = 6;                     // 2: the options lab's tape status (`lab`); 3: upload delay and rate-limit headroom; 4: the Radar → Options shadow (`select`); 5: its progress and each run's check; 6: the lab sessions' stale split and tier-1 open-interest nulls
 /** Gap Hunter's live state (DEC-0078): the newest format this build validates. */
 export const GAP_HUNTER_LIVE_ACCEPTS = 1;
 /** 2 adds `money`: deposits, withdrawals and the account value. */

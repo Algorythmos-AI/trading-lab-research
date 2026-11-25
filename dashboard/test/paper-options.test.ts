@@ -204,7 +204,7 @@ describe("the health report", () => {
     const h = paperOptionsHealth({ status: "ok", doc: d, source: "blob" });
     expect(h).toEqual({ status: "ok", accepts: PAPER_OPTIONS_ACCEPTS, run_id: d.run_id, as_of: d.as_of, schema_version: 1 });
     expect(JSON.stringify(h)).not.toMatch(/SPY|HYP|usd|trades/);
-    expect(paperOptionsHealth({ status: "missing" })).toMatchObject({ status: "missing", accepts: 5, run_id: null });
+    expect(paperOptionsHealth({ status: "missing" })).toMatchObject({ status: "missing", accepts: 6, run_id: null });
   });
 });
 
@@ -225,7 +225,7 @@ describe("version 2: the options lab's tape status (DEC-0067)", () => {
     expect(bad((d) => (d.lab.names = ["AAA"]))).toBe(false);
     expect(bad((d) => (d.lab.sessions[0].why_not = ["because"]))).toBe(false);
     expect(bad((d) => (d.lab.sessions[0].coverage = 1.5))).toBe(false);
-    expect(bad((d) => (d.schema_version = 6))).toBe(false);
+    expect(bad((d) => (d.schema_version = 7))).toBe(false);
     expect(bad((d) => (d.select.sessions[0].symbol = "AAA"))).toBe(false);
     expect(bad((d) => (d.select.sessions[0].picks = ["AAA"]))).toBe(false);
     expect(bad((d) => (d.select.sessions[0].radar_detail = "free text"))).toBe(false);

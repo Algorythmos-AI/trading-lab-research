@@ -47,11 +47,25 @@ const pct = (v: number | null, digits = 2) => (v === null ? "—" : `${(v * 100)
 const TONE = { good: "bg-good-soft text-good", warn: "bg-warn-soft text-warn", bad: "bg-bad-soft text-bad" } as const;
 const DOT = { good: "bg-good-fill", warn: "bg-warn-fill", bad: "bg-bad-fill" } as const;
 
-function notes(s: LabSession): string {
+/** A stale run's length: seconds under two minutes (2026-11-24's 25 s read "0 min"), minutes above. */
+export function staleSpan(sec: number | null): string {
+  const v = sec ?? 0;
+  return v < 120 ? `${Math.round(v)} s` : `${Math.round(v / 60)} min`;
+}
+
+/** Where the stale name-ticks fell, from recorder manifests that carry the split (schema 6); "" before them. */
+export function staleSplit(s: LabSession): string {
+  const start = s.stale_slow_start ?? null;
+  const mid = s.stale_mid_session ?? null;
+  if (start === null || mid === null) return "";
+  return ` (${start} name-${start === 1 ? "tick" : "ticks"} before first fresh, ${mid} mid-session)`;
+}
+
+export function notes(s: LabSession): string {
   const out = [...s.why_not.filter((w) => w !== "not_recorded").map((w) => WHY[w])];
   if (s.stopped) out.push(STOPPED[s.stopped]);
   if (s.ticks_down) out.push(`${s.ticks_down} ${s.ticks_down === 1 ? "tick" : "ticks"} not run`);
-  if (s.stale_names) out.push(`${s.stale_names} ${s.stale_names === 1 ? "name" : "names"} stale for ${Math.round((s.longest_stale_s ?? 0) / 60)} min at most`);
+  if (s.stale_names) out.push(`${s.stale_names} ${s.stale_names === 1 ? "name" : "names"} stale for ${staleSpan(s.longest_stale_s)} at most${staleSplit(s)}`);
   if (s.recorded && !s.after_close_ok) out.push("after-close pull incomplete");
   if (s.recorded && !s.archived) out.push("not archived yet");
   if (s.upload_late && s.upload_after_close_min != null) out.push(`uploaded ${(s.upload_after_close_min / 60).toFixed(1)} h after the close (due within 110 min)`);

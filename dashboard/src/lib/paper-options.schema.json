@@ -23,9 +23,10 @@
         2,
         3,
         4,
-        5
+        5,
+        6
       ],
-      "description": "5 adds the shadow's `progress` and each shadow session's `check`; 4 adds `select`, the Radar → Options shadow's status; 3 adds each lab session's upload delay and rate-limit headroom; 2 adds `lab`, the options lab's tape status; 1 to 4 are still taken."
+      "description": "6 adds each lab session's stale split (slow start, mid-session) and tier-1 open-interest null share; 5 adds the shadow's `progress` and each shadow session's `check`; 4 adds `select`, the Radar → Options shadow's status; 3 adds each lab session's upload delay and rate-limit headroom; 2 adds `lab`, the options lab's tape status; 1 to 5 are still taken."
     },
     "run_id": {
       "type": "string",
@@ -807,6 +808,30 @@
             }
           ]
         },
+        "stale_slow_start": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0
+            }
+          ],
+          "description": "Stale name-ticks before each name's first fresh tick (version 6). Null on older manifests."
+        },
+        "stale_mid_session": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 0
+            }
+          ],
+          "description": "Stale name-ticks after the name was already fresh (version 6). Null on older manifests."
+        },
         "ticks_down": {
           "oneOf": [
             {
@@ -890,6 +915,19 @@
               "maximum": 1
             }
           ]
+        },
+        "oi_null_share_tier1": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          ],
+          "description": "Share of tier-1 contracts with no open interest value (version 6). Null before the field existed."
         },
         "archived": {
           "type": "boolean"

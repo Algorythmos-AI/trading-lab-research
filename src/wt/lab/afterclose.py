@@ -93,12 +93,15 @@ def prints(get: Get, headers: Mapping[str, str], symbols: Sequence[str], start: 
 def open_interest(get: Get, headers: Mapping[str, str], roots: Sequence[str], first: dt.date, last: dt.date,
                   keep: set[str], out: PartWriter, gap: PartWriter, deadline: float,
                   timeout: float = 10.0, session: dt.date | None = None,
-                  pause: Callable[[float], None] = time.sleep) -> dict[str, Any]:
+                  pause: Callable[[float], None] = time.sleep, tier1: set[str] | None = None) -> dict[str, Any]:
     """The listed open interest of the recorded contracts (`keep`), by root and expiry span. Recorded contracts the
     listing did not return are counted (and written as one gap row), and the open-interest dates are counted, so a
     stale or partial pull is visible: Alpaca's figure is as of its `open_interest_date` (on 2026-11-19 it was dated
-    2026-11-17, morning and evening alike) and is null for about a quarter of contracts; nulls are counted too."""
+    2026-11-17, morning and evening alike) and is null for about a quarter of contracts; nulls are counted too.
+    With `tier1`, the tier-1 contracts and their nulls are counted apart (diagnostic only: no table reads them)."""
     counts: dict[str, Any] = {"contracts": 0, "requests": 0, "failed": 0, "null_open_interest": 0}
+    if tier1 is not None:
+        counts |= {"contracts_tier1": 0, "null_open_interest_tier1": 0}
     seen: set[str] = set()
     dates: dict[str, int] = {}
     for root in sorted(set(roots)):
@@ -133,6 +136,9 @@ def open_interest(get: Get, headers: Mapping[str, str], roots: Sequence[str], fi
                              "open_interest_date": d, "close_price": _num(_as_num(r.get("close_price")))})
                     counts["contracts"] += 1
                     counts["null_open_interest"] += oi is None
+                    if tier1 is not None and sym in tier1:
+                        counts["contracts_tier1"] += 1
+                        counts["null_open_interest_tier1"] += oi is None
             nxt = body.get("next_page_token") if body else None
             token = nxt if isinstance(nxt, str) and nxt else None
             if token is None:

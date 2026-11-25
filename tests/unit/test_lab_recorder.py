@@ -679,3 +679,51 @@ def test_the_recorder_saves_its_headroom_across_a_restart(tmp_path: Path) -> Non
     rec.save()
     again = recorder.Recorder(get, {}, ["AAA"], day, tmp_path, Clock())
     assert again.min_share == 0.25 and again.counts["low_readings"] == 1 and again.counts["refused_429"] == 1
+
+
+def test_stale_ticks_split_into_slow_start_and_mid_session_with_their_runs(tmp_path: Path) -> None:
+    """2026-11-24: one name went stale for 9 ticks after it was already fresh; the manifest only had totals, so the
+    check could bound the mid-session share, not count it. The split and the runs are diagnostics: no rule reads them."""
+    clock = Clock(START - dt.timedelta(seconds=30))
+    api = Alpaca(clock)
+    api.prior_day = {"AAA": START + dt.timedelta(minutes=2)}               # AAA slow to start
+    api.frozen = (START + dt.timedelta(minutes=5), START + dt.timedelta(minutes=6, seconds=30))   # then all go stale
+    rec = make(tmp_path, clock, api)
+    rec.run(START, START + dt.timedelta(minutes=9))
+    doc = rec.finish({})
+    total = sum(doc["stale_ticks_by_name"].values())
+    assert doc["stale_ticks_slow_start"] > 0 and doc["stale_ticks_mid_session"] > 0
+    assert doc["stale_ticks_slow_start"] + doc["stale_ticks_mid_session"] == total
+    runs = doc["stale_runs_by_name"]
+    assert set(runs) == set(doc["stale_ticks_by_name"])
+    assert {n: sum(t for _, t in v) for n, v in runs.items()} == doc["stale_ticks_by_name"]
+    assert doc["stale_runs"] == sum(len(v) for v in runs.values())
+    assert max(t for v in runs.values() for _, t in v) * 5 == doc["longest_stale_s"]
+    first = doc["first_fresh_tick_by_name"]
+    mid = sum(t for n, v in runs.items() for b, t in v if b >= first.get(n, 10**9))
+    assert mid == doc["stale_ticks_mid_session"]                            # mid-session = runs after first fresh
+
+
+def test_a_stale_run_still_open_at_the_end_is_in_the_runs_and_survives_a_restart(tmp_path: Path) -> None:
+    clock = Clock(START - dt.timedelta(seconds=30))
+    api = Alpaca(clock, exit_at_stock=40)
+    api.frozen = (START + dt.timedelta(minutes=2), START + dt.timedelta(hours=1))   # stale to the end
+    rec = make(tmp_path, clock, api)
+    rec.run(START, START + dt.timedelta(minutes=6))
+    recorder.TERM.clear()
+    rec.flush()
+    api.exit_at_stock = None
+    rec2 = make(tmp_path, clock, api)
+    rec2.run(START, START + dt.timedelta(minutes=6))
+    doc = rec2.finish({})
+    runs = doc["stale_runs_by_name"]
+    assert runs and all(len(v) == 1 and v[0][0] + v[0][1] - 1 == rec2.last_tick for v in runs.values())
+    assert doc["stale_ticks_slow_start"] == 0 and doc["stale_runs"] == len(runs)
+
+
+def test_stale_runs_kept_per_name_are_capped_but_all_are_counted(tmp_path: Path) -> None:
+    clock = Clock(START - dt.timedelta(seconds=30))
+    rec = make(tmp_path, clock, Alpaca(clock))
+    for i in range(recorder.RUNS_KEPT + 5):
+        rec._close_run("AAA", 10 * i, 2)
+    assert len(rec.stale_runs["AAA"]) == recorder.RUNS_KEPT and rec.counts["stale_runs"] == recorder.RUNS_KEPT + 5
