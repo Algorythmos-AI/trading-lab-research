@@ -1405,11 +1405,34 @@ def load_events() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     return rows(CONFIG_DIR / "events" / "macro_events.csv"), rows(CONFIG_DIR / "events" / "earnings.csv")
 
 
+ROLES = ("primary", "shadow")
+
+
+def host_role() -> str:
+    """WT_ROLE (unset is primary). Anything else refuses the session: a mistyped `shadow` must never trade as a
+    primary host would."""
+    role = env("WT_ROLE", "primary").strip()
+    if role not in ROLES:
+        raise SystemExit(f"runner_o refuses to start: WT_ROLE must be one of {', '.join(ROLES)}")
+    return role
+
+
+def for_role(broker: Any, exits_only: str | None) -> tuple[Any, str | None]:
+    """On a shadow host (WT_ROLE=shadow) the clone sends nothing, as Gap Hunter (wt.live.runner_s): its broker is
+    wrapped in ShadowBroker, whose every order, cancel and replace raises, and the session is exits-only so it never
+    tries an entry. Reads pass through. On a primary host nothing changes; any other value refuses (host_role)."""
+    if host_role() != "shadow":
+        return broker, exits_only
+    from wt.brokers.shadow import ShadowBroker
+    return ShadowBroker(broker), "shadow host: this session never places orders"
+
+
 def run(day: dt.date | None = None) -> int:
     """The production session. Exits 0 on a day with no session; non-zero only when it could not run."""
     from wt.brokers.alpaca_options_paper import AlpacaOptionsPaperBroker, keys
     if env("MODE", "backtest") != "paper":
         raise SystemExit("runner_o refuses to start: MODE must be 'paper'")
+    host_role()                         # before any broker is built: an unknown role never reaches one
     now = dt.datetime.now(NEW_YORK)
     day = day or now.date()
     if not lv.is_session(day.isoformat()):
@@ -1445,12 +1468,15 @@ def run(day: dt.date | None = None) -> int:
             pager.fire("options-clone:broker", "Options clone could not connect", "Five tries failed.", 5)
             pager.close()
             return 2
+        broker, exits_only = for_role(broker, "exits-only launch" if env("WT_EXITS_ONLY", "") == "1" else None)
+        if exits_only and exits_only.startswith("shadow host"):
+            write("shadow_role", wrapped=type(broker).__name__)
         macro, earnings = load_events()
         r = Runner(day, cfg, lim, AlpacaFeeds(k[0], k[1], "opra" if (OPT / "switches" / "opra").exists()
                                               else str(cfg["feeds"]["option"]),
                                               stock_feed=str(cfg["feeds"]["stock"])),
                    broker, lambda: dt.datetime.now(NEW_YORK), time.sleep, pager, macro=macro, earnings=earnings,
-                   exits_only="exits-only launch" if env("WT_EXITS_ONLY", "") == "1" else None,
+                   exits_only=exits_only,
                    publisher=clone_site.publisher_from_env())
         r.arm()
         poll = float(cfg["feeds"]["poll_s"])
