@@ -22,6 +22,7 @@ import {
 } from "./desk";
 import {
   fixtureCalendar,
+  fixtureGapLive,
   fixtureOptionLot,
   fixtureOptionsClone,
   fixtureOptionsLive,
@@ -500,11 +501,8 @@ export const loadGapHunterLive = cache(async (): Promise<GapHunterLiveResult> =>
     const mod = await import("../../test/fixtures/snapshot.v3.json");
     const snap = (mod.default ?? mod) as unknown as { as_of?: string; gap_hunter?: GapHunterLive["gap_hunter"] };
     if (!snap.gap_hunter) return { status: "missing" };
-    return {
-      status: "ok",
-      doc: { schema: "stocksdelta/gap-hunter-live", schema_version: 1, run_id: "fixture-gap-live", as_of: snap.as_of ?? FROZEN_NOW, paper: true, gap_hunter: snap.gap_hunter },
-      source: "fixture",
-    };
+    const doc: GapHunterLive = { schema: "stocksdelta/gap-hunter-live", schema_version: 1, run_id: "fixture-gap-live", as_of: snap.gap_hunter.as_of ?? snap.as_of ?? FROZEN_NOW, paper: true, gap_hunter: snap.gap_hunter };
+    return { status: "ok", doc: fixtureGapLive(doc, flags), source: "fixture" };
   }
   try {
     const stored = await readText(GAP_HUNTER_LIVE_PATHS.latest);

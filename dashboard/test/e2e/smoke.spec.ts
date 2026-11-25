@@ -12,6 +12,7 @@ const PAGES = [
   { path: "/calendar", heading: "Calendar" },
   { path: "/strategies", heading: "Strategies" },
   { path: "/research", heading: "Research" },
+  { path: "/research/records", heading: "Records" },
   { path: "/operations", heading: "Operations" },
   { path: "/risk", heading: "Risk" },
   { path: "/engineering", heading: "Engineering" },
@@ -200,10 +201,10 @@ test("the stock robot's old address lands on the Gap Hunter page, which shows th
   await expect(page.getByRole("heading", { level: 1, name: "Gap Hunter" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Robot B" })).toHaveCount(0);
   await expect(page.getByRole("group", { name: "Paper account (Alpaca): Gap Hunter", exact: true })).toHaveAttribute("data-env", "paper");
-  const glance = page.getByRole("region", { name: "Gap Hunter at a glance" });
-  await expect(glance).toContainText("Paper money only");
-  await expect(glance).toContainText("Rule DEC-0068");
-  for (const name of ["Where it stands", "Morning funnel", "Trades and results", "Session runs", "Alerts"]) {
+  // DEC-0078: what it is doing now leads the page, in the paper frame
+  await expect(page.getByRole("region", { name: "What Gap Hunter is doing now" })).toContainText("Paper money only");
+  await expect(page.getByRole("region", { name: "Gap Hunter at a glance" })).toContainText("Rule DEC-0068");
+  for (const name of ["Its day", "Position", "Today's name and its rules", "What it did", "Safety", "Orders", "Closed trades", "Where it stands", "Morning funnel", "Trades and results", "Session runs", "Alerts"]) {
     await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
   }
   await expect(page.getByText("First pick: Yes")).toBeVisible();                   // the fixture's gap_hunter block
@@ -423,6 +424,23 @@ test("the crypto page says the desk is closed, with no sections and no readings"
   const desk = page.getByRole("navigation", { name: "Desk" });
   await expect(desk.getByRole("link", { name: "Crypto" })).toHaveAttribute("aria-current", "true");
   await expect(desk.getByRole("link", { name: "Stocks" })).not.toHaveAttribute("aria-current", "true");
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+  expect(errors).toEqual([]);
+});
+
+test("the research arms' story renders every block, under the Research tab", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  const res = await page.goto("/research-arms");
+  expect(res?.status()).toBe(200);
+  await expect(page).toHaveURL(/\/research\/arms$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Research arms" })).toBeAttached();
+  const nav = page.getByRole("navigation", { name: "Sections" });
+  await expect(nav.getByRole("link", { name: "Research", exact: true })).toHaveAttribute("aria-current", "page");
+  for (const id of ["timeline", "how", "trials", "shadow", "verdict", "next"]) await expect(page.locator(`#${id}`)).toBeAttached();
+  await expect(page.locator("[data-trial]")).toHaveCount(14);
+  await expect(page.locator('[data-kind="tag"]').getByText("Result sealed until its report")).toHaveCount(10);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
   expect(errors).toEqual([]);

@@ -538,7 +538,16 @@ function ArmsSection({ doc, filter, now }: { doc: PaperOptions | null; filter: F
   const books = arms.map((a) => ({ hyp: a.hyp, whole: a, book: withTrades(a, applyFilter(a.trades, filter, now)) }));
   return (
     <EnvFrame env="shadow" label={PAPER_FRAMES.arms} className="grid gap-5">
-      <Panel id="arms-table" title="Arm by arm" icon={FlaskConical} means="One row for each arm: its simulated trades, the share that won, the result for one contract a trade and the average on the premium. Each is its own trial; the rows are not added up.">
+      <Panel
+        id="arms-table"
+        title="Arm by arm"
+        icon={FlaskConical}
+        action={
+          <Link href="/research/arms" className="hover:text-foreground text-muted-foreground inline-flex min-h-11 items-center text-xs font-medium underline underline-offset-2 sm:min-h-0">
+            Full story
+          </Link>
+        }
+        means="One row for each arm: its simulated trades, the share that won, the result for one contract a trade and the average on the premium. Each is its own trial; the rows are not added up.">
         <Table label="Research arms, one row each">
           <TableHeader>
             <TableRow>

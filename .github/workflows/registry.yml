@@ -1,0 +1,68 @@
+name: registry
+
+# The Reference Registry's index (dashboard/README.md, "Reference Registry"): built from the research records on
+# every push to integration and main, and when the owner presses Refresh on the page (workflow_dispatch), then sent
+# signed to the dashboard's ingest with key id `registry`. One index per branch; the page compares its commit with the
+# branch head, so a run that did not happen shows as "Out of date" and a failed run as "Sync failed".
+#
+# The repository is public and so are these logs. The job prints counts and outcomes only, writes the index under
+# $RUNNER_TEMP alone, and never uploads it, caches it, commits it or prints it (tests/unit/test_registry.py).
+# Not a required check: it has no path filter, so the index's commit is always the branch head's.
+on:
+  push:
+    branches: [main, integration]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: registry-${{ github.ref }}
+  # One run per branch at a time, never cut off half way: a newer push waits and then sends its own index.
+  cancel-in-progress: false
+
+jobs:
+  registry:
+    name: registry index
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # Secrets live in the `registry` Environment, which the owner limits to main and integration.
+    environment: registry
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/integration'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0          # the history gives first seen, last changed, renames and deletions
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Install PyYAML from the lock (hash-checked)
+        run: |
+          uv venv --python 3.12 "$RUNNER_TEMP/venv"
+          awk '/^pyyaml==/{p=1} p&&/^[a-z]/&&!/^pyyaml==/{exit} p' requirements.lock.txt > "$RUNNER_TEMP/req.txt"
+          uv pip install --require-hashes --no-deps --python "$RUNNER_TEMP/venv/bin/python" -r "$RUNNER_TEMP/req.txt"
+      - name: Build the index (counts only in the log)
+        env:
+          BRANCH: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          "$RUNNER_TEMP/venv/bin/python" scripts/build_registry.py build --branch "$BRANCH" --sha "$SHA" \
+            --repo "$REPO" --out "$RUNNER_TEMP/registry.json"
+      # Until the owner sets the `registry` Environment's REGISTRY_INGEST_URL, the index is built (so the parser is still
+      # checked on every push) but not sent, and the run says so as a warning instead of failing. The page then shows
+      # "Out of date" for that branch, never a stale index as current. Once the URL is set, a send that fails (a missing
+      # secret, a refused upload) fails the run as before.
+      - name: Not set up yet (nothing sent)
+        if: ${{ vars.REGISTRY_INGEST_URL == '' }}
+        run: |
+          echo "::warning title=Registry not set up::REGISTRY_INGEST_URL is not set in the registry Environment; the index was built and not sent"
+          rm -f "$RUNNER_TEMP/registry.json"
+      - name: Send it to the dashboard (outcome only in the log)
+        if: ${{ vars.REGISTRY_INGEST_URL != '' }}
+        env:
+          REGISTRY_INGEST_URL: ${{ vars.REGISTRY_INGEST_URL }}
+          REGISTRY_INGEST_SECRET: ${{ secrets.REGISTRY_INGEST_SECRET }}
+          REGISTRY_VERCEL_BYPASS: ${{ secrets.REGISTRY_VERCEL_BYPASS }}
+        run: |
+          "$RUNNER_TEMP/venv/bin/python" scripts/build_registry.py send --index "$RUNNER_TEMP/registry.json"
+          rm -f "$RUNNER_TEMP/registry.json"

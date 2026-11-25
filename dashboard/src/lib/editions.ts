@@ -12,7 +12,7 @@ export const RADAR_ACCEPTS = 1;
 export const OPTIONS_LIVE_ACCEPTS = 3;
 export const OPTIONS_CLONE_ACCEPTS = 1;
 /** The paper options history (DEC-0057): the newest format this build validates. */
-export const PAPER_OPTIONS_ACCEPTS = 5;                     // 2: the options lab's tape status (`lab`); 3: upload delay and rate-limit headroom; 4: the Radar → Options shadow (`select`); 5: its progress and each run's check
+export const PAPER_OPTIONS_ACCEPTS = 6;                     // 2: the options lab's tape status (`lab`); 3: upload delay and rate-limit headroom; 4: the Radar → Options shadow (`select`); 5: its progress and each run's check; 6: the lab sessions' stale split and tier-1 open-interest nulls
 /** Gap Hunter's live state (DEC-0078): the newest format this build validates. */
 export const GAP_HUNTER_LIVE_ACCEPTS = 1;
 /** 2 adds `money`: deposits, withdrawals and the account value. */
@@ -22,6 +22,8 @@ export const FUNNEL_ACCEPTS = 1;
 export const RADAR_DESK_ACCEPTS = 1;
 /** The Radar run beacon: the newest format this build validates. */
 export const RADAR_RUN_ACCEPTS = 1;
+/** The Reference Registry's index (stocksdelta/registry): the newest format this build validates. */
+export const REGISTRY_ACCEPTS = 1;
 /** The newest economic calendar format this build validates. */
 export const CALENDAR_ACCEPTS = 1;
 
@@ -186,4 +188,18 @@ export function radarRunHealth(r: RadarRunLatestResult): EditionHealth & { sessi
     as_of: d?.as_of ?? null,
     schema_version: d?.schema_version ?? null,
   };
+}
+
+/**
+ * The Reference Registry's indexes on file: per branch, the commit each was built from and when. Nothing of the
+ * records. The CI job reads `accepts` before it sends.
+ */
+export function registryHealth(
+  byBranch: Record<"integration" | "main", { status: "ok"; doc: { sha: string; as_of: string; run_id: string; schema_version: number } } | { status: "missing" | "error" }>,
+): { accepts: number; branches: Record<string, { status: "ok" | "missing" | "error"; sha: string | null; as_of: string | null }> } {
+  const branches: Record<string, { status: "ok" | "missing" | "error"; sha: string | null; as_of: string | null }> = {};
+  for (const [b, r] of Object.entries(byBranch)) {
+    branches[b] = r.status === "ok" ? { status: "ok", sha: r.doc.sha, as_of: r.doc.as_of } : { status: r.status, sha: null, as_of: null };
+  }
+  return { accepts: REGISTRY_ACCEPTS, branches };
 }

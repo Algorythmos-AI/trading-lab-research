@@ -193,6 +193,21 @@ wt.ops.publish                            POST /api/ingest            (productio
   `src/lib/robot-b.ts`). What the host still publishes about it is left out by id (`RETIRED_*` in
   `src/lib/robots.ts`): its scoreboard rows, the G2 tile and progress line, three digest lines and the host's
   "best candidate" line. Its `paper-b` job has no lane on Today and is never expected: absent is normal.
+- **Research arms** (`/research/arms`, `/research-arms` redirects there; `src/app/research/arms/page.tsx`,
+  `src/components/research-arms/`, `src/lib/research-arms.ts`): the story of the options clone's fourteen research
+  arms (DEC-0041, EXP-0030), from registration to the no-verdict close on 2027-11-05, and the options lab that replaced
+  them (DEC-0060, DEC-0067, EXP-0052). The dates and rules are fixed facts of those records, in `lib/research-arms.ts`;
+  the figures are read from the paper options document only: the four shadow arms' simulated trades, cut again to
+  sessions up to 2026-11-17, one panel per arm in one `shadow` frame and never added together, with the `paper.ts`
+  helpers; and the lab block's shadow and counted sessions. The tag arms show no figure. Arms are named by hypothesis
+  id and short neutral words of the page's own, never a registered trial name. Each record id links to the Reference
+  Registry's drill-down (`/research/records/<id>`). Also drawn from the same data: the record lineage (ids only,
+  `src/lib/research-lineage.ts`, for the Registry to replace), the pipeline with each box's last sign of life (stale
+  amber, switched off grey), a calendar of the 9 window sessions (from `market-calendar.json`) against the 20 each
+  trial needed, and the lab's gate to its first tables (5 shadow sessions, then 20 counted) with EXP-0052's four
+  tables locked. The verdict section draws the method with no numbers; a descriptive band on two shadow arms' real
+  trades (DEC-0080, EXP-0056, `src/lib/research-arms-band.ts`) is built and switched off until DEC-0080 is accepted.
+  Display only: no field is added to any document.
 - **Paper options** (`/paper`, `stocksdelta/paper-options`, schema `src/lib/paper-options.schema.json`;
   `paper-options.types.ts` is generated; DEC-0057): every closed paper option trade, from two books that are
   shown apart and never added together. The options clone's trades come from its journal and the research arms'
@@ -224,6 +239,60 @@ wt.ops.publish                            POST /api/ingest            (productio
   and prices (PRIVATE, behind the login), never a setup name or free text; `paper` must be `true`. The host sends
   nothing until `/api/health` reports `editions.gap_hunter_live.accepts`. `loadGapHunterLive` reads it; fixture mode
   builds it from the fixture snapshot's own block (`fx=gap-live-off`: not published yet).
+- **Reference Registry** (`/research/records`, one page per record at `/research/records/<ID>`; `stocksdelta/registry`,
+  schema `src/lib/registry.schema.json`, `registry.types.ts` generated): an index of every decision, hypothesis,
+  experiment and lesson in `research/` and the trial families of `config/trial_registry.yaml`, one per branch
+  (`integration`, `main`), built in CI from the repository itself, so GitHub is the one source and nothing is typed
+  here. `.github/workflows/registry.yml` runs on every push to either branch (no path filter, so the index's commit is
+  always the head's) and on `workflow_dispatch`; `scripts/build_registry.py build` (`src/wt/research/registry.py`)
+  reads the record files and `git log` and writes the index under the runner's temporary folder, then `send` reads
+  `/api/health`, sends nothing until `editions.registry.accepts` is there, and posts it signed with key id `registry`.
+  The repository is public, so the job prints counts and outcomes only and never uploads, caches, commits or prints the
+  index (`tests/unit/test_registry.py` checks the workflow).
+  - **What it carries.** While `src/lib/registry-policy.json` says `"prose": false` (the one gate; the builder reads it
+    too, see AGENTS.md data classes): ids, kinds, closed status codes, dates, commit SHAs, counts and typed links
+    between ids (`depends_on`, `amends`, `supersedes`, `experiment`, `evidence`, `hypothesis`, `decision`, `base`,
+    `family`, `mentions`), read from a decision's labelled head lines, a hypothesis's `evidence`, an experiment's
+    config, and every other id a record names. No title, no sentence, no file path (paths carry title slugs): links
+    to GitHub are commits by SHA and a code search by id. Nothing under `research/specs/` or `research/external/` is
+    read. The validator refuses any key that could hold record text at any depth.
+  - **History, renames, duplicates.** From `git log` (the job checks out the whole history): when each record first
+    appeared and last changed, how often its file was renamed under the same id, and a tombstone for each id that no
+    longer has a file (`deleted`, or `renamed` with the new id), with its last status read from the commit before.
+    There is one entry per id: two files with one id give `conflict` and an issue, never two rows. A file that cannot
+    be read, an unknown status word, an id that disagrees with its file name and a link to an id nobody has are
+    listed as issues (codes and ids only); the record stays, with what could be read. No git history (a shallow
+    clone) is said (`history: "unavailable"`), never guessed.
+  - **Ingest.** One slot per branch, `registry/<branch>/latest.json`, taken only from key id `registry`
+    (`REGISTRY_INGEST_SECRET`) and that key may publish nothing else. The same run (`<branch>@<sha>`) again is a
+    `duplicate`; an index of an earlier commit (by its commit time, `as_of`) is `older` (409), which the job counts as
+    done; one ahead of the clock is refused. A stored or repeated index writes `registry/<branch>/checked.json`, the
+    last time the job confirmed it. A refusal fails the job (it leaves no `ops/ingest-rejects` record).
+    `/api/health` reports `editions.registry`: `accepts` and each branch's SHA and time.
+  - **Is it current?** `src/lib/registry-status.ts` (pure) compares the index's commit with the branch head, read on
+    the server through `src/lib/registry-github.ts` with `GITHUB_REGISTRY_TOKEN` (never sent to the browser; reads
+    shared for 15 s per instance). **Synced**: the index is the head. **Syncing**: a run of the job for the branch is
+    queued or running. **Sync failed**: the newest finished run failed. **Out of date**: the head moved and nothing is
+    under way. **Can't check**: no token, a refused token, GitHub unreachable or rate-limited, or the store failed;
+    never Synced. Whenever the state is not Synced, the page says above everything that the records are as of an
+    older commit. The last successful sync is the later of the store's own write time and the last confirmation.
+  - **Refresh.** `POST /api/registry/refresh` with exactly `{"branch": "integration" | "main"}` starts the job
+    (`workflow_dispatch` of `registry.yml` on that ref, both fixed in code): hardened like `/api/desk/flags` (same
+    origin, JSON, 256 bytes, the bypass refused, no CORS, `no-store`); never while a run is under way (409) or within
+    a minute of the last (429). `GET /api/registry/status?b=` answers the state, codes and SHAs only; the page asks it
+    every 5 s while a run is under way and redraws when it ends.
+  - **The pages.** The sync card for the branch (and the other branch's state), headline counts per kind with active,
+    proposed and closed, status by kind with every status a filter, a timeline of records first seen per month, the
+    records changed most recently, the records most depended on, the records list (filters by id or linked id, kind,
+    phase, status, family and issues, all in the address; each card opens on its links in and out and its history;
+    on integration each record says whether it is on main, changed since, or not there yet), what needs a look, the
+    trial families and the deleted and renamed records. A record's page draws its one-hop dependency map, its links
+    and its history; a renamed id points at its new one.
+  - **Fixture mode.** Staging shows only `test/fixtures/registry.integration.v1.json` and `registry.main.v1.json`,
+    which `scripts/gen_registry_fixture.py` builds from a made-up repository (a pytest fails when they are stale);
+    GitHub is pretended and Refresh pretends a 20 s run. The `fx` words `registry-off`, `registry-empty`,
+    `registry-poison`, `registry-syncing`, `registry-stale`, `registry-failed`, `registry-unknown` and
+    `registry-no-main` bend it.
 - **Calendar** (`/calendar`, `src/app/calendar/page.tsx`, the grid in `src/components/client/calendar-year.tsx`, all
   arithmetic in `src/lib/market-calendar.ts`, pure and unit-tested): the US market year, 2026 and 2027 (`?y=`), Monday
   to Friday with weekends narrow. Open days, holidays and 1 pm closes come from `src/lib/market-calendar.json`, which
@@ -528,6 +597,8 @@ other panes keep working.
 | `CRON_SECRET` | Vercel production | Bearer token Vercel Cron sends to `/api/cron/watchdog` and `/api/cron/desk` |
 | `NTFY_TOPIC` | Vercel production and preview + the Mac | Secret, random ntfy topic for pages; unset means log and skip |
 | `NTFY_SERVER` | Vercel (optional) | ntfy server, default `https://ntfy.sh` |
+| `REGISTRY_INGEST_SECRET` | Vercel production + the GitHub Environment `registry` | HMAC key for key id `registry`: the Reference Registry's CI job, which may publish its index and nothing else. Unset means that key is refused |
+| `GITHUB_REGISTRY_TOKEN` | Vercel production only | A fine-grained token on this repository alone (Actions: read and write; Contents: read; Metadata: read) that the server uses to read the branch heads and the registry job's runs and to start that job. Never sent to the browser. Unset means the records pages say "Can't check" and Refresh is refused |
 | `FEED_WATCH_ALERTS` | Vercel production (the owner sets it) | Exactly `on`: the feed watch sends its pages. Unset or anything else: display only (state still kept, nothing sent) |
 | `DASHBOARD_FIXTURE` | Local, CI and Vercel preview | `1` serves the fixture snapshot (ignored in production) |
 | `DASHBOARD_INGEST_URL` | The Mac | `https://lab.algorythmos.com/api/ingest` |
@@ -547,8 +618,9 @@ prints a secret; it prints only the ntfy topic and how to subscribe to it.
   statements, spec title and open items, headlines, review URLs, subjects, statements) even if a future schema
   allowed them. Validation errors name paths, never values.
 - **Read-only UI.** No page has a control that trades, kills or resets anything. The buttons switch the colour
-  theme, copy a command to the clipboard, and set the owner's own "done for today" flag (below), the one thing the
-  browser writes.
+  theme, copy a command to the clipboard, set the owner's own "done for today" flag (below), and start the Reference
+  Registry's CI job (Refresh on the Research records pages: a `workflow_dispatch` of `registry.yml` and nothing else,
+  hardened like the flag's route). Those two are the only writes the browser can cause.
 - **The done-for-today flag** (`/api/desk/flags`, `src/lib/desk-flags-run.ts`). One private Blob document,
   `desk/flags.json`: `{ "v": 1, "done": { "day": "<New York day>", "at": "<instant>" } | null }`. It counts only on
   the New York day it names, so it clears itself at the next day with no job; Undo is allowed for 60 s after it is
@@ -642,7 +714,12 @@ The repository is restricted (see `AGENTS.md`). The dashboard only ever receives
 lets through, and the ingest denylist is a second line of defence:
 
 - **Restricted** material (specifications, decision and hypothesis prose, reports, setup names, news headlines,
-  the knowledge base) is never published. Registries appear by ID, status and date only.
+  the knowledge base) is never published. Registries appear by ID, status and date only, except below.
+- **Record** text (owner decision of 2026-11-25, the RECORD class in `AGENTS.md`): the Reference Registry alone,
+  sent by its CI job with the `registry` key, may carry each research record's title and a capped summary of that
+  record's own prose. Never from `research/specs/`, `research/external/`, `knowledge/` or a `report.md`, and not put
+  through the publisher's 8-word phrase check (CI holds no corpus; see `NOTICE.md`). Until
+  `src/lib/registry-policy.json` says `"prose": true`, the ingest refuses any of it and the registry is SAFE fields only.
 - **Private** material (paper account balances, host details, log lines, commit subjects) is shown only behind
   the owner's login, already redacted by the publisher.
 - **Safe** material (counts, IDs, statuses, dates, R-multiples and statistics) makes up the rest.

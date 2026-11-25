@@ -29,6 +29,7 @@ const { default: PaperPage } = await import("@/app/paper/page");
 const { default: GapHunterPage } = await import("@/app/gap-hunter/page");
 const { default: StrategiesPage } = await import("@/app/strategies/page");
 const { default: ResearchPage } = await import("@/app/research/page");
+const { default: ResearchArmsPage } = await import("@/app/research/arms/page");
 
 beforeEach(() => {
   vi.unstubAllEnvs();
@@ -47,6 +48,7 @@ const RENDER: Record<GuardedPage, () => Promise<string>> = {
   risk: async () => renderToString(await RiskPage()),
   paper: async () => renderToString(await PaperPage(params({}))),
   "gap-hunter": async () => renderToString(await GapHunterPage()),
+  "research-arms": async () => renderToString(await ResearchArmsPage()),
 };
 
 const unescape = (s: string) => s.replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");

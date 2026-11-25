@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { DigestPanel } from "@/components/v3/digest";
 import { GatePanel, Kpis, LabSummary } from "@/components/overview/lab-panels";
 import { BookOpen, BrainCircuit, FlaskConical, Layers, Scale, Target } from "lucide-react";
@@ -30,6 +31,17 @@ export default async function ResearchPage() {
         title="Research"
         intro="The evidence behind every strategy decision: backtest results against the research bar, the trial budget, the research registries and how much of the specification is built."
       />
+      <Link
+        href="/research/arms"
+        className="bg-card hover:bg-muted/60 focus-visible:outline-ring flex items-center gap-3 rounded-lg border px-4 py-3 focus-visible:outline-2"
+        data-research-arms-link=""
+      >
+        <FlaskConical aria-hidden className="text-muted-foreground size-4 shrink-0" />
+        <span className="grid gap-0.5">
+          <span className="text-sm font-medium">Research arms: the full story</span>
+          <span className="text-muted-foreground text-xs">Fourteen trials on the options clone, ended with no verdict, and what replaced them.</span>
+        </span>
+      </Link>
       {result.status !== "ok" ? (
         <NoSnapshot status={result.status} />
       ) : (

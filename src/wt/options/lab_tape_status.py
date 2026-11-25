@@ -112,6 +112,7 @@ def session(m: Mapping[str, Any], archived: bool, receipt: Mapping[str, Any] | N
     oi = ac.get("open_interest") if isinstance(ac.get("open_interest"), Mapping) else {}
     listed = _num(oi.get("contracts"))
     nulls = _num(oi.get("null_open_interest"))
+    listed1, nulls1 = _num(oi.get("contracts_tier1")), _num(oi.get("null_open_interest_tier1"))
     recorded = bool(m.get("recorded"))
     fails = why_not(m) if recorded else ["not_recorded"]
     stale = m.get("stale_ticks_by_name") if isinstance(m.get("stale_ticks_by_name"), Mapping) else {}
@@ -136,6 +137,9 @@ def session(m: Mapping[str, Any], archived: bool, receipt: Mapping[str, Any] | N
         "prints": int(_num(prints.get("prints")) or 0) if prints else None,
         "after_close_ok": recorded and not ac.get("error") and not ac.get("skipped") and not prints.get("failed"),
         "oi_null_share": round(nulls / listed, 4) if nulls is not None and listed else None,
+        "oi_null_share_tier1": round(nulls1 / listed1, 4) if nulls1 is not None and listed1 else None,
+        "stale_slow_start": _int(m, "stale_ticks_slow_start"),         # name-ticks; None on manifests before them
+        "stale_mid_session": _int(m, "stale_ticks_mid_session"),
         "archived": archived,
         "upload_after_close_min": (up := upload_after_close_min(m, receipt)),
         "upload_late": up is not None and up > UPLOAD_WITHIN_MIN and str(m.get("session")) >= LATE_FROM,

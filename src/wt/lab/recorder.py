@@ -60,6 +60,7 @@ MAX_NAMES = 6                                       # config/options_clone.yaml 
 CHANGE_KEY = ("tier", "bid", "ask", "bid_size", "ask_size", "quote_ts", "last", "last_size", "last_ts", "volume")
 # greeks and IV are not in the key: on a row they are as of its quote or trade change, never forward-filled as current
 STATE = "state.json"
+RUNS_KEPT = 200                                     # stale runs kept per name in the state and the manifest
 START_GRACE_S = 1.0                                 # a tick is still run when the run starts this late for it
 RECORDER_VERSION = 2                                # 2: sample and member streams, freshness by name (DEC-0067)
 
@@ -150,6 +151,7 @@ class Recorder:
         self.name_newest: dict[str, int] = {}                     # name: the newest tier-1 quote time answered
         self.first_fresh: dict[str, int] = {}                     # name: the first tick its quotes were fresh
         self.stale_by_name: dict[str, int] = {}                   # name: stale ticks after the freeze
+        self.stale_runs: dict[str, list[list[int]]] = {}         # name: closed stale runs [first tick, ticks]
         self.batch_syms: dict[tuple[int, int], tuple[str, ...]] = {}   # (tier, batch): the symbols last written
         self.tail_counted = False
         self.offsets: list[float] = []                 # the host clock's offset (ms), read every 30 minutes
@@ -165,6 +167,7 @@ class Recorder:
         self.reading: tuple[float, float] | None = None           # (remaining share, clock seconds)
         self.counts = {"requests": 0, "taken": 0, "taken_fresh": 0, "expected": 0, "ticks_run": 0, "restarts": 0,
                        "errors": 0, "stale_ticks": 0, "longest_stale_ticks": 0, "ticks_down": 0,
+                       "stale_slow_start": 0, "stale_mid_session": 0, "stale_runs": 0,
                        "tier1_rows": 0, "tier1_crossed_rows": 0, "low_readings": 0, "refused_429": 0,
                        "budget_refused": 0}
         self.min_share: float | None = None                        # lowest remaining-requests share Alpaca reported
@@ -204,6 +207,7 @@ class Recorder:
         self.stale_from = {str(k): int(v) for k, v in (s.get("stale_from") or {}).items()}
         self.stale_by_name = {str(k): int(v) for k, v in (s.get("stale_by_name") or {}).items()}
         self.first_fresh = {str(k): int(v) for k, v in (s.get("first_fresh") or {}).items()}
+        self.stale_runs = {str(k): [[int(a), int(b)] for a, b in v] for k, v in (s.get("stale_runs") or {}).items()}
         self.name_newest = {str(k): int(v) for k, v in (s.get("name_newest") or {}).items()}
         ms = s.get("min_share")
         self.min_share = float(ms) if isinstance(ms, (int, float)) and not isinstance(ms, bool) else None
@@ -218,7 +222,7 @@ class Recorder:
                    "opening_missing": self.opening_missing, "freeze_tick": self.freeze_tick, "counts": self.counts,
                    "last_tick": self.last_tick, "refused": sorted(self.refused), "scheduled": self.scheduled,
                    "stale_from": self.stale_from, "stale_by_name": self.stale_by_name, "first_fresh": self.first_fresh,
-                   "name_newest": self.name_newest, "min_share": self.min_share}
+                   "stale_runs": self.stale_runs, "name_newest": self.name_newest, "min_share": self.min_share}
             manifest.atomic(self.folder / STATE, json.dumps(doc))
 
     # ------------------------------------------------------------ requests, within the budget
@@ -555,6 +559,23 @@ class Recorder:
                     self.minute = pool.submit(self.minute_work, tick)
         self.freeze(tick)
 
+    def _close_run(self, name: str, began: int, ticks: int) -> None:
+        """Keeps a closed stale run (diagnostic only: no counting rule reads it). Every run is counted; the first
+        RUNS_KEPT of each name are kept, so a name that flaps all day cannot swell the state or the manifest."""
+        self.counts["stale_runs"] += 1
+        runs = self.stale_runs.setdefault(name, [])
+        if len(runs) < RUNS_KEPT:
+            runs.append([began, ticks])
+
+    def stale_runs_now(self) -> dict[str, list[list[int]]]:
+        """The closed stale runs by name, with any run still open counted to the newest tick run."""
+        out = {n: [list(r) for r in v] for n, v in self.stale_runs.items()}
+        last = self.last_tick
+        for n, began in self.stale_from.items():
+            if last is not None and last >= began and len(out.get(n, [])) < RUNS_KEPT:
+                out.setdefault(n, []).append([began, last - began + 1])
+        return dict(sorted(out.items()))
+
     def freshness(self, tick: int, taken: Mapping[str, int], newest: Mapping[str, int],
                   current: Mapping[str, int] | None = None) -> None:
         """Freshness is judged name by name: a name is fresh at a tick when the newest tier-1 quote ever answered for
@@ -582,10 +603,13 @@ class Recorder:
                     continue
                 if fresh:
                     if n in self.stale_from:
-                        self._gap(tick, "feed", f"{n} fresh again after {tick - self.stale_from.pop(n)} stale ticks")
+                        began = self.stale_from.pop(n)
+                        self._close_run(n, began, tick - began)
+                        self._gap(tick, "feed", f"{n} fresh again after {tick - began} stale ticks")
                     continue
                 stale_names.append(n)
                 self.stale_by_name[n] = self.stale_by_name.get(n, 0) + 1
+                self.counts["stale_mid_session" if n in self.first_fresh else "stale_slow_start"] += 1
                 if n not in self.stale_from:
                     self.stale_from[n] = tick
                     self._gap(tick, "feed", f"{n} stale: newest tier-1 quote "
@@ -689,6 +713,10 @@ class Recorder:
             "stale_ticks_by_name": dict(sorted(self.stale_by_name.items())),
             "names_without_tier1": sorted(n for n in self.names if not self.tier1.get(n)),
             "first_fresh_tick_by_name": dict(sorted(self.first_fresh.items())),
+            "stale_ticks_slow_start": c["stale_slow_start"], "stale_ticks_mid_session": c["stale_mid_session"],
+            "stale_runs_by_name": self.stale_runs_now(),
+            "stale_runs": c["stale_runs"] + sum(1 for n, b in self.stale_from.items()
+                                                if self.last_tick is not None and self.last_tick >= b),
             "tier1_crossed_share": round(c["tier1_crossed_rows"] / c["tier1_rows"], 6) if c["tier1_rows"] else 0.0,
             "clock_offset_ms_max_abs": max((abs(x) for x in self.offsets), default=None),
             "clock_offset_readings": len(self.offsets),
@@ -736,7 +764,7 @@ def after_close(rec: Recorder, get: Get, headers: Mapping[str, str], start: dt.d
         if expiries:                                 # open interest first: it does not wait for late prints
             out["open_interest"] = afterclose.open_interest(paced, headers, list(rec.names), min(expiries),
                                                             max(expiries), every, ow, rec.gap, deadline,
-                                                            session=rec.day)
+                                                            session=rec.day, tier1=set(t1))
         ow.flush()
         late = close + dt.timedelta(minutes=PRINTS_AFTER_CLOSE_MIN + 1)
         if rec.stopped is None and clock.now() < late:   # a full day: wait for the prints of the last fifteen minutes

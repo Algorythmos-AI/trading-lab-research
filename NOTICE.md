@@ -26,3 +26,11 @@ The dashboard at lab.algorythmos.com never publishes restricted material. The pu
 only allowlisted fields: ids, statuses, dates, counts, statistics, and short owner-written notes. It withholds any
 text that shares an 8-word phrase with the course corpus. Spec text, decision and hypothesis prose, setup names and
 news headlines are never sent. See `docs/adr/0001-vercel-dashboard.md`.
+
+One exception, decided by the owner on 2026-11-25: the **Reference Registry**, the owner-only index of the research
+records behind the dashboard's Vercel Authentication. It is built in CI from the repository (not by `wt.ops.publish`)
+and may carry each decision's, hypothesis's, experiment's and lesson's title and a capped summary of that record's
+own prose (the RECORD class in `AGENTS.md`). CI has no copy of the course corpus (`knowledge/` is never pushed), so
+that text is **not** put through the 8-word phrase check; what keeps it to the owner is the login, the closed list of
+record files it reads, and the cap on each summary. It never reads `research/specs/`, `research/external/`,
+`knowledge/` or any `report.md`, and it sends nothing anywhere but the owner's dashboard.

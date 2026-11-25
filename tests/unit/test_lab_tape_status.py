@@ -106,10 +106,37 @@ def test_the_paper_document_carries_it_and_a_version_1_site_gets_it_without(tmp_
     doc = paper_site.build(paper_site.dt.datetime(2026, 11, 21, tzinfo=paper_site.dt.UTC), "r", tmp_path / "j.jsonl",
                            tmp_path / "state", {"costs": {"fee_per_contract_each_way": 0.65}},
                            {"WT_LAB_TAPE": str(tmp_path / "tape")})
-    assert doc["schema_version"] == 5 and len(doc["lab"]["sessions"]) == 2 and paper_site.validate(doc) == []
+    assert doc["schema_version"] == 6 and len(doc["lab"]["sessions"]) == 2 and paper_site.validate(doc) == []
     old = paper_site.as_version(doc, 1)
     assert old["schema_version"] == 1 and "lab" not in old and paper_site.validate(old) == []
-    assert paper_site.as_version(doc, 5) == doc
+    assert paper_site.as_version(doc, 6) == doc
+
+
+def test_the_stale_split_and_tier1_nulls_reach_the_line_and_a_version_5_site_gets_them_without(tmp_path: Path) -> None:
+    new = {**V2, "session": "2026-11-24", "focus_session": "2026-11-24", "stale_ticks_slow_start": 0,
+           "stale_ticks_mid_session": 9,
+           "after_close": {"open_interest": {"contracts": 2648, "null_open_interest": 713, "contracts_tier1": 400,
+                                             "null_open_interest_tier1": 20}}}
+    tape(tmp_path / "tape", [V2, new])
+    lab = L.block(root=tmp_path / "tape")
+    assert lab is not None
+    before, after = lab["sessions"]
+    assert (before["stale_slow_start"], before["stale_mid_session"], before["oi_null_share_tier1"]) == (None, None, None)
+    assert (after["stale_slow_start"], after["stale_mid_session"], after["oi_null_share_tier1"]) == (0, 9, 0.05)
+    valid(lab)
+    doc = paper_site.build(paper_site.dt.datetime(2026, 11, 25, tzinfo=paper_site.dt.UTC), "r", tmp_path / "j.jsonl",
+                           tmp_path / "state", {"costs": {"fee_per_contract_each_way": 0.65}},
+                           {"WT_LAB_TAPE": str(tmp_path / "tape")})
+    five = paper_site.as_version(doc, 5)
+    assert five["schema_version"] == 5
+    assert not any(k in s for s in five["lab"]["sessions"] for k in paper_site.LAB_SESSION_V6_KEYS)
+    assert [{k: v for k, v in s.items() if k not in paper_site.LAB_SESSION_V6_KEYS} for s in doc["lab"]["sessions"]] \
+        == five["lab"]["sessions"]
+    old = json.loads(json.dumps(SCHEMA))                        # the version 5 schema as the site had it
+    old["properties"]["schema_version"]["enum"] = [1, 2, 3, 4, 5]
+    for k in paper_site.LAB_SESSION_V6_KEYS:
+        del old["definitions"]["lab_session"]["properties"][k]
+    assert list(jsonschema.Draft7Validator(old).iter_errors(five)) == []
 
 
 def test_a_broken_tape_never_stops_the_paper_history(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
