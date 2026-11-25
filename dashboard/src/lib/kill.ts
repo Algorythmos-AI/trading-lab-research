@@ -25,3 +25,8 @@ export function killOverall(rows: DeskKill[]): boolean | null {
   if (rows.some((r) => r.on === true)) return true;
   return rows.every((r) => r.on === false) ? false : null;
 }
+
+/** The Risk page's summary line and whether its section opens by itself: any desk's file on, read across them all. */
+export function anyKillOn(s: Snapshot | null | undefined): boolean | null {
+  return killOverall(deskKills(s));
+}

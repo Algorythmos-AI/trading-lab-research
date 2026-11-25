@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AlertHistoryPanel } from "@/components/v3/audit";
 import { accountRisk } from "@/lib/account-risk";
 import { newYork, shortDate, sydney, txt } from "@/lib/format";
-import { deskKills, killOverall } from "@/lib/kill";
+import { anyKillOn, deskKills, killOverall } from "@/lib/kill";
 import { activeWindow } from "@/lib/freshness";
 import { moneyView, type JournalDoc } from "@/lib/journal";
 import type { OptionsClone } from "@/lib/options-clone.types";
@@ -68,7 +68,7 @@ function AccountSection({ doc, now }: { doc: JournalDoc; now: Date }) {
 
 /** True when a robot has something that needs a look: then the section opens by itself. */
 function robotsNeedLook(s: Snapshot): boolean {
-  return s.kill?.on === true || list(s.alerts?.firing).some((a) => isRedAlert(a.key));
+  return anyKillOn(s) === true || list(s.alerts?.firing).some((a) => isRedAlert(a.key));
 }
 
 /**
@@ -77,7 +77,7 @@ function robotsNeedLook(s: Snapshot): boolean {
  */
 function RobotsSection({ s, clone, now }: { s: Snapshot; clone: OptionsClone | null; now: Date }) {
   const alerts = list(s.alerts?.firing).length;
-  const kill = s.kill?.on;
+  const kill = anyKillOn(s);                      // every desk's file the snapshot carries, not the root one alone
   return (
     <>
       <RobotsRow lines={robotLines(s, clone)} />

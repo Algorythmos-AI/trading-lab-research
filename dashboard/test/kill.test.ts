@@ -2,7 +2,7 @@
 // Hunter's own file (gap_hunter.kill) beside the root one (kill.on), not only the root file.
 import { describe, expect, it } from "vitest";
 import { computeHealth } from "@/lib/health";
-import { deskKills, killOverall } from "@/lib/kill";
+import { anyKillOn, deskKills, killOverall } from "@/lib/kill";
 import type { Snapshot } from "@/lib/types";
 import { cleanSnapshot } from "./helpers";
 
@@ -39,5 +39,14 @@ describe("the health banner", () => {
   it("names the root file and Gap Hunter's apart", () => {
     const h = computeHealth(snap(true, true), IN_WINDOW);
     expect(h.reasons.map((r) => r.code).filter((c) => c.startsWith("kill"))).toEqual(["kill", "kill:s"]);
+  });
+});
+
+describe("the Risk page's summary", () => {
+  it("says on when only Gap Hunter's file is on, so the section opens though the root file is off", () => {
+    expect(anyKillOn(snap(false, true))).toBe(true);
+    expect(anyKillOn(snap(true, false))).toBe(true);
+    expect(anyKillOn(snap(false, false))).toBe(false);
+    expect(anyKillOn(snap(false))).toBeNull();
   });
 });
