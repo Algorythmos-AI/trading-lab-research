@@ -642,7 +642,12 @@ The repository is restricted (see `AGENTS.md`). The dashboard only ever receives
 lets through, and the ingest denylist is a second line of defence:
 
 - **Restricted** material (specifications, decision and hypothesis prose, reports, setup names, news headlines,
-  the knowledge base) is never published. Registries appear by ID, status and date only.
+  the knowledge base) is never published. Registries appear by ID, status and date only, except below.
+- **Record** text (owner decision of 2026-11-25, the RECORD class in `AGENTS.md`): the Reference Registry alone,
+  sent by its CI job with the `registry` key, may carry each research record's title and a capped summary of that
+  record's own prose. Never from `research/specs/`, `research/external/`, `knowledge/` or a `report.md`, and not put
+  through the publisher's 8-word phrase check (CI holds no corpus; see `NOTICE.md`). Until
+  `src/lib/registry-policy.json` says `"prose": true`, the ingest refuses any of it and the registry is SAFE fields only.
 - **Private** material (paper account balances, host details, log lines, commit subjects) is shown only behind
   the owner's login, already redacted by the publisher.
 - **Safe** material (counts, IDs, statuses, dates, R-multiples and statistics) makes up the rest.
