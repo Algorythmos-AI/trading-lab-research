@@ -13,7 +13,7 @@ The research and paper-trading engine behind Trading Lab. It holds:
 | **Runs at**     | One Google Cloud VM, `trading-lab-host` (systemd timers), against three Alpaca **paper** accounts. The Mac runs nothing          |
 | **Dashboard**   | [lab.algorythmos.com](https://lab.algorythmos.com) (Vercel login required)                                                        |
 | **Run locally** | `make bootstrap && make ci`                                                                                                      |
-| **Docs**        | **[Start here: docs/README.md](docs/README.md)** · [Glossary](docs/reference/glossary.md) · [Safety](docs/operations/safety.md) |
+| **Docs**        | **[Start here: docs/README.md](docs/README.md)** · [Architecture](docs/architecture.md) · [Jobs](docs/operations/jobs.md) · [Deploy](docs/operations/deploy.md) · [Glossary](docs/reference/glossary.md) · [Safety](docs/operations/safety.md) |
 | **Context**     | [Research registry](research/README.md) · [G1 summary](research/G1_SUMMARY.md) · [ADRs](docs/adr/) · [Runbooks](docs/runbooks/) · [Security](SECURITY.md) · [Notice](NOTICE.md) · [Licence](LICENSE) |
 
 ---
@@ -56,7 +56,8 @@ Vercel (trading-lab-dashboard) ◄─────┘  private Blob storage; page
                                          if the host goes quiet in a trading window, and feed checks
 ```
 
-- The job list comes from `src/wt/ops/schedule.py` (`JOBS`), and the host units from `deploy/oci/systemd/`.
+- The job list comes from `src/wt/ops/schedule.py` (`JOBS`), and the host units from `deploy/oci/systemd/`. The full
+  table, kept in step with the code by a test, is [docs/operations/jobs.md](docs/operations/jobs.md).
 - Every job runs through `wt.ops.jobs`, which gives it a lock, a deadline, alerts and a heartbeat. The five gated jobs
   also run preflight checks and refuse to start when one fails (`preflight` in `src/wt/ops/schedule.py`).
 - Session times follow New York, so daylight-saving changes need no edits.

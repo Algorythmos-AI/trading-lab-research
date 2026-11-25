@@ -55,6 +55,8 @@ specific to this repository. Where the two conflict, the org file's "Never" sect
 The code is the truth for what runs; the docs mirror it ([docs/README.md](docs/README.md)). In the same pull request:
 - a new or renamed runbook or ADR gets a row in `docs/runbooks/README.md` or `docs/adr/README.md`;
 - a release to `main` gets a row in `docs/releases/README.md`;
+- a new or changed job, host unit, `src/wt` package or environment variable updates `docs/operations/jobs.md`,
+  `docs/architecture.md` or `docs/reference/env-vars.md` (the test prints the rows to paste);
 - a doc that names a file, job, `make` target or env var is updated when that thing changes.
 
 Never rename or move an existing doc: code, alerts and tests link to those paths. `tests/unit/test_docs_truth.py`
@@ -100,7 +102,7 @@ and dates are synthetic.
 
 ```
 src/wt/        core · data · scanner · signals · backtest · risk · oms · brokers · live · options · lab · analytics ·
-               ops · research · specs · webull · owner · knowledge
+               ops · research · specs · webull · owner · knowledge   (map: docs/architecture.md)
 scripts/       research drivers and nightly jobs (forward_test, premarket_routine, status_dashboard, ...)
 research/      hypotheses/ experiments/ decisions/ active_strategies/ lessons_learned/ specs/ forward/
 config/        ranking and catalyst configs, macro-event calendar, dashboard config
@@ -118,7 +120,8 @@ Git-ignored: `data/` (market caches and `data/live/`), `knowledge/`, `logs/`, `v
 ```
 make bootstrap     # .venv from requirements.lock.txt
 make ci            # ruff + mypy (typed modules) + restricted paths + pytest; most of the required `test` check, not all
-                   #   (CI also runs actionlint, the ARM64 install, the schema diff and the per-commit restricted check)
+                   #   (CI also runs actionlint, the ARM64 install, the schema diff and the per-commit restricted check:
+                   #   docs/reference/ci.md)
 make hooks         # pre-commit: gitleaks, restricted-path guard, ruff
 ```
 
