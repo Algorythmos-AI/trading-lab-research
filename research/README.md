@@ -80,7 +80,7 @@ A holdout is run once per frozen config and named for it (for example `EXP-0011-
 |---|---|
 | `make research-index` (`scripts/research_index.py`) | Prints every experiment with its decision, span, data hash, result hash and the commit that added it. Printed, never committed |
 | `src/wt/research/registry.py`, `scripts/build_registry.py` | Build the Reference Registry's index from the records |
-| `.github/workflows/registry.yml` | On every push to `main` and `integration`, builds that index and sends it, signed, to the dashboard. It prints counts and hashes only ([dashboard/README.md](../dashboard/README.md), "Reference Registry") |
+| `.github/workflows/registry.yml` | On every push to `main` and `integration`, builds that index. It sends it, signed, to the dashboard only when the `registry` Environment's `REGISTRY_INGEST_URL` is set; without it, the run warns "Registry not set up" and the page shows that branch as out of date. It prints counts and hashes only ([dashboard/README.md](../dashboard/README.md), "Reference Registry") |
 | `src/wt/research/trials.py` | Reads the trial counts in `config/trial_registry.yaml` |
 
 A record the registry cannot parse shows up as an issue on the Reference Registry page (two experiment configs did
