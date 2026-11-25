@@ -42,12 +42,14 @@ from wt.options import lab_tape_status, select_status
 from wt.options import arms_verdict, paper_manual, review
 
 SCHEMA_ID = "stocksdelta/paper-options"
-SCHEMA_VERSION = 5                # 2 adds `lab`; 3 adds the lab's upload delay and headroom; 4 adds `select`, the
+SCHEMA_VERSION = 6                # 2 adds `lab`; 3 adds the lab's upload delay and headroom; 4 adds `select`, the
                                   # Radar → Options shadow (DEC-0070); 5 adds the shadow's `progress` and each
-                                  # session's `check`; older sites get less
+                                  # session's `check`; 6 adds the lab sessions' stale split and tier-1 open-interest
+                                  # null share; older sites get less
 LAB_V3_KEYS = ("uploads_late",)   # the `lab` block's version 3 keys, and each session's below
 LAB_SESSION_V3_KEYS = ("upload_after_close_min", "upload_late", "rate_limit_min_share", "rate_limit_low",
                        "rate_limit_429", "budget_refused")
+LAB_SESSION_V6_KEYS = ("stale_slow_start", "stale_mid_session", "oi_null_share_tier1")
 SCHEMA_PATH = ROOT / "dashboard" / "src" / "lib" / "paper-options.schema.json"
 JOURNAL = DATA_DIR / "live" / "options_journal.jsonl"
 OPT = STATE_DIR / "options"
@@ -330,11 +332,18 @@ def build(now: dt.datetime, run_id: str, journal: Path = JOURNAL, state: Path = 
 
 
 def as_version(doc: Mapping[str, Any], version: int) -> dict[str, Any]:
-    """The document in the newest format the site takes: version 4 has `select` without `progress` and without each
+    """The document in the newest format the site takes: version 5 has lab sessions without the version 6 keys,
+    version 4 has `select` without `progress` and without each
     session's `check`, version 3 has no `select`, version 2 has `lab` without the version 3 keys, version 1 has no
     `lab`."""
     if version >= SCHEMA_VERSION:
         return dict(doc)
+    lab6 = doc.get("lab")
+    if isinstance(lab6, Mapping):
+        doc = {**doc, "lab": {**lab6, "sessions": [{k: v for k, v in s.items() if k not in LAB_SESSION_V6_KEYS}
+                                                   for s in lab6.get("sessions", []) if isinstance(s, Mapping)]}}
+    if version == 5:
+        return {**doc, "schema_version": 5}
     if version == 4:
         out4 = {**doc, "schema_version": 4}
         sel4 = doc.get("select")

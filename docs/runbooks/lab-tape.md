@@ -68,14 +68,29 @@ Look at:
   until about 10:30);
 - `stale_ticks`, `stale_ticks_by_name`, `first_fresh_tick_by_name` (tick 0 is 09:30, one tick is 5 s) and
   `longest_stale_s`;
+- the stale split: `stale_ticks_slow_start` (name-ticks before that name's first fresh tick, as on 2026-11-19) and
+  `stale_ticks_mid_session` (name-ticks after the name was already fresh, as on 2026-11-23 and 11-24). The two add
+  up to the sum of `stale_ticks_by_name`. `stale_runs_by_name` lists each run as `[first tick, ticks]`, with the first
+  200 kept per name, and `stale_runs` counts them all. These are diagnostics: no counting rule reads them. Manifests
+  before 2026-11-27 do not have them;
 - `ticks_down`: ticks nobody ran, from a late start, a crash or a stop;
 - `opening_complete`;
 - `stopped`: empty on a normal day;
-- `restarts`, `rows` and `after_close` (with `open_interest.missing` and `.dates`);
+- `restarts`, `rows` and `after_close` (with `open_interest.missing`, `.dates`, and `.contracts_tier1` and
+  `.null_open_interest_tier1` for the tier-1 contracts alone);
 - `tier1_refused_by_cap`;
 - `code`: the commit that recorded it.
 
-DEC-0067, once accepted, says which of these make a session count. `receipts/<date>.json` in the tape root means the
+DEC-0067 says which of these make a session count (point 3). Its shadow-period question (§7) is about **the same
+stale first hour**: it applies only when at least two of the five shadow sessions show a slow start bad enough that no
+session can pass point 3. Mid-session staleness that stays inside point 3 is a watch item, not that trigger. The owner
+writes a dated line before the sixth v2 session either way.
+
+**Open interest** (checked 2026-11-25 across 11-20, 11-23 and 11-24): Alpaca's `open_interest_date` is two sessions
+before the session, and a later pull does not change it. The pull sends no date, so it cannot ask for the wrong one.
+About a quarter of contracts have no value; no contract has 0, so a null is probably a zero (not confirmed by Alpaca).
+EXP-0052's tables do not read open interest. Any experiment that does must state the two-session lag and decide in
+advance what a null means. `receipts/<date>.json` in the tape root means the
 bucket holds the whole session; it is kept after the local copy is pruned.
 
 The `sample` stream says what every request asked for and got back, and the `member` stream says when each contract

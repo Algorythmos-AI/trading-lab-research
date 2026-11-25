@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { verdict, WHY } from "@/components/paper/lab-tape";
+import { notes, staleSpan, staleSplit, verdict, WHY } from "@/components/paper/lab-tape";
 import { PAPER_FRAMES, PaperBody } from "@/components/paper/paper-page";
 import { fixturePaperOptions } from "@/lib/fixture-variants";
 import type { OptionsClone } from "@/lib/options-clone.types";
@@ -232,6 +232,16 @@ describe("the options lab's tape (DEC-0060, DEC-0067)", () => {
     expect(row("2026-10-06")).toContain("rate limit under 30% left 4 times");
     expect(row("2026-10-01")).toMatch(/data-lab-headroom[^>]*>—/);          // saved only by later recorders
     expect(row("2026-10-07")).toMatch(/data-lab-upload[^>]*>—/);            // not archived yet
+  });
+
+  it("says where the stale ticks fell when the recorder splits them, and short runs in seconds", () => {
+    const html = lab();
+    const row = (day: string) => html.split(`data-lab-session="${day}"`)[1]!.split("</tr>")[0]!;
+    expect(row("2026-10-05")).toContain("2 names stale for 60 min at most (120 name-ticks before first fresh, 53 mid-session)");
+    const s = withLab.lab!.sessions.find((x) => x.date === "2026-10-05")!;
+    expect(notes({ ...s, longest_stale_s: 25, stale_slow_start: undefined })).toContain("stale for 25 s at most;");
+    expect(staleSpan(null)).toBe("0 s");
+    expect(staleSplit({ ...s, stale_mid_session: null })).toBe("");
   });
 
   it("names no stock and no contract", () => {
