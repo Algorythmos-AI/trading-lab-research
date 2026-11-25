@@ -4,13 +4,21 @@ A private, read-only status page for the paper-trading research lab, built with 
 It shows the owner, on a phone or a laptop, whether last night's jobs ran, what the research says, how the paper
 account is doing and whether anything needs attention. It cannot trade, stop, reset or change anything.
 
+**Contents:** [Architecture](#architecture) (the ingest, the watchdog and each page's contract, including the
+Reference Registry and the Feed watch) · [Signal log](#signal-log-dec-0051) · [Desks](#desks) ·
+[Local development](#local-development) · [Environment variables](#environment-variables) ·
+[Security model](#security-model) · [Data classes](#data-classes) · [Deployment notes](#deployment-notes).
+The whole system around the dashboard (the host, its jobs, the deploy) is in [docs/README.md](../docs/README.md) and
+[docs/architecture.md](../docs/architecture.md). Section names here are cited by code; keep them.
+
 ## Architecture
 
-The dashboard never reaches into the Mac. The Mac pushes; Vercel stores and serves.
+The dashboard never reaches into the trading host. The GCP host pushes (the `wt-dashboard` job and the other
+publishers); Vercel stores and serves. The Mac runs nothing.
 
 ```
-Mac (launchd job)                         Vercel project (Vercel Authentication on every deployment)
-─────────────────                         ─────────────────────────────────────────────────────────
+GCP host (wt-dashboard unit)              Vercel project (Vercel Authentication on every deployment)
+────────────────────────────              ─────────────────────────────────────────────────────────
 wt.ops.publish                            POST /api/ingest            (production only)
   collect  → sanitize (allowlist) ──────▶   size cap 3.5 MB → HMAC + ±300 s → schema + denylist
   sign HMAC-SHA256, POST with the           → compare with the stored run_id / as_of
@@ -22,7 +30,7 @@ wt.ops.publish                            POST /api/ingest            (productio
 
                                           GET /api/cron/watchdog      (Vercel Cron, every 10 min)
                                             late / stopped / recovered pages during trading windows,
-                                            one "Mac offline" note a day otherwise → ntfy
+                                            one "Trading host offline for N days" note a day otherwise → ntfy
                                             alert state in private Blob alerts/state.json
                                             prunes history older than 90 days, once a day
                                             then the feed watch: every routine's document on time?
@@ -586,7 +594,8 @@ other panes keep working.
 | Name | Where | Purpose |
 |---|---|---|
 | `BLOB_READ_WRITE_TOKEN` | Vercel **production only** (added when the private Blob store is connected) | Read and write snapshots and alert state. Previews must not hold it: they run with `DASHBOARD_FIXTURE=1` |
-| `DASHBOARD_INGEST_SECRET` | Vercel production + the Mac's `~/trading/.env` | Shared HMAC key for `/api/ingest` |
+| `DASHBOARD_INGEST_SECRET` | Vercel production (the `default` key); a publisher's environment (the secret of the key it signs with) | On Vercel: the `default` key's HMAC secret for `/api/ingest`. On a publisher it is the secret it signs with, whatever its key id: the GCP host signs as `DASHBOARD_KEY_ID` (`gcp-use1`), so its `DASHBOARD_INGEST_SECRET` must equal that key's entry in `DASHBOARD_INGEST_KEYS`, **not** Vercel's default secret |
+| `DASHBOARD_KEY_ID` | The publisher (the host's secrets; `gcp-use1` by default in `wt-set-secrets`) | Which key in `DASHBOARD_INGEST_KEYS` signs; empty means `default` |
 | `DASHBOARD_INGEST_KEYS` | Vercel production (optional) | JSON map `{"<key id>": "<secret>"}`: one HMAC key per publisher, chosen by the `x-wt-key-id` header (ADR 0004) |
 | `PRIMARY_HOST` | Vercel production (optional) | The key id whose snapshots are the visible ones; default `default`. Every other key's go to the shadow slots |
 | `DASHBOARD_INGEST_SCOPES` | Vercel production (optional) | JSON map `{"<key id>": {"desks": ["hft"]}}`: that key is the primary publisher of those desks and may publish nothing else (see Desks). Holds no secret |
@@ -595,22 +604,26 @@ other panes keep working.
 | `ALPACA_DATA_URL` | Vercel (optional) | Market-data base URL, default `https://data.alpaca.markets` |
 | `ALPACA_FEED` | Vercel (optional) | The stock feed for the live prices, the session bars and the shadow check: `iex` (default when unset or empty; free, one exchange) or `sip` (every US exchange). Case and surrounding spaces are ignored. `sip` needs a paid Alpaca market-data plan and is the owner's decision alone. Any other value is refused: `/api/quote` and `/api/bars` answer 503 `not-configured` (in fixture mode too), so the page drops its prices and shows them as off until it is reloaded, the shadow check logs `bars-off`, and one log line `alpaca.feed` gives the bad value's length, never the value. With `sip` on a plan that does not include it, Alpaca answers 403: the routes then answer 503 `not-configured` with `why: "plan"`, the page shows the prices as off and says SIP is not on this data plan, the shadow check logs `bars-off`, and one `alpaca.feed` line with outcome `plan` is logged (a 403 on `iex`, or a 401, stays a 502 failure). The option chain's feed is separate and not set by it |
 | `CRON_SECRET` | Vercel production | Bearer token Vercel Cron sends to `/api/cron/watchdog` and `/api/cron/desk` |
-| `NTFY_TOPIC` | Vercel production and preview + the Mac | Secret, random ntfy topic for pages; unset means log and skip |
+| `NTFY_TOPIC` | Vercel production and preview + the host's secrets | Secret, random ntfy topic for pages; unset means log and skip |
 | `NTFY_SERVER` | Vercel (optional) | ntfy server, default `https://ntfy.sh` |
 | `REGISTRY_INGEST_SECRET` | Vercel production + the GitHub Environment `registry` | HMAC key for key id `registry`: the Reference Registry's CI job, which may publish its index and nothing else. Unset means that key is refused |
 | `GITHUB_REGISTRY_TOKEN` | Vercel production only | A fine-grained token on this repository alone (Actions: read and write; Contents: read; Metadata: read) that the server uses to read the branch heads and the registry job's runs and to start that job. Never sent to the browser. Unset means the records pages say "Can't check" and Refresh is refused |
 | `FEED_WATCH_ALERTS` | Vercel production (the owner sets it) | Exactly `on`: the feed watch sends its pages. Unset or anything else: display only (state still kept, nothing sent) |
 | `DASHBOARD_FIXTURE` | Local, CI and Vercel preview | `1` serves the fixture snapshot (ignored in production) |
-| `DASHBOARD_INGEST_URL` | The Mac | `https://lab.algorythmos.com/api/ingest` |
-| `VERCEL_AUTOMATION_BYPASS_SECRET` | The Mac | Lets the publisher through Vercel Authentication |
+| `DASHBOARD_INGEST_URL` | The host's secrets | `https://lab.algorythmos.com/api/ingest` |
+| `VERCEL_AUTOMATION_BYPASS_SECRET` | The host's secrets + the GitHub `production` Environment | Lets the publisher (and the deploy workflow) through Vercel Authentication |
+| `ALPACA_OPTION_FEED` | Vercel (optional) | The option feed the contract pane's chain reads (`/api/chain`), parsed in `src/lib/option-feed.ts` |
+| `BUILD_SHA`, `VERCEL_GIT_COMMIT_SHA`, `VERCEL_DEPLOYMENT_ID` | Set at build / by Vercel | Shown on `/api/health` and the Engineering page; stamped on board-feed records |
 
-`scripts/provision_secrets.sh` creates or rotates all of these in one go, for the owner to run once. It never
-prints a secret; it prints only the ntfy topic and how to subscribe to it.
+`scripts/provision_secrets.sh` creates or rotates `DASHBOARD_INGEST_SECRET`, `CRON_SECRET`, `NTFY_TOPIC` and the
+bypass secret (it revokes the old bypass). It never prints a secret, only the ntfy topic. It does not touch the host,
+the host's own key in `DASHBOARD_INGEST_KEYS` or GitHub: see [secret-rotation.md](../docs/runbooks/secret-rotation.md).
+Every variable across the system, with who reads it: [docs/reference/env-vars.md](../docs/reference/env-vars.md).
 
 ## Security model
 
 - **Vercel Authentication on all deployments.** Only the owner's Vercel login can open the site. The only
-  exception is the automation bypass secret, which only the Mac's publisher holds.
+  exception is the automation bypass secret, which only the publishers (the GCP host) and the deploy workflow hold.
 - **Signed writes.** `/api/ingest` accepts only production writes signed with HMAC-SHA256 over
   `"<timestamp>.<body>"` with a ±300 s window, compared in constant time. Bodies are capped at 3.5 MB.
 - **Schema plus denylist.** Every snapshot is validated against the JSON Schema (`additionalProperties: false`
@@ -704,9 +717,11 @@ prints a secret; it prints only the ntfy topic and how to subscribe to it.
   - In fixture mode and anywhere but production none of them touches Blob: the switch reads as off.
 - **No secrets client-side.** Storage, HMAC and cron checks run only in server code; nothing secret is sent to
   the browser. Logs are one JSON line per event and never include bodies, headers or secret values.
-- **Headers.** `vercel.json` sets a strict Content-Security-Policy, `X-Frame-Options: DENY`,
-  `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`, a restrictive `Permissions-Policy`,
-  `X-Robots-Tag: noindex, nofollow` and `Cache-Control: no-store` on pages and APIs; `robots.txt` disallows all.
+- **Headers.** `vercel.json` sets `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
+  `X-Content-Type-Options: nosniff`, a restrictive `Permissions-Policy`, `X-Robots-Tag: noindex, nofollow`,
+  `Cross-Origin-Opener-Policy` and `Strict-Transport-Security` on everything, `Cache-Control: no-store` on all but
+  static assets, and a strict Content-Security-Policy on `/api/*`. Pages get their Content-Security-Policy from
+  `src/proxy.ts`, with a fresh nonce per request. `robots.txt` disallows all.
 
 ## Data classes
 

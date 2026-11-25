@@ -1,5 +1,8 @@
 # Crypto desk summary (2026-10-09)
 
+> **Historical.** DEC-0036 closed the crypto desk on 2026-10-24, and its code (`wt.crypto`, `wt.ml`) was deleted on
+> 2026-10-25 (ADR 0005, addenda). Nothing below runs. The "next steps" here were never taken.
+
 **Question:** does any rule on the crypto desk show a statistically robust edge after costs, on paper, on public
 market data?
 
