@@ -6,11 +6,24 @@
 bash ~/trading/dashboard/scripts/provision_secrets.sh
 ```
 
-- It regenerates every value and writes it to `~/trading/.env` (mode 600) and to the Vercel production
-  environment.
-- It prints only the new ntfy topic. Subscribe to it in the ntfy app and remove the old one.
-- Redeploy the dashboard by re-running the latest `dashboard` workflow on `main`, so the functions pick up the new
-  values.
+It regenerates the default ingest secret (`DASHBOARD_INGEST_SECRET`), `CRON_SECRET`, `NTFY_TOPIC` and the Vercel
+bypass secret, writes them to `~/trading/.env` (mode 600) and to the Vercel production environment, and **revokes the
+old bypass secret**. It prints only the new ntfy topic. It touches neither the host nor GitHub. Then, in this order,
+outside the trading window:
+
+1. Set the new `VERCEL_AUTOMATION_BYPASS_SECRET` in the GitHub `production` Environment, which `dashboard.yml` uses.
+   Do this before the redeploy: the workflow's closing `/api/health` check uses that secret, and the old one is
+   already revoked.
+2. Redeploy the dashboard by re-running the latest `dashboard` workflow on `main`, so the functions pick up the new
+   values.
+3. On the host, run `sudo wt-set-secrets` and type the new `VERCEL_AUTOMATION_BYPASS_SECRET` and `NTFY_TOPIC` from
+   the Mac's `.env`. Until then every publish from the host is refused (HTTP 403).
+4. Subscribe to the new ntfy topic in the ntfy app, remove the old one, and point the healthchecks.io ntfy
+   integration at it ([dead-man-switches.md](dead-man-switches.md)).
+5. Check the next `wt-dashboard` run's log ([dashboard-late.md](dashboard-late.md)).
+
+The host signs with its own key (`DASHBOARD_KEY_ID`, `gcp-use1` by default), which this script does not rotate; that
+key's secret lives in Vercel's `DASHBOARD_INGEST_KEYS` ([gcp-host.md](gcp-host.md), section 2).
 
 **Broker keys (Alpaca paper):**
 

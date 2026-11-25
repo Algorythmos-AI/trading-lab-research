@@ -1,4 +1,7 @@
-# Evidence backups, anchors and the primary lease (OCI host, ADR 0004)
+# Evidence backups, anchors and the primary lease
+
+These run on the GCP host ([gcp-host.md](gcp-host.md)); they were designed for the OCI host of ADR 0004, which was
+never provisioned. `wt-install-units` enables the backup timers only when the host's secrets hold `RESTIC_REPOSITORY`.
 
 ## Nightly (wt-backup.timer, 19:30 ET after the forward test)
 `python -m wt.ops.backup nightly`:

@@ -1,4 +1,10 @@
-# The GCP free-tier trading host: provision, operate, rebuild
+# The GCP trading host: provision, operate, rebuild
+
+> **Now (read live, 2026-11-25):** `trading-lab-host` is an **e2-standard-2** (2 vCPU, 8 GB) in `us-east1-b` with a
+> **60 GB pd-balanced** boot disk under the `wt-daily` snapshot schedule (7 days). It is the only host that runs
+> jobs. It was created as the free-tier e2-micro described in sections 0 to 3 and resized later ("Primary host",
+> below). The create command in section 1 is that original free-tier one. A rebuild today should use the current
+> size. What the host is: [host.md](../operations/host.md).
 
 A second home for the trading jobs while OCI has no Ampere capacity: one Google Cloud **e2-micro** in **us-east1**,
 inside the always-free tier. It uses the same host helpers and units as the OCI host (`deploy/oci/bin`,
@@ -84,6 +90,21 @@ Rebuilds come from code. Turn off deletion protection
 (`gcloud compute instances update trading-lab-host --zone us-east1-b --no-deletion-protection`), delete the
 instance, run the create command in step 1 again, then step 2 again. A primary host restores `var/` from R2 first
 ([backups-and-lease.md](backups-and-lease.md)).
+
+**Use the current size, not the free-tier one.** Step 1's command creates the original e2-micro with a 30 GB
+`pd-standard` disk. The production host is an e2-standard-2 with a 60 GB `pd-balanced` disk under the `wt-daily`
+snapshot schedule (read live 2026-11-25). For a rebuild, run step 1's command with these flags changed:
+
+```bash
+--machine-type e2-standard-2 --boot-disk-size 60GB --boot-disk-type pd-balanced
+```
+
+Then attach the snapshot schedule:
+`gcloud compute disks add-resource-policies trading-lab-host --zone us-east1-b --resource-policies wt-daily`.
+The e2-standard-2 is outside the free tier; it is the size the jobs were moved to for memory ("Primary host", below).
+The new boot disk takes the instance's name, `trading-lab-host`. A detached disk of that name, the original
+free-tier boot disk, was still in the project on 2026-11-25. Delete it first (**owner**, after checking it holds
+nothing you need), or the create fails on the name.
 
 ## Deploying (owner)
 
@@ -200,7 +221,7 @@ The VM is the only host that runs jobs. The Mac is a console for writing code an
 
 | | |
 |---|---|
-| Machine | e2-standard-2 (2 vCPU, 8 GB) since 2026-10-13 21:07 UTC, before that e2-medium (4 GB); us-east1-b, pd-balanced 30 GB, daily snapshot schedule `wt-daily` (7 days). The external address is ephemeral and changes on a stop; nothing depends on it |
+| Machine | e2-standard-2 (2 vCPU, 8 GB) since 2026-10-13 21:07 UTC, before that e2-medium (4 GB); us-east1-b, pd-balanced 60 GB (read live 2026-11-25), daily snapshot schedule `wt-daily` (7 days). The external address is ephemeral and changes on a stop; nothing depends on it |
 | Why 8 GB | The forex desk's pre-flight measured 1.06 GB as the least memory available over a day at 4 GB, under the 1.5 GB it needs. Resized in a gap with no job running; the desks were down about 80 s |
 | Memory fuses | routine/forward/weekly MemoryHigh 1.5G, MemoryMax 2G; publisher 1G; paper-s and paper-o uncapped (OOMScoreAdjust -500) |
 | Tuning an existing VM | `sudo wt-tune-host` (zram, journald, needrestart, gh and time, git identity); `--check` only reports |

@@ -1,5 +1,9 @@
 # The OCI trading host: provision, operate, rebuild (ADR 0004)
 
+> **Historical.** This host was never provisioned (no Ampere capacity); ADR 0010 superseded ADR 0004 on 2026-10-24.
+> The jobs run on the GCP host ([gcp-host.md](gcp-host.md)). The helpers and units in `deploy/oci/` are what the GCP
+> host runs; the Terraform here is kept only as a rebuild path. The Mac is no longer a fall-back host.
+
 The trading jobs move from the Mac to one OCI **Always Free** Ampere VM (2 OCPU / 12 GB) in **ap-sydney-1**.
 Owner steps are marked **(owner)**; Claude never types a secret, applies the stack, or (re)loads units.
 
