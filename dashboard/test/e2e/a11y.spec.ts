@@ -20,6 +20,8 @@ const PAGES = [
   "/review",
   "/strategies",
   "/research",
+  "/research/records",
+  "/research/records/DEC-9001",
   "/operations",
   "/risk",
   "/engineering",
