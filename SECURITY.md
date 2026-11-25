@@ -10,6 +10,7 @@ This repository is restricted (see NOTICE.md) and is meant to be private.
 | | |
 |---|---|
 | Decided | 2026-09-29, by the owner (skalaliya) |
+| Status | Public when checked on 2026-11-25 (`gh api repos/Algorythmos-AI/trading-lab-research`). The visibility has changed more than once since 2026-09-29, and only the owner changes it. The guards act on the live visibility, not on this table ([public-repo-guards.md](docs/runbooks/public-repo-guards.md)) |
 | Why | GitHub Actions for private repositories is blocked by an org billing issue; public repositories run CI free |
 | Accepted risk | The restricted specs and research records in this repository are publicly readable and may be indexed |
 | Exit criterion | The org's payment method or Actions spending limit is fixed, private CI is proven to run, then the repository goes private again |
@@ -17,10 +18,14 @@ This repository is restricted (see NOTICE.md) and is meant to be private.
 
 ## Secrets
 
-- **Where they live.** Secrets live only in `~/trading/.env` (mode 600, never committed), in the GitHub
-  `production` Environment (main only), and in Vercel environment variables (Sensitive). Never in git, logs,
-  alerts or the dashboard.
-- **Blocking them.** gitleaks runs in pre-commit and in CI (`security.yml`). The pre-commit hook also blocks
+- **Where they live.** Secrets are never in git, logs, alerts or the dashboard. They live in:
+  - **the host:** `/etc/wt/secrets.env` (root, 0600), typed by the owner with `sudo wt-set-secrets` and copied at
+    boot to tmpfs `/run/wt-secrets/env`. The Webull key is separate, in `/etc/wt/webull.env` (ADR 0011). See
+    [gcp-host.md](docs/runbooks/gcp-host.md);
+  - **GitHub Environments:** `production` and `staging` (`dashboard.yml`) and `registry` (`registry.yml`);
+  - **Vercel environment variables** (Sensitive);
+  - **the Mac console checkout's `~/trading/.env`** (mode 600, never committed), for hand-run tools only.
+- **Blocking them.** gitleaks runs in pre-commit and in CI (`security.yml`, through the org's reusable security workflow). The pre-commit hook also blocks
   `.env*`, `knowledge/`, `data/`, `var/`, `logs/` and PDFs.
 - **Scrubbing them.** The dashboard collector redacts `.env` values and token patterns. The publisher drops every
   field it doesn't explicitly allow.
@@ -30,13 +35,15 @@ This repository is restricted (see NOTICE.md) and is meant to be private.
 
 ## Trading safety
 
-- **Paper only**, by construction. The broker adapter hard-codes the paper endpoint, and the paper-only lock
-  (`wt.core.safety`) checks four things when the adapter is built and again before every order:
+- **Paper only**, by construction. The broker adapters hard-code the paper endpoint, and the paper-only lock
+  (`wt.core.safety`) checks four things when an adapter is built (before each order it checks the environment
+  part again). Details: [docs/operations/safety.md](docs/operations/safety.md).
   - `MODE=paper`
   - `LIVE_TRADING_ENABLED` is not true
   - a paper endpoint
   - a `PA…` account number
-- **Every order goes through the pre-trade guard** (`wt.risk.pretrade`), inside the OMS:
+- **Every order goes through a pre-trade guard inside its OMS**: stock orders through `wt.risk.pretrade`
+  (`wt.oms.manager`), option orders through `wt.risk.options_guard` (`wt.oms.options`). The stock guard checks:
   - allowlist
   - hard quantity and notional caps
   - entries per day
@@ -44,5 +51,6 @@ This repository is restricted (see NOTICE.md) and is meant to be private.
   - loss latch
   - market hours
   - no sell beyond the long position
-- **Loss limits latch** and survive restarts and file deletion. Only `make reset-latch REASON=…` clears them, and
-  the reset is recorded.
+- **Loss limits latch** and survive restarts. Only the owner clears one, each desk with its own target:
+  `make reset-latch-s` (Gap Hunter), `make reset-options-latch` (the options clone) and `make reset-latch` (the
+  retired QQQ rule). See [docs/operations/safety.md](docs/operations/safety.md).
