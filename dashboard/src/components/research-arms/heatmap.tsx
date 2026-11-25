@@ -37,7 +37,7 @@ export function SessionHeatmap({ rows, unread = false }: { rows: HeatRow[] | nul
             {rows && rows.length > 0 ? (
               rows.map((r) => (
                 <tr key={r.hyp} data-heat={r.hyp}>
-                  <th scope="row" className="pr-2 text-left font-normal">
+                  <th scope="row" className="pr-2 text-left font-normal whitespace-nowrap">
                     <a href={recordHref(r.hyp)} className="font-mono underline decoration-dotted underline-offset-2">
                       {r.hyp}
                     </a>

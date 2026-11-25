@@ -95,7 +95,7 @@ export function GateTracker({ track, unread = false }: { track: GateTrack | null
                 {t.title}
               </span>
               <span className="text-muted-foreground text-[0.8125rem] leading-snug">{t.what}</span>
-              <span className="text-muted-foreground text-xs">Coming next: locked</span>
+              <span className="text-muted-foreground text-xs">Locked until {FIRST_READ} counted sessions</span>
             </li>
           ))}
         </ul>

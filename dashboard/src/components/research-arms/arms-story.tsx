@@ -200,7 +200,7 @@ function TrialCard({ t, book, sent }: { t: ArmTrial; book: ArmBook | null; sent:
         ) : (
           "Its own trigger"
         )}
- · tests the {t.compares}
+        {" · "}tests the {t.compares}
       </p>
       {t.kind === "tag" ? (
         <p className="text-muted-foreground flex items-center gap-1.5 text-[0.8125rem]">
@@ -278,12 +278,12 @@ function ArmDetail({ t, book }: { t: ArmTrial; book: ArmBook }) {
             <div>
               <dt className="text-muted-foreground text-xs">Won</dt>
               <dd className="font-mono text-lg font-semibold">{enough ? share(s.winRate) : "—"}</dd>
-              {!enough ? <dd className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">From {MIN_SAMPLE} trades</dd> : null}
+              {!enough ? <dd className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">Shown from {MIN_SAMPLE} trades</dd> : null}
             </div>
             <div>
               <dt className="text-muted-foreground text-xs">Average on the premium</dt>
               <dd className={cn("font-mono text-lg font-semibold", textTone(prem.mean))}>{signedPct(prem.mean)}</dd>
-              {prem.mean === null ? <dd className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">From {MIN_SAMPLE} trades</dd> : null}
+              {prem.mean === null ? <dd className="text-muted-foreground text-[0.6875rem] max-sm:text-xs">Shown from {MIN_SAMPLE} trades</dd> : null}
             </div>
           </dl>
           <div className="grid gap-5 md:grid-cols-2">
