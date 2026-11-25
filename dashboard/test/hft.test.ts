@@ -562,6 +562,8 @@ describe("GET /api/health", () => {
     paper_options: { status: "missing", accepts: 5, run_id: null, as_of: null, schema_version: null },
     radar_run: { status: "missing", accepts: 1, session: null, run_id: null, as_of: null, schema_version: null },
     gap_hunter_live: { status: "missing", accepts: 1, run_id: null, as_of: null, schema_version: null },
+    // The Reference Registry's indexes, one per branch, added after every older edition.
+    registry: { accepts: 1, branches: { integration: { status: "missing", sha: null, as_of: null }, main: { status: "missing", sha: null, as_of: null } } },
   };
 
   beforeEach(() => {
