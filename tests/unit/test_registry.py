@@ -200,6 +200,43 @@ def test_shallow_or_missing_history_is_said_not_guessed(tmp_path: Path) -> None:
     assert {"code": "history-unavailable"} in index["issues"]
 
 
+def test_merged_history_never_hides_a_deleted_record(tmp_path: Path) -> None:
+    """Deleted on one line of work, changed on another dated later, the deletion kept at the merge: HEAD has no file,
+    so the id is a tombstone, whatever order the replay saw the two lines in."""
+    import os
+    env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@example.invalid", "GIT_COMMITTER_NAME": "t",
+           "GIT_COMMITTER_EMAIL": "t@example.invalid", "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+
+    def git(*a: str, date: str | None = None) -> str:
+        e = {**env, **({"GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date} if date else {})}
+        return subprocess.run(["git", *a], cwd=tmp_path, env=e, check=True, capture_output=True, text=True).stdout
+
+    git("init", "-q", "-b", "main")
+    (tmp_path / "dashboard/src/lib").mkdir(parents=True)
+    (tmp_path / reg.POLICY_PATH).write_text('{"prose": false}')
+    d = tmp_path / "research/decisions"
+    d.mkdir(parents=True)
+    (d / "DEC-0001-a.md").write_text("# DEC-0001\n\n- **Status: ACCEPTED on 2026-10-01.**\n")
+    (d / "DEC-0002-b.md").write_text("# DEC-0002\n\n- **Status: ACCEPTED on 2026-10-01.**\n")
+    git("add", "-A")
+    git("commit", "-q", "-m", "a", date="2026-10-01T00:00:00Z")
+    git("switch", "-q", "-c", "side")
+    (d / "DEC-0001-a.md").write_text("# DEC-0001\n\n- **Status: WITHDRAWN on 2026-10-03.**\n")
+    git("commit", "-q", "-am", "m", date="2026-10-03T00:00:00Z")
+    git("switch", "-q", "main")
+    git("rm", "-q", "research/decisions/DEC-0001-a.md")
+    git("commit", "-q", "-m", "d", date="2026-10-02T00:00:00Z")
+    subprocess.run(["git", "merge", "-q", "side", "-m", "merge"], cwd=tmp_path, env=env, capture_output=True)
+    git("rm", "-q", "--ignore-unmatch", "research/decisions/DEC-0001-a.md")
+    git("commit", "-q", "-m", "merge", date="2026-10-04T00:00:00Z")
+    head = git("rev-parse", "HEAD").strip()
+    index = reg.build(tmp_path, branch="main", sha=head, as_of="2026-10-04T00:00:00Z", built_at="2026-10-04T00:00:00Z",
+                      repo="example/x")
+    assert [r["id"] for r in index["records"]] == ["DEC-0002"]
+    assert [(t["id"], t["state"]) for t in index["tombstones"]] == [("DEC-0001", "deleted")]
+    assert index["tombstones"][0]["last_status"] in ("accepted", "withdrawn")
+
+
 # ---- duplicates and malformed input ----------------------------------------------------------------------------
 
 def test_duplicate_id_is_one_entry_marked_as_a_conflict(made: Any) -> None:

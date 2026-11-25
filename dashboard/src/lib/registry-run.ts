@@ -155,7 +155,9 @@ export async function handleRegistryRefresh(req: Request, deps: RegistryDeps = l
   }
   const state = await registryState(branch, deps);
   if (state.status.state === "syncing") return json(409, { error: "already-syncing", ...statusBody(state) });
-  if (state.status.reason === "no-token" || state.status.reason === "unauthorized") return json(503, { error: state.status.reason });
+  // "forbidden" is the token's missing permission here, kept apart from this route's own 403 for a refused request.
+  const tokenError = (reason: string) => (reason === "forbidden" ? "token-forbidden" : reason);
+  if (state.status.reason === "no-token" || state.status.reason === "unauthorized" || state.status.reason === "forbidden") return json(503, { error: tokenError(state.status.reason) });
 
   lastDispatch.set(branch, nowMs);
   if (deps.dry) {
@@ -167,7 +169,7 @@ export async function handleRegistryRefresh(req: Request, deps: RegistryDeps = l
   logEvent("registry.refresh", { outcome: r.ok ? "dispatched" : r.reason, branch });
   if (!r.ok) {
     lastDispatch.delete(branch);
-    return json(r.reason === "rate-limited" ? 429 : 502, { error: r.reason });
+    return json(r.reason === "rate-limited" ? 429 : r.reason === "forbidden" || r.reason === "unauthorized" ? 503 : 502, { error: tokenError(r.reason) });
   }
   return json(202, { status: "dispatched", branch });
 }

@@ -12,6 +12,7 @@ const MESSAGES: Record<string, string> = {
   cooldown: "Started less than a minute ago.",
   "no-token": "The server has no GitHub token, so it cannot start the job.",
   unauthorized: "GitHub refused the server's token.",
+  "token-forbidden": "The server's GitHub token lacks the permission to start the job.",
   "rate-limited": "GitHub is rate-limiting the server; try again shortly.",
   forbidden: "Refused.",
 };

@@ -32,7 +32,7 @@ export interface RunInfo {
 
 export type GithubView =
   | { ok: true; head: string; headAt: string | null; runs: readonly RunInfo[] }
-  | { ok: false; reason: "no-token" | "unauthorized" | "unreachable" | "rate-limited" | "not-found" };
+  | { ok: false; reason: "no-token" | "unauthorized" | "forbidden" | "unreachable" | "rate-limited" | "not-found" };
 
 export type IndexView =
   | { status: "ok"; sha: string; as_of: string; storedAt: string | null; checkedAt: string | null }
@@ -51,6 +51,7 @@ export interface SyncStatus {
     | "no-index"
     | "no-token"
     | "unauthorized"
+    | "forbidden"
     | "unreachable"
     | "rate-limited"
     | "not-found"
@@ -114,6 +115,8 @@ export function syncSentence(s: SyncStatus): string {
       return "GitHub cannot be asked: the server has no token. What is shown may not be current.";
     case "unauthorized":
       return "GitHub refused the server's token (expired or revoked). What is shown may not be current.";
+    case "forbidden":
+      return "GitHub refused the server's token for this (it lacks a permission). What is shown may not be current.";
     case "rate-limited":
       return "GitHub is rate-limiting the server. What is shown may not be current.";
     case "not-found":

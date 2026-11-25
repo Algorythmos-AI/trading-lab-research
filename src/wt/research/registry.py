@@ -450,7 +450,8 @@ class History:
     first_seen: dict[str, dict[str, str]] = field(default_factory=dict)
     last_changed: dict[str, dict[str, str]] = field(default_factory=dict)
     path_renames: dict[str, int] = field(default_factory=dict)
-    gone: dict[str, dict[str, Any]] = field(default_factory=dict)   # id -> {sha, at, renamed_to, last_path, last_sha}
+    gone: dict[str, dict[str, Any]] = field(default_factory=dict)   # id -> {sha, at, renamed_to, last_path}
+    last_path: dict[str, str] = field(default_factory=dict)          # id -> the last path a file of it had
 
 
 def replay(commits: list[list[Change]]) -> History:
@@ -495,6 +496,7 @@ def replay(commits: list[list[Change]]) -> History:
                 sha, at = next((c.sha, c.at) for c in changes if c.old and path_id(c.old) == rid)
                 h.gone[rid] = {"sha": sha, "at": at, "renamed_to": renamed_to.get(rid),
                                "last_path": lp[0] if lp else None}
+    h.last_path = {rid: lp[0] for rid, lp in last_path.items()}
     return h
 
 
@@ -510,7 +512,9 @@ def read_history(root: Path) -> History | None:
     try:
         if _git(root, "rev-parse", "--is-shallow-repository").strip() != "false":
             return None
-        out = _git(root, "log", "--format=%x00%H %cI", "--name-status", "-M", "--no-color", "--",
+        # Parents before children, so a line of work merged later is replayed in the order it was made. Merge commits
+        # show no diff here; build() checks the result against the files at HEAD either way.
+        out = _git(root, "log", "--topo-order", "--format=%x00%H %cI", "--name-status", "-M", "--no-color", "--",
                    *RECORD_DIRS.values())
     except (RegistryError, OSError, subprocess.SubprocessError):
         return None
@@ -520,6 +524,8 @@ def read_history(root: Path) -> History | None:
 def last_status(root: Path, rid: str, gone: Mapping[str, Any]) -> str:
     """A gone record's status as its last version said, read from git (the commit before the one that removed it)."""
     path = gone.get("last_path")
+    # Read from the commit itself when it last touched a live file (`after`), else from the one before the deletion.
+    rev = str(gone["sha"]) if gone.get("after") else f"{gone['sha']}^"
     kind = _kind_of(path) if isinstance(path, str) else None
     if not path or not kind:
         return "unparsed"
@@ -527,9 +533,14 @@ def last_status(root: Path, rid: str, gone: Mapping[str, Any]) -> str:
     if kind == "exp":
         folder = RECORD_DIRS["exp"] + "/" + path[len(RECORD_DIRS["exp"]) + 1:].split("/", 1)[0]
         target = folder + "/config.yaml"
-    try:
-        body = _git(root, "show", f"{gone['sha']}^:{target}")
-    except (RegistryError, OSError, subprocess.SubprocessError):
+    body = None
+    for r in dict.fromkeys([rev, f"{gone['sha']}^"]):
+        try:
+            body = _git(root, "show", f"{r}:{target}")
+            break
+        except (RegistryError, OSError, subprocess.SubprocessError):
+            continue
+    if body is None:
         return "no_config" if kind == "exp" else "unparsed"
     if kind == "dec":
         return dec_status(body)[0]
@@ -583,7 +594,16 @@ def build(root: Path, *, branch: str, sha: str, as_of: str, built_at: str, repo:
             rec.first_seen = hist.first_seen.get(rid)
             rec.last_changed = hist.last_changed.get(rid)
             rec.path_renames = hist.path_renames.get(rid, 0)
-        for rid, g in sorted(hist.gone.items()):
+        gone = dict(hist.gone)
+        # A merged history replayed in one line can leave an id "live" whose file HEAD no longer has (deleted on one
+        # line of work, changed on another). HEAD is the truth: every id ever seen and absent now is gone, dated by
+        # the last commit that touched it.
+        for rid, stamp in hist.first_seen.items():
+            if rid not in records and rid not in gone:
+                last = hist.last_changed.get(rid, stamp)
+                gone[rid] = {"sha": last["sha"], "at": last["at"], "renamed_to": None,
+                             "last_path": hist.last_path.get(rid), "after": True}
+        for rid, g in sorted(gone.items()):
             if rid in records:
                 continue                       # back again under the same id: the live record is the truth
             renamed_to = g.get("renamed_to")

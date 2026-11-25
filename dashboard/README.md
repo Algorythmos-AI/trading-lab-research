@@ -603,8 +603,9 @@ prints a secret; it prints only the ntfy topic and how to subscribe to it.
   statements, spec title and open items, headlines, review URLs, subjects, statements) even if a future schema
   allowed them. Validation errors name paths, never values.
 - **Read-only UI.** No page has a control that trades, kills or resets anything. The buttons switch the colour
-  theme, copy a command to the clipboard, and set the owner's own "done for today" flag (below), the one thing the
-  browser writes.
+  theme, copy a command to the clipboard, set the owner's own "done for today" flag (below), and start the Reference
+  Registry's CI job (Refresh on the Research records pages: a `workflow_dispatch` of `registry.yml` and nothing else,
+  hardened like the flag's route). Those two are the only writes the browser can cause.
 - **The done-for-today flag** (`/api/desk/flags`, `src/lib/desk-flags-run.ts`). One private Blob document,
   `desk/flags.json`: `{ "v": 1, "done": { "day": "<New York day>", "at": "<instant>" } | null }`. It counts only on
   the New York day it names, so it clears itself at the next day with no job; Undo is allowed for 60 s after it is

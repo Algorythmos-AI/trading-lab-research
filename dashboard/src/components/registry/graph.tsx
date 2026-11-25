@@ -12,10 +12,12 @@ const STRENGTH: readonly EdgeType[] = ["supersedes", "superseded_by", "amends", 
  * names the link. Every node is a link to its own page, and the same links are listed in text beside the map.
  */
 export function NeighbourGraph({ doc, id, branch }: { doc: RegistryIndex; id: string; branch: "integration" | "main" }) {
-  const ns = neighbours(doc, id);
+  const all = neighbours(doc, id, Number.POSITIVE_INFINITY);
+  const ns = all.slice(0, 24);
   const known = new Set(doc.records.map((r) => r.id));
-  const W = 640;
-  const H = ns.length > 12 ? 520 : 420;
+  const busy = ns.length > 10;
+  const W = busy ? 780 : 640;
+  const H = busy ? 620 : 420;
   const cx = W / 2;
   const cy = H / 2;
   const rx = W / 2 - 70;
@@ -24,13 +26,15 @@ export function NeighbourGraph({ doc, id, branch }: { doc: RegistryIndex; id: st
   if (ns.length === 0) return <p className="text-muted-foreground text-sm">No other record links to or from {id}.</p>;
   const nodes = ns.map((n, i) => {
     const a = -Math.PI / 2 + (2 * Math.PI * i) / ns.length;
+    // A busy record's neighbours alternate between two rings, so the boxes never sit on one another.
+    const ring = busy && i % 2 === 1 ? 0.64 : 1;
     const types = [...n.out, ...n.in];
     const main = STRENGTH.find((t) => types.includes(t)) ?? "mentions";
-    return { ...n, x: cx + rx * Math.cos(a), y: cy + ry * Math.sin(a), main, kind: kindOf(n.id) ?? "dec" };
+    return { ...n, x: cx + rx * ring * Math.cos(a), y: cy + ry * ring * Math.sin(a), main, kind: kindOf(n.id) ?? "dec" };
   });
   return (
     <figure className="grid gap-2">
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full max-w-3xl" role="img" aria-label={`${id} and the ${ns.length} records linked to it`}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full max-w-3xl" role="group" aria-label={`${id} and the ${ns.length} records linked to it`}>
         <defs>
           <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0,0 L10,5 L0,10 z" fill="var(--muted-foreground)" />
@@ -64,8 +68,9 @@ export function NeighbourGraph({ doc, id, branch }: { doc: RegistryIndex; id: st
           );
         })}
         <g>
-          <rect x={cx - 52} y={cy - 18} width={104} height={36} rx={8} fill={KIND_COLOUR[kind]} />
-          <text x={cx} y={cy + 5} textAnchor="middle" className="font-mono" fontSize={14} fontWeight={600} fill="white">
+          <rect x={cx - 52} y={cy - 18} width={104} height={36} rx={8} fill="var(--card)" stroke={KIND_COLOUR[kind]} strokeWidth={3} />
+          <rect x={cx - 52} y={cy - 18} width={104} height={36} rx={8} fill={KIND_COLOUR[kind]} fillOpacity={0.18} />
+          <text x={cx} y={cy + 5} textAnchor="middle" className="font-mono" fontSize={14} fontWeight={700} fill="var(--foreground)">
             {id}
           </text>
         </g>
@@ -82,6 +87,7 @@ export function NeighbourGraph({ doc, id, branch }: { doc: RegistryIndex; id: st
         ))}
       </svg>
       <figcaption className="text-muted-foreground text-xs">
+        {all.length > ns.length ? `The ${ns.length} closest of ${all.length} linked records (typed links first); every one is listed under Links. ` : null}
         Arrows point from the record that names the link. Solid: a typed link (depends on, amends, decision and so on); dotted: a mention. A dashed box is an id no
         record in this index has.
       </figcaption>

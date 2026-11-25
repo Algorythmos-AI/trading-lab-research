@@ -45,9 +45,17 @@ async function call(path: string, init: RequestInit, f: Fetch): Promise<Response
   });
 }
 
-function failure(status: number): GithubView {
+/**
+ * GitHub answers 403 both when the rate limit is spent and when the token lacks a permission; only the first says
+ * `x-ratelimit-remaining: 0` (or sends `retry-after`, for the secondary limit).
+ */
+function failure(status: number, headers?: Headers): GithubView {
   if (status === 401) return { ok: false, reason: "unauthorized" };
-  if (status === 403 || status === 429) return { ok: false, reason: "rate-limited" };
+  if (status === 429) return { ok: false, reason: "rate-limited" };
+  if (status === 403) {
+    const spent = headers?.get("x-ratelimit-remaining") === "0" || headers?.has("retry-after");
+    return { ok: false, reason: spent ? "rate-limited" : "forbidden" };
+  }
   if (status === 404) return { ok: false, reason: "not-found" };
   return { ok: false, reason: "unreachable" };
 }
@@ -82,8 +90,8 @@ export async function readGithub(branch: RegistryBranch, f: Fetch = fetch, nowMs
       call(`/repos/${REGISTRY_REPO}/branches/${branch}`, {}, f),
       call(`/repos/${REGISTRY_REPO}/actions/workflows/${REGISTRY_WORKFLOW}/runs?branch=${branch}&per_page=10`, {}, f),
     ]);
-    if (!b.ok) view = failure(b.status);
-    else if (!r.ok) view = failure(r.status);
+    if (!b.ok) view = failure(b.status, b.headers);
+    else if (!r.ok) view = failure(r.status, r.headers);
     else {
       const bb = (await b.json()) as { commit?: { sha?: unknown; commit?: { committer?: { date?: unknown } } } };
       const head = bb.commit?.sha;
@@ -101,7 +109,7 @@ export async function readGithub(branch: RegistryBranch, f: Fetch = fetch, nowMs
   return view;
 }
 
-export type DispatchResult = { ok: true } | { ok: false; reason: "no-token" | "unauthorized" | "rate-limited" | "not-found" | "unreachable" };
+export type DispatchResult = { ok: true } | { ok: false; reason: "no-token" | "unauthorized" | "forbidden" | "rate-limited" | "not-found" | "unreachable" };
 
 /** Start the registry job on one branch (workflow_dispatch). The job, the repository and the ref are fixed here. */
 export async function dispatchRegistry(branch: RegistryBranch, f: Fetch = fetch): Promise<DispatchResult> {
@@ -114,8 +122,8 @@ export async function dispatchRegistry(branch: RegistryBranch, f: Fetch = fetch)
     }, f);
     forgetGithub();
     if (r.status === 204 || r.ok) return { ok: true };
-    const v = failure(r.status);
-    return { ok: false, reason: v.ok ? "unreachable" : v.reason === "no-token" ? "unreachable" : v.reason };
+    const v = failure(r.status, r.headers);
+    return { ok: false, reason: v.ok || v.reason === "no-token" ? "unreachable" : v.reason };
   } catch {
     return { ok: false, reason: "unreachable" };
   }
