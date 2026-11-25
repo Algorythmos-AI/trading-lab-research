@@ -15,6 +15,9 @@ comes back only under a new hypothesis, a new experiment id and a new decision, 
 | Knowledge-base setups with ATR stops | HYP-0008 | DEC-0009 | EXP-0013 | No edge with wider stops |
 | B on IWM and DIA | HYP-0009 | DEC-0009 | EXP-0012 | Does not carry over from QQQ |
 | Crypto family C and its challengers | HYP-0020 to HYP-0024 | DEC-0036 | EXP-0016 to EXP-0022 | Every rule run failed C1; desk closed |
+| B on QQQ (QQQM orders), "the QQQ rule" | — | DEC-0069 | see DEC-0069 | Retired by the owner on 2026-11-20; its job `paper-b` left the schedule |
 
-Strategy B on QQQ (QQQM orders) is not retired: it is the one forward candidate, under the stop rule in DEC-0037
-(`research/active_strategies/`).
+Strategy B on QQQ was the last forward candidate (stop rule DEC-0037) until DEC-0069 retired it on 2026-11-20. Its
+frozen config `research/active_strategies/B_intraday_momentum_qqqm.yaml` is still read by the status and dashboard
+code (`src/wt/ops/status.py`, `publish.py`, `assemble.py`), so it stays until the owner decides how to move it. The
+desks that trade now, Gap Hunter and the options clone, are configured in `config/` ([config/README.md](../../config/README.md)).

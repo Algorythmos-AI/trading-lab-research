@@ -1,5 +1,9 @@
 # G1 summary (2026-09-28)
 
+> **Historical.** This is the stocks research gate as it stood through 2026-11-19. Its one candidate, strategy B on
+> QQQ, was retired by DEC-0069 on 2026-11-20 ([retired strategies](retired_strategies/README.md)). For the current
+> state, see the dashboard's Reference Registry and [docs/README.md](../docs/README.md).
+
 **Question:** does anything in the knowledge base, or the two published candidates, show a statistically
 robust edge after realistic costs, tradable in a small long-only cash account on Webull AU?
 
