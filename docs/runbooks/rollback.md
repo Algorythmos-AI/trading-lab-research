@@ -13,8 +13,8 @@ sudo -u wt /usr/local/bin/wt-deploy 'rollback runtime-YYYYMMDD-N'
 
 `wt-deploy` runs `make rollback TAG=…`, which runs `wt.ops.deploy rollback` (`src/wt/ops/deploy.py`). The rollback:
 
-1. Refuses unless the deploy gate is open: no gated job running, and outside the trading window (07:00 New York to
-   2 h after the close).
+1. Refuses unless the deploy gate is open: no gated job running, outside the trading window (07:00 New York to
+   2 h after the close), and not within an hour of a gated job's start.
 2. Checks the broker before it moves anything. It refuses if strategy B's allowlist holds a position. If B is flat,
    it cancels this repo's resting orders. **This check reads only the `APCA_API_*` account** ("Robot B stocks"),
    which no desk trades since DEC-0069. It does not look at Gap Hunter's or the clone's accounts. Both desks are
@@ -26,6 +26,6 @@ sudo -u wt /usr/local/bin/wt-deploy 'rollback runtime-YYYYMMDD-N'
    only a newer one goes in.
 
 If the units differ between the two versions, `sudo -u wt /usr/local/bin/wt-deploy units-diff` shows how, and
-the owner runs `sudo wt-install-units`.
+the owner runs `sudo wt-install-units` (it re-enables every job timer, including one disabled on purpose).
 
 Then fix forward: a `hotfix/*` branch from `origin/main` ([deploy.md](../operations/deploy.md)).

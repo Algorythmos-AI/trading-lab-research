@@ -1,4 +1,10 @@
-# The GCP free-tier trading host: provision, operate, rebuild
+# The GCP trading host: provision, operate, rebuild
+
+> **Now (read live, 2026-11-25):** `trading-lab-host` is an **e2-standard-2** (2 vCPU, 8 GB) in `us-east1-b` with a
+> **60 GB pd-balanced** boot disk under the `wt-daily` snapshot schedule (7 days). It is the only host that runs
+> jobs. It was created as the free-tier e2-micro described in sections 0 to 3 and resized later ("Primary host",
+> below). The create command in section 1 is that original free-tier one. A rebuild today should use the current
+> size. What the host is: [host.md](../operations/host.md).
 
 A second home for the trading jobs while OCI has no Ampere capacity: one Google Cloud **e2-micro** in **us-east1**,
 inside the always-free tier. It uses the same host helpers and units as the OCI host (`deploy/oci/bin`,
@@ -200,7 +206,7 @@ The VM is the only host that runs jobs. The Mac is a console for writing code an
 
 | | |
 |---|---|
-| Machine | e2-standard-2 (2 vCPU, 8 GB) since 2026-10-13 21:07 UTC, before that e2-medium (4 GB); us-east1-b, pd-balanced 30 GB, daily snapshot schedule `wt-daily` (7 days). The external address is ephemeral and changes on a stop; nothing depends on it |
+| Machine | e2-standard-2 (2 vCPU, 8 GB) since 2026-10-13 21:07 UTC, before that e2-medium (4 GB); us-east1-b, pd-balanced 60 GB (read live 2026-11-25), daily snapshot schedule `wt-daily` (7 days). The external address is ephemeral and changes on a stop; nothing depends on it |
 | Why 8 GB | The forex desk's pre-flight measured 1.06 GB as the least memory available over a day at 4 GB, under the 1.5 GB it needs. Resized in a gap with no job running; the desks were down about 80 s |
 | Memory fuses | routine/forward/weekly MemoryHigh 1.5G, MemoryMax 2G; publisher 1G; paper-s and paper-o uncapped (OOMScoreAdjust -500) |
 | Tuning an existing VM | `sudo wt-tune-host` (zram, journald, needrestart, gh and time, git identity); `--check` only reports |

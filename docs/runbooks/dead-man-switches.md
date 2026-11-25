@@ -6,7 +6,8 @@ Four independent monitors, none of them on the trading host:
    inside an expected trading window. Proven by `make watchdog-drill` (see dashboard-deploy.md).
 2. **healthchecks.io** (free plan): each job pings its own check by slug when it finishes, and `/fail` when it
    fails or refuses. A check that doesn't hear from its job in time pages (ntfy + email).
-3. **OCI alarm + Cloudflare tunnel notification** (VM only, ADR 0004): instance down, tunnel down.
+3. **Cloudflare tunnel notification**, where the tunnel is set up: tunnel down. (The OCI instance alarm of ADR 0004
+   never existed: that host was never provisioned.)
 4. **The feed watch**, in the same cron run, beside the desks' ticks (`dashboard/src/lib/feed-watch-run.ts`): whether
    each cloud routine's document arrived for the right session by its time (the options edition, the pre-open
    refresh, the journal, the radar, the ledger as display only), whether the desk's shadow evaluator is still writing
@@ -28,7 +29,7 @@ incident, not a second one.
 ## healthchecks.io setup (owner, once)
 
 1. Create a free account and a project "trading-lab". Settings > API Access: create a **ping key** and put it in
-   `~/trading/.env` on the Mac (and the VM's paging file later) as `HC_PING_KEY=...`. Never commit it.
+   the host's secrets with `sudo wt-set-secrets` (`HC_PING_KEY`). Never commit it.
 2. Integrations: add **ntfy** (the same topic as `NTFY_TOPIC`) and email. Attach both to every check.
 3. Create these checks. Use **Cron** schedules, time zone **America/New_York**, slug exactly as shown. Each tick
    is before the earliest possible ping on either host in every daylight-saving combination, and the grace covers
