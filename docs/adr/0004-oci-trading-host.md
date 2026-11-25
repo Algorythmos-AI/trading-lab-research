@@ -2,8 +2,6 @@
 
 - **Status:** superseded by [ADR 0010](0010-gcp-trading-host.md) on 2026-10-24. Proposed 2026-09-30 (plan v4.2 §3);
   the OCI VM was never provisioned (no Ampere capacity), and its helpers and units run on the GCP host.
-- **Note (2026-11-25, docs only):** this host was never provisioned. `wt-boot-reconcile` now restarts `routine`,
-  `paper-s`, `paper-o` and `forward` after a reboot inside their windows (`src/wt/ops/bootreconcile.py`), not paper-b.
 - **Context:** the Mac's disk and swap made jobs refuse (2026-09-29); the owner chose Oracle Cloud's free tier.
 
 ## Decision

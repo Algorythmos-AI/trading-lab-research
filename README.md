@@ -8,12 +8,11 @@ The research and paper-trading engine behind Trading Lab. It holds:
 
 |                 |                                                                                                                                  |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| **Status**      | Active research · paper only, no live trading · two desks trade on paper: Gap Hunter (stocks) and the options clone · the QQQ rule (strategy B) is retired (DEC-0069) |
+| **Status**      | Active research · G1 closed with one candidate (strategy B, under re-evaluation per DEC-0011) · paper only · no live trading      |
 | **Owner**       | [@Algorythmos-AI/maintainers](https://github.com/orgs/Algorythmos-AI/teams/maintainers)                                          |
-| **Runs at**     | One Google Cloud VM, `trading-lab-host` (systemd timers), against three Alpaca **paper** accounts. The Mac runs nothing          |
+| **Runs at**     | One Google Cloud VM, `trading-lab-host` (systemd timers), against an Alpaca **paper** account. The Mac runs nothing              |
 | **Dashboard**   | [lab.algorythmos.com](https://lab.algorythmos.com) (Vercel login required)                                                        |
 | **Run locally** | `make bootstrap && make ci`                                                                                                      |
-| **Docs**        | **[Start here: docs/README.md](docs/README.md)** · [Glossary](docs/reference/glossary.md) · [Safety](docs/operations/safety.md) |
 | **Context**     | [Research registry](research/README.md) · [G1 summary](research/G1_SUMMARY.md) · [ADRs](docs/adr/) · [Runbooks](docs/runbooks/) · [Security](SECURITY.md) · [Notice](NOTICE.md) · [Licence](LICENSE) |
 
 ---
@@ -21,9 +20,8 @@ The research and paper-trading engine behind Trading Lab. It holds:
 > **Not financial advice.** This is a research tool that trades simulated (paper) money only. A paper-only lock
 > (`wt.core.safety`) refuses to send any order that could reach a live account.
 
-> **Restricted, and public for now.** This repository contains material derived from third-party courses
-> ([NOTICE.md](NOTICE.md)). It is meant to be private, but it was public when checked on 2026-11-25; the owner
-> decides its visibility ([SECURITY.md](SECURITY.md)). The dashboard publishes a sanitized snapshot only.
+> **Restricted.** This repository contains material derived from third-party courses. See [NOTICE.md](NOTICE.md).
+> Keep it private. The dashboard publishes a sanitized snapshot only.
 
 ## Is everything OK?
 
@@ -39,28 +37,20 @@ The research and paper-trading engine behind Trading Lab. It holds:
 ## How it runs
 
 ```
-GCP VM trading-lab-host: systemd runs /home/wt/trading (a deployed main commit); runtime state in var/ and data/live/
- ├─ trading jobs (gated: no deploy while they run)
- │   ├─ wt-routine    Mon–Fri 07:30 NY  pre-market dry run (market data only)
- │   ├─ wt-paper-s    Mon–Fri 08:30 NY  Gap Hunter, the stock desk's paper session   ← places paper orders
- │   ├─ wt-paper-o    Mon–Fri 09:00 NY  the options clone's paper session            ← places paper orders
- │   ├─ wt-forward    Mon–Fri 12:40 NY  forward test of the frozen candidates, after the close
- │   └─ wt-weekly     Fri 20:00 NY      weekly scorecard and evidence
- ├─ publishers: wt-dashboard, wt-options-live, wt-gap-hunter-publish, wt-econ-calendar → signed POST to Vercel
- ├─ research and options pipeline: wt-options-select, wt-pipeline-check, wt-options-review, wt-exp0037,
- │                                 wt-lab-tape, wt-lab-archive-check
- ├─ deploy: wt-deploy-notify, wt-deploy-auto (hourly; dry run unless var/deploy/AUTO_ON exists)
- └─ host units: wt-secrets, wt-boot-reconcile, wt-backup, wt-restore-test, wt-tunnel, wt-webull-pull/-publish, wt-alert@
+systemd timers on the VM (/home/wt/trading at a deployed main commit; runtime state in var/)
+ ├─ wt-routine    07:30 New York: SPEC-0001 pre-market dry run (stages 08:00 to 09:15, signals check 11:31)
+ ├─ wt-paper-s    08:30 New York: Gap Hunter, the stock desk's paper session (its own account, journal and lease)
+ ├─ wt-forward    12:40 New York → waits until close + 20 min: forward test of the frozen candidates
+ ├─ wt-weekly     Friday 20:00 New York: weekly scorecard
+ └─ wt-dashboard  every 5 min in the US session, every 15 otherwise → collect → sanitize → sign → POST
                                      │
-Vercel (trading-lab-dashboard) ◄─────┘  private Blob storage; pages; crons: a watchdog that pages
-                                         if the host goes quiet in a trading window, and feed checks
+Vercel (trading-lab-dashboard) ◄─────┘  private Blob storage; pages; a watchdog cron that alerts
+                                         if the host goes quiet during a trading window
 ```
 
-- The job list comes from `src/wt/ops/schedule.py` (`JOBS`), and the host units from `deploy/oci/systemd/`.
-- Every job runs through `wt.ops.jobs`, which gives it a lock, preflight checks, deadlines, alerts and a heartbeat.
+- Every job runs through `wt.ops.jobs`. That gives it a lock, preflight checks, deadlines, alerts and a heartbeat.
 - Session times follow New York, so daylight-saving changes need no edits.
-- See [ADR 0001](docs/adr/0001-vercel-dashboard.md), [ADR 0002](docs/adr/0002-runtime-state-and-deploy-gate.md) and
-  [ADR 0010](docs/adr/0010-gcp-trading-host.md).
+- See [ADR 0001](docs/adr/0001-vercel-dashboard.md) and [ADR 0002](docs/adr/0002-runtime-state-and-deploy-gate.md).
 
 ## Everyday commands
 
@@ -79,14 +69,13 @@ Vercel (trading-lab-dashboard) ◄─────┘  private Blob storage; page
 ## Layout
 
 ```
-src/wt/          core · data · scanner · signals · backtest · risk · oms · brokers · live · options · lab · analytics ·
-                 ops · research · specs · webull · owner · knowledge
+src/wt/          data · scanner · signals · backtest · risk · oms · brokers · live · ops · knowledge · specs · options
 scripts/         research drivers and nightly jobs
 research/        hypotheses/ experiments/ decisions/ active_strategies/ lessons_learned/ specs/ forward/
 config/          ranking, catalyst and risk limits, macro-event calendar, dashboard config
 dashboard/       the Vercel dashboard (Next.js)
 deploy/          host helpers, units and first-boot files (gcp/, oci/), and the jobs' entry scripts
-docs/            start at docs/README.md: ADRs, runbooks, releases, operations, reference
+docs/            ADRs and runbooks
 tests/unit/      pytest suite
 ```
 

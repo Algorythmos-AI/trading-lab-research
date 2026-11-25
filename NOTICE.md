@@ -3,9 +3,6 @@
 **Keep this repository private. Never make it public, fork it, or copy its contents into a public
 repository.** Its catalog entry is `data_class: restricted`.
 
-> **Status, 2026-11-25:** the repository is public, under the owner's risk acceptance recorded in
-> [SECURITY.md](SECURITY.md) ("Current exception"). The rule above stands; the exception is the owner's to end.
-
 Some of this repository's contents are derived from third-party day-trading courses, books and notes.
 Most of that material is Warrior Trading course content, which is "All rights reserved". The derived
 content is:
