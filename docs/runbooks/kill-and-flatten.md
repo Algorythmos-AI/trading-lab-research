@@ -26,10 +26,18 @@ Exits and stops keep being managed.
 
 ## Flatten now
 
-1. Turn the desk's kill file on (above).
-2. **Cancel orders first.** In the Alpaca paper UI of the desk's account ([paper-accounts.md](paper-accounts.md)),
-   cancel the desk's open orders, so a stop can't fill *after* your sell and open a short:
+A kill file stops only new entries. The running desk keeps protecting what it holds: Gap Hunter re-places a
+missing stop on every loop, and the clone keeps managing its exits. **Stop the runner before you touch its orders**,
+or a stop you cancel can come back and open a short after your sell.
+
+1. Turn the desk's kill file on (above), so a restart cannot enter.
+2. **(owner)** Stop the desk's runner: `sudo systemctl stop wt-paper-s` (Gap Hunter) or `sudo systemctl stop wt-paper-o`
+   (the clone). It may page as a failed unit (the job runner exits 143 when stopped). Its resting orders stay at the broker: the
+   runner does not cancel them on the way out. Its timer starts it again
+   at the next session, and the kill file keeps that session from entering.
+3. **Cancel orders.** In the Alpaca paper UI of the desk's account ([paper-accounts.md](paper-accounts.md)), cancel
+   the desk's open orders:
    - `wt-S-…` for Gap Hunter;
    - `wt-O-…` for the clone.
-3. Close the position in the Alpaca UI.
-4. Leave the kill switch on until you've read the logs (`/home/wt/trading/logs/`).
+4. Close the position in the Alpaca UI.
+5. Leave the kill switch on until you've read the logs (`/home/wt/trading/logs/`).

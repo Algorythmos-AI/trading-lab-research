@@ -15,7 +15,9 @@ Three layers keep orders away from a live account.
 
 On a host with `WT_ROLE=shadow`, Gap Hunter (and the retired QQQ runner) wrap their broker in `ShadowBroker`, which
 raises on every order, cancel and replace call (`src/wt/brokers/shadow.py`, `runner_s.py`). **The options clone does
-not read `WT_ROLE`**: on a shadow host only its kill file keeps it from sending paper orders.
+not read `WT_ROLE`.** On a shadow host its kill file blocks only new entries; a plan it already holds still manages
+its exits and can send paper exit orders. A shadow run is order-free for the clone only if the clone holds nothing,
+or if `wt-paper-o` is not running.
 
 `MODE`, `LIVE_TRADING_ENABLED` and any live key belong to the owner alone ([AGENTS.md](../../AGENTS.md), rule 1).
 
@@ -78,12 +80,19 @@ its preflight (`src/wt/ops/jobs.py`). The last recorded check of the host's keys
 
 ## 4. Flatten
 
-Use the Alpaca paper UI of the account the desk trades (see [paper-accounts.md](../runbooks/paper-accounts.md)):
+A kill file stops only new entries. The running desk keeps protecting what it holds: Gap Hunter re-places a
+missing stop on every loop (`protect()` in `runner_s.py`), and the clone keeps managing its exits. So **stop the
+desk's runner before you touch its orders**, or a stop you cancel can come back and open a short after your sell.
 
-1. Turn the desk's kill file on (section 2).
-2. Cancel the desk's open orders **first**, so a stop cannot fill after your sell and open a short. Each desk's
-   client order ids start with `wt-<tag>-`, from `src/wt/core/ids.py`:
+1. Turn the desk's kill file on (section 2), so a restart cannot enter.
+2. **(owner)** Stop the desk's runner: `sudo systemctl stop wt-paper-s` (Gap Hunter) or
+   `sudo systemctl stop wt-paper-o` (the clone). The job runner forwards the stop to the desk and exits 143
+   (`src/wt/ops/jobs.py`), so the unit may page as failed. Resting orders stay at the broker; the runner does not
+   cancel them on the way out. Its timer starts it again at the next session;
+   the kill file keeps that session from entering.
+3. In the Alpaca paper UI of the desk's account (see [paper-accounts.md](../runbooks/paper-accounts.md)), cancel
+   the desk's open orders **first**. Each desk's client order ids start with `wt-<tag>-` (`src/wt/core/ids.py`):
    - `wt-S-` for Gap Hunter;
    - `wt-O-` for the options clone.
-3. Close the position.
-4. Leave the kill file on until you have read the session's logs.
+4. Close the position.
+5. Leave the kill file on until you have read the session's logs.
