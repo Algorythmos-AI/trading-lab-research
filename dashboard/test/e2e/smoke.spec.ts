@@ -428,6 +428,23 @@ test("the crypto page says the desk is closed, with no sections and no readings"
   expect(errors).toEqual([]);
 });
 
+test("the research arms' story renders every block, under the Research tab", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  const res = await page.goto("/research-arms");
+  expect(res?.status()).toBe(200);
+  await expect(page).toHaveURL(/\/research\/arms$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Research arms" })).toBeAttached();
+  const nav = page.getByRole("navigation", { name: "Sections" });
+  await expect(nav.getByRole("link", { name: "Research", exact: true })).toHaveAttribute("aria-current", "page");
+  for (const id of ["timeline", "how", "trials", "shadow", "verdict", "next"]) await expect(page.locator(`#${id}`)).toBeAttached();
+  await expect(page.locator("[data-trial]")).toHaveCount(14);
+  await expect(page.locator('[data-kind="tag"]').getByText("Result sealed until its report")).toHaveCount(10);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+  expect(errors).toEqual([]);
+});
+
 test("the crypto desk's old pages are gone", async ({ page }) => {
   for (const path of ["/crypto/market", "/crypto/strategy", "/crypto/research", "/crypto/learning", "/crypto/operations", "/crypto/risk", "/crypto/engineering"]) {
     const res = await page.goto(path);
