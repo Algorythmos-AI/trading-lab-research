@@ -594,7 +594,7 @@ other panes keep working.
 | Name | Where | Purpose |
 |---|---|---|
 | `BLOB_READ_WRITE_TOKEN` | Vercel **production only** (added when the private Blob store is connected) | Read and write snapshots and alert state. Previews must not hold it: they run with `DASHBOARD_FIXTURE=1` |
-| `DASHBOARD_INGEST_SECRET` | Vercel production + a publisher's environment | The `default` key's HMAC secret for `/api/ingest`. The GCP host signs with its own key (`DASHBOARD_KEY_ID`, below) |
+| `DASHBOARD_INGEST_SECRET` | Vercel production (the `default` key); a publisher's environment (the secret of the key it signs with) | On Vercel: the `default` key's HMAC secret for `/api/ingest`. On a publisher it is the secret it signs with, whatever its key id: the GCP host signs as `DASHBOARD_KEY_ID` (`gcp-use1`), so its `DASHBOARD_INGEST_SECRET` must equal that key's entry in `DASHBOARD_INGEST_KEYS`, **not** Vercel's default secret |
 | `DASHBOARD_KEY_ID` | The publisher (the host's secrets; `gcp-use1` by default in `wt-set-secrets`) | Which key in `DASHBOARD_INGEST_KEYS` signs; empty means `default` |
 | `DASHBOARD_INGEST_KEYS` | Vercel production (optional) | JSON map `{"<key id>": "<secret>"}`: one HMAC key per publisher, chosen by the `x-wt-key-id` header (ADR 0004) |
 | `PRIMARY_HOST` | Vercel production (optional) | The key id whose snapshots are the visible ones; default `default`. Every other key's go to the shadow slots |
@@ -612,7 +612,7 @@ other panes keep working.
 | `DASHBOARD_FIXTURE` | Local, CI and Vercel preview | `1` serves the fixture snapshot (ignored in production) |
 | `DASHBOARD_INGEST_URL` | The host's secrets | `https://lab.algorythmos.com/api/ingest` |
 | `VERCEL_AUTOMATION_BYPASS_SECRET` | The host's secrets + the GitHub `production` Environment | Lets the publisher (and the deploy workflow) through Vercel Authentication |
-| `ALPACA_OPTION_FEED` | Vercel (optional) | The option feed the board reads (`src/lib/alpaca-feed.ts`) |
+| `ALPACA_OPTION_FEED` | Vercel (optional) | The option feed the contract pane's chain reads (`/api/chain`), parsed in `src/lib/option-feed.ts` |
 | `BUILD_SHA`, `VERCEL_GIT_COMMIT_SHA`, `VERCEL_DEPLOYMENT_ID` | Set at build / by Vercel | Shown on `/api/health` and the Engineering page; stamped on board-feed records |
 
 `scripts/provision_secrets.sh` creates or rotates `DASHBOARD_INGEST_SECRET`, `CRON_SECRET`, `NTFY_TOPIC` and the
