@@ -1,6 +1,8 @@
 # ADR 0007: The host says when a deploy is ready; the owner still deploys
 
 - **Status:** accepted, 2026-10-12 (the owner's merge of the pull request that carries it)
+- **Amended:** ADR 0008 supersedes the "the owner still deploys" part where the owner has created
+  `var/deploy/AUTO_ON`. The notice itself still runs (`deploy-notify`).
 - **Context:** the owner asked whether the host could be deployed without typing the command each time, and chose
   to start with a notice only
 

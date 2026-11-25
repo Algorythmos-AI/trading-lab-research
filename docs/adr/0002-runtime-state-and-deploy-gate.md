@@ -1,6 +1,9 @@
 # ADR 0002: Runtime state outside git, and a computed deploy gate
 
 - **Status:** accepted, 2026-09-29
+- **Amended (2026-11-25, docs only):** the jobs run under systemd on the GCP host (ADR 0010), from units generated
+  by `wt.ops.units`, not launchd on the Mac. The gate is `src/wt/ops/window.py`; the deploy is `src/wt/ops/deploy.py`,
+  run by `wt-deploy` and, where the owner has switched it on, by the hourly `deploy-auto` job (ADR 0008).
 - **Context:** September 2026 audit, plan v2
 
 ## Context

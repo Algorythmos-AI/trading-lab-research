@@ -50,6 +50,16 @@ specific to this repository. Where the two conflict, the org file's "Never" sect
    - No `Co-Authored-By` trailer and no AI-tool mention anywhere (org decision D-016).
    - Author: `skalaliya <skalaliya@gmail.com>`.
 
+## Keeping the docs true
+
+The code is the truth for what runs; the docs mirror it ([docs/README.md](docs/README.md)). In the same pull request:
+- a new or renamed runbook or ADR gets a row in `docs/runbooks/README.md` or `docs/adr/README.md`;
+- a release to `main` gets a row in `docs/releases/README.md`;
+- a doc that names a file, job, `make` target or env var is updated when that thing changes.
+
+Never rename or move an existing doc: code, alerts and tests link to those paths. `tests/unit/test_docs_truth.py`
+checks the indexes, the links and the `make` targets.
+
 ## Data classes
 
 The repo is **restricted**: it holds specifications and research notes derived from third-party course material
