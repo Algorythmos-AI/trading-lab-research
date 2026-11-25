@@ -440,3 +440,13 @@ def test_workflow_never_publishes_the_index() -> None:
     assert "build_registry.py build" in steps and "build_registry.py send" in steps and "$RUNNER_TEMP" in steps
     checkout = next(s for s in job["steps"] if str(s.get("uses", "")).startswith("actions/checkout"))
     assert checkout["with"]["fetch-depth"] == 0 and checkout["with"]["persist-credentials"] is False
+
+
+def test_an_unconfigured_send_is_skipped_with_a_warning_and_a_configured_one_still_fails_loudly() -> None:
+    job = yaml.safe_load((ROOT / ".github/workflows/registry.yml").read_text())["jobs"]["registry"]
+    send = next(s for s in job["steps"] if "build_registry.py send" in str(s.get("run", "")))
+    skip = next(s for s in job["steps"] if str(s.get("name", "")).startswith("Not set up yet"))
+    assert send["if"] == "${{ vars.REGISTRY_INGEST_URL != '' }}"
+    assert skip["if"] == "${{ vars.REGISTRY_INGEST_URL == '' }}"
+    assert "::warning" in skip["run"] and 'rm -f "$RUNNER_TEMP/registry.json"' in skip["run"]
+    assert "continue-on-error" not in send and "|| true" not in send["run"]          # a real send failure stays red

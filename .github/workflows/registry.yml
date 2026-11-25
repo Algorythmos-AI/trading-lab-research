@@ -48,7 +48,17 @@ jobs:
         run: |
           "$RUNNER_TEMP/venv/bin/python" scripts/build_registry.py build --branch "$BRANCH" --sha "$SHA" \
             --repo "$REPO" --out "$RUNNER_TEMP/registry.json"
+      # Until the owner sets the `registry` Environment's REGISTRY_INGEST_URL, the index is built (so the parser is still
+      # checked on every push) but not sent, and the run says so as a warning instead of failing. The page then shows
+      # "Out of date" for that branch, never a stale index as current. Once the URL is set, a send that fails (a missing
+      # secret, a refused upload) fails the run as before.
+      - name: Not set up yet (nothing sent)
+        if: ${{ vars.REGISTRY_INGEST_URL == '' }}
+        run: |
+          echo "::warning title=Registry not set up::REGISTRY_INGEST_URL is not set in the registry Environment; the index was built and not sent"
+          rm -f "$RUNNER_TEMP/registry.json"
       - name: Send it to the dashboard (outcome only in the log)
+        if: ${{ vars.REGISTRY_INGEST_URL != '' }}
         env:
           REGISTRY_INGEST_URL: ${{ vars.REGISTRY_INGEST_URL }}
           REGISTRY_INGEST_SECRET: ${{ secrets.REGISTRY_INGEST_SECRET }}
