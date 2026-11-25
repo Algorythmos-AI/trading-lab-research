@@ -29,16 +29,16 @@ own file, and **no single file stops every desk**.
 
 | Desk | Job | File it reads (on the host, under `/home/wt/trading`) | Read by | Turn on | Turn off |
 |---|---|---|---|---|---|
-| Gap Hunter (stock desk, "sleeve S") | `paper-s` | `var/smallcap/KILL` **only** | `src/wt/live/runner_s.py` (`KILL = DIR / "KILL"`) | no `make` target, see below | `sudo -u wt rm /home/wt/trading/var/smallcap/KILL` |
+| Gap Hunter (stock desk, "sleeve S") | `paper-s` | `var/smallcap/KILL` **only** | `src/wt/live/runner_s.py` (`KILL = DIR / "KILL"`) | `make kill DESK=s REASON="…"` | `make unkill DESK=s` |
 | Options clone | `paper-o` | the root `KILL` **or** `var/options/KILL` | `src/wt/live/runner_o.py` (`KILLS`) | `make kill REASON="…"` (root) or `make kill DESK=options REASON="…"` | `make unkill` (root) or `make unkill DESK=options` |
 | Retired QQQ rule (DEC-0069) | none | the root `KILL` | `src/wt/live/runner_b.py` | — | — |
 
-**The root `KILL` does not stop Gap Hunter.** `make kill` without `DESK=options` writes the root file
-(`Makefile`, target `kill`), and `DESK=stocks` or any other value also writes the root file. To stop Gap Hunter's
-entries on the host:
+**The root `KILL` does not stop Gap Hunter.** `make kill` with no `DESK` (or `DESK=stocks`) writes the root file
+(`Makefile`, target `kill`). `DESK=s` writes Gap Hunter's file and `DESK=options` the clone's own file; any other value
+is refused and writes nothing. To stop Gap Hunter's entries on the host:
 
 ```bash
-sudo -u wt sh -c 'mkdir -p /home/wt/trading/var/smallcap && echo "why ($(date))" > /home/wt/trading/var/smallcap/KILL'
+sudo -u wt make -C /home/wt/trading kill DESK=s REASON="why"
 ```
 
 To stop every desk, write both files. Gap Hunter re-reads its file on every loop of its session (`runner_s.py`).
@@ -47,11 +47,14 @@ Either way, a change takes effect without a restart.
 
 ### What records it, and what shows it
 
-- **Audit log.** `make kill` (root file) writes a `kill_on` entry to the hash-chained audit log (`wt.ops.audit`). It
-  runs with `|| true`, so a failed write is not reported (`Makefile`, target `kill`). `make unkill` removes the root
-  file through `wt.ops.control unkill`, which takes the runner lock and writes `kill_off`.
-- **Not audited.** `make kill DESK=options`, `make unkill DESK=options` (a plain `rm -f`, with no lock check) and a
-  hand-written `var/smallcap/KILL` write no audit entry. Gap Hunter logs `kill_state` in its own journal.
+- **Audit log.** `make kill` writes a `kill_on` entry to the hash-chained audit log (`wt.ops.audit`) for every desk's
+  file, with the desk (`root`, `s` or `options`) as the entry's detail; the detail stays on the host. The file is
+  written first: a failed audit write prints `audit log not written` and does not undo the kill (`Makefile`, target
+  `kill`). `make unkill [DESK=…]` removes the file through `wt.ops.control unkill` and writes `kill_off`. For the root
+  file it takes the retired QQQ rule's runner lock first; `DESK=s` and `DESK=options` remove the file without a lock
+  check, and each runner logs the change.
+- **Not audited.** A file written or removed by hand (`echo … > var/smallcap/KILL`, `rm`) writes no audit entry. Gap
+  Hunter logs `kill_state` in its own journal either way.
 - **`make status` reads only the root file.** It prints `KILL switch: ON (no new entries)` when only the root file
   exists (`src/wt/ops/jobs.py`, `status`), even while Gap Hunter can still enter.
 - **The forward-test summary's "new entries are paused" line** also reads only the root file.

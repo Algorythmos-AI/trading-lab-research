@@ -9,7 +9,12 @@ scheduled run: the refusal now only catches a runner someone started by hand. Th
 options clone (wt.live.runner_o), so `make kill` and `make unkill` keep their use. `reset-latch` clears the retired
 rule's virtual account and has no use while nothing trades it. The lock names below are not renamed.
 
-Every action is recorded: KILL on/off in the hash-chained audit log (wt.ops.audit); a latch reset in the virtual
+`make kill DESK=s` / `make unkill DESK=s` act on Gap Hunter's own file (var/smallcap/KILL), `DESK=options` on the
+clone's own file; only the root file's unkill takes the lock above. An unknown DESK is refused rather than falling
+back to the root file, which would leave Gap Hunter running.
+
+Every action is recorded: KILL on/off for every desk's file in the hash-chained audit log (wt.ops.audit), the
+desk's name as the row's detail; a latch reset in the virtual
 account's own latch history, which the dashboard's audit trail already reads. The owner's words stay on the host.
 
     python -m wt.ops.control unkill
@@ -28,12 +33,18 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from wt.core.config import DATA_DIR, ROOT, STATE_DIR
+from wt.core.desk import OPTIONS_DIR
 from wt.ops import audit, locks
 
 RUNNER_JOB = "paper-b"
 VA_PATH = DATA_DIR / "live" / "virtual_account.json"
 RUNNER_JOB_S = "paper-s"
 VA_PATH_S = STATE_DIR / "smallcap" / "virtual_account.json"     # wt.live.runner_s.VA_PATH
+KILL_S = STATE_DIR / "smallcap" / "KILL"                         # wt.live.runner_s.KILL: Gap Hunter's only kill file
+KILL_OPTIONS = OPTIONS_DIR / "KILL"                              # wt.core.desk.DESKS["options"].kill_file
+# The desks `make kill DESK=...` / `make unkill DESK=...` name. The root file is the options clone's other file; no
+# DESK (or DESK=stocks) means the root file. The audit row's detail carries this name, which stays on the host.
+DESK_KILLS = {"root": None, "options": KILL_OPTIONS, "s": KILL_S}
 
 
 BUSY_UNKILL = ("paper B is running (its lock is held): removing KILL now would re-enable entries mid-session. "
@@ -57,18 +68,36 @@ def _runner_idle(lock_root: Path | None, job_name: str = RUNNER_JOB,
             yield runner
 
 
-def unkill(root: Path = ROOT, lock_root: Path | None = None, audit_log: Path | None = None) -> tuple[int, str]:
-    """The action runs while holding paper-b's lock, so the runner can't start half-way through it (and a start
-    that meets the lock refuses cleanly, through the normal jobs.py path)."""
-    kill = root / "KILL"
+def unkill(root: Path = ROOT, lock_root: Path | None = None, audit_log: Path | None = None, desk: str = "root",
+           kill_file: Path | None = None) -> tuple[int, str]:
+    """Remove one desk's kill file and write `kill_off` (detail: the desk) to the audit log.
+
+    The root file is removed while holding paper-b's lock, so the runner can't start half-way through it (and a start
+    that meets the lock refuses cleanly, through the normal jobs.py path). Gap Hunter's (`s`) and the options clone's
+    own file are removed without a lock check, as `rm` would: each runner re-reads its file and logs the change."""
+    desk = desk_name(desk)
+    if desk not in DESK_KILLS:
+        return 2, f"unknown desk {desk!r}: use s (Gap Hunter), options, or none for the root KILL file"
+    kill = kill_file or DESK_KILLS[desk] or root / "KILL"
+    label = "KILL switch" if desk == "root" else f"{desk} KILL switch"
     if not kill.exists():
-        return 0, "KILL switch already off"
+        return 0, f"{label} already off"
+    if desk != "root":
+        kill.unlink()
+        _audit("kill_off", audit_log, desk)
+        return 0, f"{label} off"
     with _runner_idle(lock_root) as got:
         if not got:
             return 3, BUSY_UNKILL
         kill.unlink()
-        _audit("kill_off", audit_log)
-    return 0, "KILL switch off"
+        _audit("kill_off", audit_log, desk)
+    return 0, f"{label} off"
+
+
+def desk_name(desk: str) -> str:
+    """The Makefile's DESK value as a key of DESK_KILLS: none or `stocks` is the root file; case is ignored."""
+    d = desk.strip().lower()
+    return "root" if d in ("", "stocks") else d
 
 
 def reset_latch(reason: str, va_path: Path = VA_PATH, lock_root: Path | None = None) -> tuple[int, str]:
@@ -98,9 +127,9 @@ def _reset_latch(reason: str, va_path: Path, lock_root: Path | None, job_name: s
     return 0, f"latch cleared; recorded at {va.latch_history[-1]['at']}"
 
 
-def _audit(kind: str, path: Path | None) -> None:
+def _audit(kind: str, path: Path | None, detail: str = "") -> None:
     try:
-        audit.append(kind, path=path or audit.AUDIT)
+        audit.append(kind, detail, path=path or audit.AUDIT)
     except OSError as e:
         print(f"audit log not written ({e.__class__.__name__})", file=sys.stderr)
 
@@ -108,13 +137,13 @@ def _audit(kind: str, path: Path | None) -> None:
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
     if args[:1] == ["unkill"]:
-        code, msg = unkill()
+        code, msg = unkill(desk=" ".join(args[1:2]))
     elif args[:1] == ["reset-latch"]:
         code, msg = reset_latch(" ".join(args[1:]))
     elif args[:1] == ["reset-latch-s"]:
         code, msg = reset_latch_s(" ".join(args[1:]))
     else:
-        code, msg = 2, "usage: python -m wt.ops.control {unkill | reset-latch REASON | reset-latch-s REASON}"
+        code, msg = 2, "usage: python -m wt.ops.control {unkill [s|options] | reset-latch REASON | reset-latch-s REASON}"
     print(msg, file=sys.stderr if code else sys.stdout)
     return code
 
