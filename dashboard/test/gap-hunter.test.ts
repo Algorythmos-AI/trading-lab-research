@@ -198,12 +198,12 @@ describe("the Gap Hunter page", () => {
     expect(body).toContain("Rule DEC-0068 · not in the registry yet");
     expect(body).toContain("No session run in this snapshot");
     expect(body).toContain("No Gap Hunter alert is firing");
-    // the fixture's gap_hunter block (scripts/gen_fixture.py GAP_HUNTER): armed three times, nothing switched on
-    expect(body).toMatch(/A rule is switched on\s+No/);
+    // the fixture's gap_hunter block (scripts/gen_fixture.py GAP_HUNTER): armed three times, one booked trade
+    expect(body).toMatch(/A rule is switched on\s+Yes/);
     expect(body).toMatch(/Its kill switch\s+Off/);
     expect(body).toMatch(/Sessions armed\s+3/);
-    expect(body).toMatch(/Closed trades\s+0/);
-    expect(body).toMatch(/Average R per trade\s+Not sent yet/);       // no trade, so no average
+    expect(body).toMatch(/Closed trades\s+1/);
+    expect(body).toMatch(/Average R per trade\s+−1\.050R/);
     // Gap Hunter's own selection, in counts
     expect(body).toContain("Morning funnel");
     expect(body).toMatch(/In the morning pool\s+38/);

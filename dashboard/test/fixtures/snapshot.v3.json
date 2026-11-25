@@ -653,7 +653,7 @@
     "symbol": "DDDD"
    }
   ],
-  "enabled": false,
+  "enabled": true,
   "funnel": {
    "kept": 38,
    "passed": 6,
@@ -672,8 +672,8 @@
   "kill": false,
   "last_session": "2026-10-08",
   "latched": false,
-  "mean_r": null,
-  "open": 0,
+  "mean_r": -1.05,
+  "open": 1,
   "pick": {
    "rank": 1,
    "symbol": "AAAA",
@@ -790,8 +790,8 @@
     "why": "breakeven"
    }
   ],
-  "total_r": 0.0,
-  "trades": 0
+  "total_r": -1.05,
+  "trades": 1
  },
  "history": {
   "legacy": {

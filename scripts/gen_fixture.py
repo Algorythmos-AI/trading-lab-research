@@ -130,9 +130,9 @@ def build_v3(v2: dict[str, Any], views: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-# Gap Hunter (synthetic): armed with no rule switched on, so no trades; the newest morning picked a first name
-GAP_HUNTER = {"enabled": False, "kill": False, "latched": False, "sessions": 3, "last_session": "2026-10-08",
-              "trades": 0, "total_r": 0.0, "mean_r": None, "open": 0,
+# Gap Hunter (synthetic): three armed sessions, one booked trade (a stop on 7 Oct), and on 8 Oct a trade still held
+GAP_HUNTER = {"enabled": True, "kill": False, "latched": False, "sessions": 3, "last_session": "2026-10-08",
+              "trades": 1, "total_r": -1.05, "mean_r": -1.05, "open": 1,
               "funnel": {"session": "2026-10-08", "kept": 38, "passed": 6, "tier1": 6, "tier2": 4, "primary": True},
               # DEC-0078's live block, synthetic: an in-trade morning with made-up symbols
               "as_of": "2026-10-08T14:40:00+00:00",
