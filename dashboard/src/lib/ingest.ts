@@ -6,6 +6,7 @@ import { verify } from "./hmac";
 import { KEY_ID_RE, decideScope, parseScopes } from "./ingest-scope";
 import { recordIngestReject, type IngestRejectKind } from "./ingest-reject";
 import { logEvent } from "./log";
+import { isRegistryBranch, markChecked, storeRegistryIndex } from "./registry-store";
 import { parseTime } from "./freshness";
 import type { OptionsEdition } from "./options.types";
 import {
@@ -32,6 +33,7 @@ import {
   isGapHunterLive,
   isRadar,
   isRadarRun,
+  isRegistry,
   validateCalendar,
   validateJournal,
   validateFunnel,
@@ -44,6 +46,7 @@ import {
   validateOptionsLive,
   validateRadarEdition,
   validateRadarRun,
+  validateRegistry,
 } from "./validate";
 
 export const MAX_BODY_BYTES = 3_500_000;
@@ -168,6 +171,12 @@ export const DEFAULT_KEY_ID = "default";
 export const RADAR_KEY_ID = "radar";
 
 /**
+ * The key the Reference Registry's CI job signs with (.github/workflows/registry.yml). It may publish the registry's
+ * index and nothing else, and the index is taken from no other key.
+ */
+export const REGISTRY_KEY_ID = "registry";
+
+/**
  * The secret for a key id. DASHBOARD_INGEST_KEYS is a JSON map {id: secret} (one key per host, ADR 0004);
  * DASHBOARD_INGEST_SECRET is the "default" key. Unknown ids get nothing, so they fail the HMAC check.
  */
@@ -182,6 +191,7 @@ export function secretFor(keyId: string, env: Record<string, string | undefined>
     }
   }
   if (keyId === RADAR_KEY_ID) return env.RADAR_INGEST_SECRET || null;
+  if (keyId === REGISTRY_KEY_ID) return env.REGISTRY_INGEST_SECRET || null;
   return keyId === DEFAULT_KEY_ID ? (env.DASHBOARD_INGEST_SECRET ?? null) : null;
 }
 
@@ -204,7 +214,7 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
   }
   const keyIdHeader = req.headers.get("x-wt-key-id");
   const keyId = keyIdHeader && KEY_ID_RE.test(keyIdHeader) ? keyIdHeader : DEFAULT_KEY_ID;
-  if (!process.env.DASHBOARD_INGEST_SECRET && !process.env.DASHBOARD_INGEST_KEYS && !process.env.RADAR_INGEST_SECRET) {
+  if (!process.env.DASHBOARD_INGEST_SECRET && !process.env.DASHBOARD_INGEST_KEYS && !process.env.RADAR_INGEST_SECRET && !process.env.REGISTRY_INGEST_SECRET) {
     return done(503, "not-configured", { error: "ingest is not configured" });
   }
   const secret = secretFor(keyId);
@@ -229,12 +239,21 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
     return done(422, "bad-json", { error: "invalid", errors: ["body is not valid UTF-8 JSON"] }, { bytes: bytes.byteLength });
   }
 
+  // The registry's key and the registry's index go only with each other, decided before any scope or routing: the
+  // CI job's key can never file a snapshot or an edition, and no host or research key can replace the index.
+  if (keyId === REGISTRY_KEY_ID || isRegistry(data)) {
+    if (keyId !== REGISTRY_KEY_ID || !isRegistry(data)) {
+      return done(403, "registry-key-scope", { error: "this key may not publish this document" }, { key_id: keyId });
+    }
+    return storeRegistry(text, data, done, now);
+  }
+
   // Only the primary host's snapshot is the dashboard's; any other valid host (the OCI host in its shadow run)
   // lands in shadow/latest.json, which no page and no watchdog reads. PRIMARY_HOST names the primary for every
   // desk, unless a key is scoped to a desk: that key is then the desk's primary and may publish nothing else.
   // Decided here, after the signature and before anything is routed or stored, so a wrong signature is answered
   // the same whether or not its key id is scoped.
-  const scopes = parseScopes(process.env[SCOPES_ENV], [RADAR_KEY_ID]);
+  const scopes = parseScopes(process.env[SCOPES_ENV], [RADAR_KEY_ID, REGISTRY_KEY_ID]);
   if (!scopes.ok) logEvent("ingest.scopes", { outcome: "malformed", reason: scopes.reason });
   // The desk whose snapshot this body is, by the same routing as below; null for every other document kind.
   const snapshotOf = isRadar(data) || isOptions(data) || isOptionsLive(data) || isOptionsClone(data) || isPaperOptions(data) || isGapHunterLive(data) || isCalendar(data) || isJournal(data) || isLedger(data) || isFunnel(data) || isRadarDesk(data) || isRadarRun(data) ? null : contractOf(data).desk;
@@ -608,6 +627,39 @@ async function storeRadarRun(text: string, data: unknown, done: Done, now: Date)
     return done(502, "storage-error", { error: "storage unavailable" }, { error: e instanceof Error ? e.name : "unknown", desk });
   }
   return done(503, "conflict", { status: "conflict", run_id: runId }, said);
+}
+
+/**
+ * The Reference Registry's index (stocksdelta/registry): one slot per branch (./registry-store). The same run (branch
+ * and commit) again is a `duplicate`; an index of an earlier commit is `older` (409), which the job counts as done;
+ * one dated ahead of the clock is refused. A stored or repeated index also records when the job last confirmed it.
+ * A refusal is logged and fails the job, which the page reads from GitHub as "Sync failed"; it leaves no
+ * ops/ingest-rejects record (that list is the feed watch's).
+ */
+async function storeRegistry(text: string, data: unknown, done: Done, now: Date): Promise<Response> {
+  const desk = "registry";
+  const nowMs = now.getTime();
+  const result = validateRegistry(data);
+  if (!result.ok) return done(422, "invalid", { error: "invalid", errors: result.errors }, { desk, n_errors: result.errors.length });
+  const doc = result.doc;
+  if (!isRegistryBranch(doc.branch)) return done(422, "invalid", { error: "invalid", errors: ["/branch: unknown"] }, { desk, n_errors: 1 });
+  const asOf = orderInstant(doc.as_of);
+  if (asOf === null) return done(422, "invalid", { error: "invalid", errors: ["/as_of: must be a timestamp"] }, { desk, n_errors: 1 });
+  if (isAheadOfClock(doc.as_of, nowMs)) return done(422, "ahead-of-clock", { error: "invalid", errors: [AHEAD_ERROR] }, { desk });
+  const said = { run_id: doc.run_id, desk, branch: doc.branch };
+  try {
+    const out = await storeRegistryIndex(doc, text, asOf, (held) => storedAhead(held, nowMs), orderInstant);
+    if (out.kind === "duplicate") {
+      await markChecked(doc.branch, doc.run_id, now.toISOString());
+      return done(200, "duplicate", { status: "duplicate", run_id: doc.run_id }, said);
+    }
+    if (out.kind === "older") return done(409, "older", { status: "older", run_id: doc.run_id }, said);
+    if (out.kind === "conflict") return done(503, "conflict", { status: "conflict", run_id: doc.run_id }, said);
+    await markChecked(doc.branch, doc.run_id, now.toISOString());
+    return done(200, out.supersedes ? "superseded-ahead" : "stored", { status: "stored", run_id: doc.run_id }, { ...said, bytes: text.length, attempt: out.attempt });
+  } catch (e) {
+    return done(502, "storage-error", { error: "storage unavailable" }, { error: e instanceof Error ? e.name : "unknown", desk });
+  }
 }
 
 function parsedObject(text: string): Record<string, unknown> | null {

@@ -19,6 +19,7 @@ export const NAV = [
   { href: "/calendar", label: "Calendar" },
   { href: "/strategies", label: "Strategies" },
   { href: "/research", label: "Research" },
+  { href: "/research/records", label: "Records" },
   { href: "/operations", label: "Operations" },
   { href: "/risk", label: "Risk" },
   { href: "/engineering", label: "Engineering" },
@@ -31,6 +32,16 @@ export const CRYPTO_NAV: readonly { href: string; label: string }[] = [];
 export const HFT_NAV = [{ href: "/hft", label: "Overview" }] as const;
 
 const DESK_NAV: Record<DeskName, readonly { href: string; label: string }[]> = { stocks: NAV, crypto: CRYPTO_NAV, hft: HFT_NAV };
+
+/** The one section a path belongs to: the home page exactly, otherwise the longest section the path is under. */
+export function activeHref(nav: readonly { href: string }[], pathname: string, home: string): string | null {
+  let best: string | null = null;
+  for (const { href } of nav) {
+    const hit = href === home ? pathname === href : pathname.startsWith(href);
+    if (hit && (best === null || href.length > best.length)) best = href;
+  }
+  return best;
+}
 
 export function NavTabs() {
   const pathname = usePathname();
@@ -81,8 +92,9 @@ export function NavTabs() {
     >
       <ul ref={listRef} className="flex min-w-max gap-1">
         {nav.map((item) => {
-          // A desk's first page matches exactly; every other section also covers the pages under it.
-          const active = item.href === DESK_HOME[desk] ? pathname === item.href : pathname.startsWith(item.href);
+          // A desk's first page matches exactly; every other section also covers the pages under it, and where two
+          // sections cover a page (Research and its Records) the longer one is the page's.
+          const active = item.href === activeHref(nav, pathname, DESK_HOME[desk]);
           return (
             <li key={item.href}>
               <Link
