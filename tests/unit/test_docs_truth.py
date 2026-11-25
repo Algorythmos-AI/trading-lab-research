@@ -177,3 +177,134 @@ def test_the_make_target_reader_reads_commands():
     assert make_targets_named("make -C dashboard build") == []
     assert make_targets_named("# make sure the gate is open") == []
     assert make_targets_named('make -C ~/trading reset-latch REASON="what you reviewed and why"') == ["reset-latch"]
+
+
+# ---- what runs, and where it is set: docs/operations/jobs.md, docs/architecture.md, docs/reference/env-vars.md ----
+
+JOBS_BEGIN = "<!-- jobs:begin (generated from wt.ops.schedule.JOBS; checked by tests/unit/test_docs_truth.py) -->"
+JOBS_END = "<!-- jobs:end -->"
+
+
+def jobs_table() -> str:
+    """The job table as docs/operations/jobs.md must hold it, rendered from the schedule itself."""
+    from wt.ops.schedule import JOBS
+    rows = ["| Unit | When | Runs | `MODE` | Gated | Desk | What it does |", "|---|---|---|---|---|---|---|"]
+    for j in JOBS.values():
+        when = f"{j.et} New York" if j.et else "; ".join(j.calendars)
+        cmd = " ".join(j.command).replace("|", "\\|")
+        rows.append(f"| `wt-{j.name}` | {when} | `python {cmd}` | {j.mode} | {'yes' if j.trading else 'no'} | "
+                    f"{j.desk} | {j.what.replace('|', '/')} |")
+    return "\n".join([JOBS_BEGIN, *rows, JOBS_END])
+
+
+def between(text: str, begin: str, end: str) -> str:
+    assert begin in text and end in text, f"markers missing: {begin} … {end}"
+    return text[text.index(begin):text.index(end) + len(end)]
+
+
+def first_column(block: str) -> set[str]:
+    """The backticked names in the first column of a markdown table."""
+    out = set()
+    for line in block.splitlines():
+        cells = line.split("|")
+        if len(cells) > 2:
+            out |= set(re.findall(r"`([^`]+)`", cells[1]))
+    return out
+
+
+def test_the_job_table_is_the_schedule():
+    doc = (ROOT / "docs" / "operations" / "jobs.md").read_text(encoding="utf-8")
+    want = jobs_table()
+    got = between(doc, JOBS_BEGIN, JOBS_END)
+    assert got == want, ("docs/operations/jobs.md no longer matches wt.ops.schedule.JOBS. Replace the block between "
+                         "the jobs markers with:\n\n" + want)
+
+
+def test_the_static_unit_list_is_the_unit_folder():
+    doc = (ROOT / "docs" / "operations" / "jobs.md").read_text(encoding="utf-8")
+    listed = first_column(between(doc, "<!-- units:begin", "<!-- units:end -->"))
+    files = {p.name for p in (ROOT / "deploy" / "oci" / "systemd").iterdir()
+             if p.is_file() and p.suffix in (".service", ".timer")}
+    assert listed == files, (f"docs/operations/jobs.md, the units table: add {sorted(files - listed)}, "
+                             f"remove {sorted(listed - files)}")
+
+
+def test_the_package_map_is_the_package():
+    doc = (ROOT / "docs" / "architecture.md").read_text(encoding="utf-8")
+    listed = first_column(between(doc, "<!-- packages:begin", "<!-- packages:end -->"))
+    packages = {p.name for p in (ROOT / "src" / "wt").iterdir() if (p / "__init__.py").is_file()}
+    assert listed == packages, (f"docs/architecture.md, the package table: add {sorted(packages - listed)}, "
+                                f"remove {sorted(listed - packages)}")
+
+
+ENV_READS = (re.compile(r"""os\.environ\[\s*["']([A-Z][A-Z0-9_]+)["']"""),
+             re.compile(r"""\benv\(\s*["']([A-Z][A-Z0-9_]+)["']"""),                   # wt.core.config.env("NAME")
+             re.compile(r"""getenv\(\s*["']([A-Z][A-Z0-9_]+)["']"""),
+             re.compile(r"""environ\.get\(\s*["']([A-Z][A-Z0-9_]+)["']"""),
+             re.compile(r"""\b(?:e|env)\.get\(\s*["']([A-Z][A-Z0-9_]+)["']"""),
+             re.compile(r"""\b(?:e|env)\[\s*["']([A-Z][A-Z0-9_]+)["']\]"""),
+             re.compile(r"""process\.env\.([A-Z][A-Z0-9_]+)"""),
+             re.compile(r"""process\.env\[\s*["']([A-Z][A-Z0-9_]+)["']\s*\]"""))
+ENV_SOURCES = (("src", ".py"), ("scripts", ".py"), ("dashboard/src", ".ts"), ("dashboard/src", ".tsx"))
+
+
+def env_reads() -> dict[str, str]:
+    """Every environment variable the code reads by a literal name, and one file that reads it."""
+    out: dict[str, str] = {}
+    for folder, suffix in ENV_SOURCES:
+        for p in sorted((ROOT / folder).rglob(f"*{suffix}")):
+            if "node_modules" in p.parts:
+                continue
+            text = p.read_text(encoding="utf-8", errors="replace")
+            for rx in ENV_READS:
+                for name in rx.findall(text):
+                    out.setdefault(name, rel(p))
+    return out
+
+
+def env_example_names() -> set[str]:
+    text = (ROOT / ".env.example").read_text(encoding="utf-8")
+    return set(re.findall(r"^\s*#?\s*([A-Z][A-Z0-9_]+)=", text, re.M))
+
+
+def test_every_env_var_the_code_reads_is_documented():
+    doc = (ROOT / "docs" / "reference" / "env-vars.md").read_text(encoding="utf-8")
+    documented = set(re.findall(r"`([A-Z][A-Z0-9_]+)`", doc))
+    reads = env_reads()
+    missing = sorted(n for n in reads if n not in documented)
+    assert reads, "the scan found no environment reads: its patterns are broken"
+    assert not missing, ("add these to docs/reference/env-vars.md (name, who reads it, where it is set):\n  " +
+                         "\n  ".join(f"{n}  (read in {reads[n]})" for n in missing))
+
+
+def test_every_name_in_the_env_example_is_documented():
+    doc = (ROOT / "docs" / "reference" / "env-vars.md").read_text(encoding="utf-8")
+    documented = set(re.findall(r"`([A-Z][A-Z0-9_]+)`", doc))
+    missing = sorted(env_example_names() - documented)
+    assert not missing, f"add these .env.example names to docs/reference/env-vars.md: {missing}"
+
+
+def fetched_names() -> set[str]:
+    """The names wt-fetch-secrets passes from the host's secrets file to the jobs (its REQUIRED and OPTIONAL)."""
+    text = (ROOT / "deploy" / "oci" / "bin" / "wt-fetch-secrets").read_text(encoding="utf-8")
+    out: set[str] = set()
+    for name in ("REQUIRED", "OPTIONAL"):
+        m = re.search(rf"^{name}=\((.*?)\)", text, re.S | re.M)
+        assert m, f"wt-fetch-secrets: no {name}=(...) list"
+        out |= set(m.group(1).split())
+    return out
+
+
+def test_host_secrets_rows_are_what_the_host_passes_to_the_jobs():
+    """A name the page says is a host secret must be one wt-fetch-secrets copies into the jobs' environment, and
+    every name it copies must be on the page as one."""
+    doc = (ROOT / "docs" / "reference" / "env-vars.md").read_text(encoding="utf-8")
+    said = set()
+    for line in doc.splitlines():
+        cells = line.split("|")
+        if len(cells) > 3 and "Host secrets" in cells[-2]:
+            said |= set(re.findall(r"`([A-Z][A-Z0-9_]+)`", cells[1]))
+    passed = fetched_names()
+    assert said == passed, ("docs/reference/env-vars.md and deploy/oci/bin/wt-fetch-secrets disagree on the host's "
+                            f"secrets: mark as \"Host secrets\" {sorted(passed - said)}; not passed to jobs "
+                            f"{sorted(said - passed)}")
