@@ -216,7 +216,7 @@ ALLOW: dict[str, Any] = {
                    "safety": {"x_latched": [S],
                               "stop_rule": {"decision": S, "trades": I, "sum_r": N, "max_loss_r": N,
                                             "review_at": I, "stop_date": S}},
-                   "rotation": {"names": I, "changes": I, "done": S}},
+                   "rotation": {"names": I, "changes": I, "live": B, "done": S}},
 }
 REQUIRED = ("schema", "schema_version", "run_id", "as_of")
 _KEY = re.compile(r"^[\w.:+\- /|]{1,64}$")
@@ -638,9 +638,12 @@ def gap_hunter_live(rows: list[dict[str, Any]], folder: Path, session: str | Non
     xs = sorted({str(r.get("code")) for r in rows if r.get("event") == "execution_stop" and r.get("new_latch")
                  and isinstance(r.get("code"), str) and re.fullmatch(r"X[1-9]", str(r.get("code")))}) \
         if latched else []
-    shadow = next((r.get("rotation_shadow") for r in reversed(today) if r.get("event") == "session_end"), None)
+    # HYP-0072 trading journals `gap_names` and `rotation_live` (and `session_end.rotation`); the shadow its own rows
+    rot_live = any(r.get("event") in ("gap_names", "rotation_live") for r in today)
+    ev, key = ("rotation_live", "rotation") if rot_live else ("rotation_shadow", "rotation_shadow")
+    shadow = next((r.get(key) for r in reversed(today) if r.get("event") == "session_end"), None)
     rot_names = len(tier2)
-    rot_changes = sum(1 for r in today if r.get("event") == "rotation_shadow" and r.get("kind") == "change")
+    rot_changes = sum(1 for r in today if r.get("event") == ev and r.get("kind") == "change")
     return {
         "as_of": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
         "heartbeat": {"session": session, "armed_at": armed.get("ts") if armed else None,
@@ -658,7 +661,7 @@ def gap_hunter_live(rows: list[dict[str, Any]], folder: Path, session: str | Non
                        "decision": rule.decision, "trades": len(counted), "sum_r": round(sum(counted), 4),
                        "max_loss_r": rule.cum_r_max_loss, "review_at": rule.review_at_trades,
                        "stop_date": rule.stop_date.isoformat()}},
-        "rotation": {"names": rot_names, "changes": rot_changes,
+        "rotation": {"names": rot_names, "changes": rot_changes, "live": rot_live,
                      "done": _code(shadow.get("done")) if isinstance(shadow, dict) else None},
     }
 

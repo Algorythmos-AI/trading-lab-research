@@ -144,6 +144,25 @@ def test_a_crash_while_the_order_rests_in_rank_two_resumes_it_without_a_second_c
     flat_and_clean(b)
 
 
+def test_a_restart_that_finds_the_pick_but_not_the_names_chooses_them_from_the_pool(rotating):
+    # a crash after `gap_primary` was written but before `gap_names` was: the restart must not watch no names all day
+    tape = tape_of([THIN] + [QUIET] * 100, more={"XYZ": ORB + RUN[2:]})
+    b = crashed(tape, at(9, 30, 30))
+    f = rotating / "live" / "smallcap_journal.jsonl"
+    rows = f.read_text().splitlines()
+    assert sum('"gap_names"' in x for x in rows) == 1 and not events(journal(rotating), "entry_placed")
+    f.write_text("".join(x + "\n" for x in rows if '"gap_names"' not in x))
+    session(tape, start=(9, 31), broker=b)
+    j = journal(rotating)
+    assert len(events(j, "gap_primary")) == 1
+    [names] = events(j, "gap_names")
+    assert names["names"] == [[1, "ABC"], [2, "XYZ"]]
+    assert {r["symbol"] for r in events(j, "entry_placed")} == {"XYZ"}
+    done = one(j, "gap_day_done")
+    assert done["reason"] == "traded" and done["symbol"] == "XYZ"
+    flat_and_clean(b)
+
+
 def test_both_gap_trials_switched_on_is_no_entry(gap, monkeypatch):  # noqa: F811
     monkeypatch.setattr(runner_s, "switched_on", lambda: frozenset({"HYP-0071", "HYP-0072"}))
     b = session(tape_of([THIN] + [QUIET] * 100, more={"XYZ": ORB + RUN[2:]}))
