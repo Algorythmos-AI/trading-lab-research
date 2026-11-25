@@ -234,3 +234,111 @@ def test_the_deploy_gate_counts_the_runner_lock(tmp_path, orphan_runner, monkeyp
     monkeypatch.setattr(deploy, "running_jobs", lambda: {})
     deploy.gate_blockers()
     assert locks.RUNNER_LOCK in seen["held"]
+
+
+# ---------------------------------------------------------------- every desk's kill file (audit 2026-11-25)
+def test_desk_kill_paths_are_the_ones_the_runners_read():
+    from wt.core.desk import DESKS
+    from wt.live import runner_s
+    assert control.KILL_S == runner_s.KILL
+    assert control.KILL_OPTIONS == DESKS["options"].kill_file
+    assert set(control.DESK_KILLS) == {"root", "s", "options"}
+    assert control.desk_name("") == control.desk_name("stocks") == "root" and control.desk_name(" S ") == "s"
+
+
+@pytest.mark.parametrize("desk", ["s", "options"])
+def test_unkill_a_desk_file_removes_it_and_audits_with_the_desk(tmp_path, runner, desk):
+    """A desk's own file is removed as `rm` would (no lock check: its runner re-reads the file and logs the change)
+    and the audit row names the desk. The root file is not touched."""
+    (tmp_path / "KILL").write_text("root")
+    f = tmp_path / desk / "KILL"
+    f.parent.mkdir()
+    f.write_text("paused")
+    log = tmp_path / "a.jsonl"
+    code, msg = control.unkill(root=tmp_path, lock_root=runner, audit_log=log, desk=desk, kill_file=f)
+    assert code == 0 and msg == f"{desk} KILL switch off" and not f.exists() and (tmp_path / "KILL").exists()
+    rows = audit.read(log)
+    assert [(r["kind"], r["detail"]) for r in rows] == [("kill_off", desk)] and audit.verify(rows) == (True, None)
+    assert control.unkill(audit_log=log, desk=desk, kill_file=f) == (0, f"{desk} KILL switch already off")
+    assert len(audit.read(log)) == 1                      # nothing removed, nothing recorded
+
+
+def test_unkill_refuses_an_unknown_desk_rather_than_the_root_file(tmp_path):
+    (tmp_path / "KILL").write_text("root")
+    code, msg = control.unkill(root=tmp_path, lock_root=tmp_path / "l", audit_log=tmp_path / "a.jsonl", desk="gap")
+    assert code == 2 and "unknown desk" in msg and (tmp_path / "KILL").exists()
+    assert control.main(["unkill", "gap"]) == 2
+
+
+def test_root_unkill_audit_names_the_root_file(tmp_path):
+    (tmp_path / "KILL").write_text("paused")
+    control.unkill(root=tmp_path, lock_root=tmp_path / "locks", audit_log=tmp_path / "a.jsonl")
+    assert [r["detail"] for r in audit.read(tmp_path / "a.jsonl")] == ["root"]
+
+
+def _make(target, desk, state, **extra):
+    import shutil
+    import subprocess
+    import sys
+    from pathlib import Path
+    if shutil.which("make") is None:
+        pytest.skip("make not installed")
+    repo = Path(__file__).resolve().parents[2]
+    env = {**os.environ, "WT_STATE": str(state), "PYTHONPATH": str(repo / "src"), **extra}
+    return subprocess.run(["make", "-s", "-C", str(repo), target, f"DESK={desk}", f"PY={sys.executable}"],
+                          env=env, capture_output=True, text=True, timeout=60)
+
+
+@pytest.mark.parametrize(("desk", "sub"), [("s", "smallcap"), ("options", "options")])
+def test_make_kill_and_unkill_a_desk_write_its_file_and_audit_both(tmp_path, desk, sub):
+    on = _make("kill", desk, tmp_path, REASON="testing")
+    f = tmp_path / sub / "KILL"
+    assert on.returncode == 0, on.stderr
+    assert f.read_text().startswith("testing (")
+    off = _make("unkill", desk, tmp_path)
+    assert off.returncode == 0, off.stderr
+    assert not f.exists()
+    rows = audit.read(tmp_path / "audit" / "events.jsonl")
+    assert [(r["kind"], r["detail"]) for r in rows] == [("kill_on", desk), ("kill_off", desk)]
+
+
+def test_make_kill_refuses_an_unknown_desk_and_writes_nothing(tmp_path):
+    got = _make("kill", "gap", tmp_path)
+    assert got.returncode != 0 and "unknown DESK=gap" in got.stderr
+    assert not any(tmp_path.rglob("KILL"))
+
+
+# ---------------------------------------------------------------- what shows each desk's kill file
+@pytest.fixture
+def desk_files(tmp_path, monkeypatch):
+    s, o = tmp_path / "smallcap" / "KILL", tmp_path / "options" / "KILL"
+    monkeypatch.setattr(control, "KILL_S", s)
+    monkeypatch.setattr(control, "KILL_OPTIONS", o)
+    monkeypatch.setattr(control, "DESK_KILLS", {"root": None, "options": o, "s": s})
+    return {"root": tmp_path / "KILL", "s": s, "options": o}
+
+
+def test_kill_states_read_every_desk_file(tmp_path, desk_files):
+    assert control.kill_states(tmp_path) == {"root": False, "options": False, "s": False}
+    assert control.paused_note(tmp_path) == ""
+    desk_files["s"].parent.mkdir()
+    desk_files["s"].write_text("x")
+    assert control.kill_states(tmp_path) == {"root": False, "options": False, "s": True}
+    assert control.paused_note(tmp_path) == " Kill switch on: Gap Hunter. New entries there are paused."
+
+
+def test_make_status_shows_gap_hunter_on_when_only_its_file_is(tmp_path, desk_files, monkeypatch, capsys):
+    """The audit's case: the root file off, Gap Hunter's on. Status used to print one `off`."""
+    from wt.ops import jobs
+    desk_files["s"].parent.mkdir()
+    desk_files["s"].write_text("x")
+    monkeypatch.setattr(jobs, "last_runs", lambda: {})
+    monkeypatch.setattr(jobs, "cadence", lambda: [])
+    monkeypatch.setattr("wt.ops.alerts.Alerts.firing", lambda self: {})
+    monkeypatch.setattr("wt.ops.preflight.run_checks", lambda root: [])
+    assert jobs.status(tmp_path) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert out[0].startswith("KILL switches")
+    assert out[1].split() == ["Gap", "Hunter", "ON", "(no", "new", "entries)"]
+    assert out[2].split() == ["Options", "clone", "off"]
+    assert out[3].split() == ["Options", "clone", "(root", "KILL)", "off"]

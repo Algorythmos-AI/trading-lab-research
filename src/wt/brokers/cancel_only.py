@@ -33,9 +33,16 @@ class CancelOnlyClient:
         self.__b.cancel(client_order_id)
 
 
-def connect(factory: Callable[[], Any] | None = None) -> CancelOnlyClient:
-    """The paper broker (paper-only lock asserted at construction), wrapped. `factory` is for tests."""
+def connect(factory: Callable[[], Any] | None = None, keys: tuple[str, str] | None = None) -> CancelOnlyClient:
+    """The paper broker (paper-only lock asserted at construction), wrapped. `keys`: another paper account's key
+    pair (a desk's own account: Gap Hunter's APCA_S_, the clone's APCA_CLONE_); the default is the APCA_API_ pair's.
+    `factory` is for tests."""
     if factory is None:
         from wt.brokers.alpaca_paper import AlpacaPaperBroker
-        factory = AlpacaPaperBroker
+        if keys is None:
+            factory = AlpacaPaperBroker
+        else:
+            kid, secret = keys
+            def factory() -> Any:
+                return AlpacaPaperBroker(key_id=kid, secret=secret)
     return CancelOnlyClient(factory())

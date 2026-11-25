@@ -13,16 +13,18 @@ Exits and stops keep being managed.
 
 | Desk | On | Off |
 |---|---|---|
-| Gap Hunter (`paper-s`) | `sudo -u wt sh -c 'mkdir -p /home/wt/trading/var/smallcap && echo "why ($(date))" > /home/wt/trading/var/smallcap/KILL'` | `sudo -u wt rm /home/wt/trading/var/smallcap/KILL` |
+| Gap Hunter (`paper-s`) | `sudo -u wt make -C /home/wt/trading kill DESK=s REASON="why"` | `sudo -u wt make -C /home/wt/trading unkill DESK=s` |
 | Options clone (`paper-o`) | `sudo -u wt make -C /home/wt/trading kill DESK=options REASON="why"` | `sudo -u wt make -C /home/wt/trading unkill DESK=options` |
 | Options clone, root file | `sudo -u wt make -C /home/wt/trading kill REASON="why"` | `sudo -u wt make -C /home/wt/trading unkill` |
 
 - The root `KILL` file is read by the options clone, not by Gap Hunter (`src/wt/live/runner_o.py`,
   `src/wt/live/runner_s.py`).
-- `make kill DESK=stocks` also writes the root file; it does not stop Gap Hunter.
+- `make kill DESK=stocks` also writes the root file; it does not stop Gap Hunter. Any `DESK` other than `s`,
+  `options` or `stocks` is refused and writes nothing.
+- Every `make kill` and `make unkill` above writes a `kill_on` or `kill_off` entry to the audit log.
 - The runners re-read their files while running, so this takes effect at once.
-- `make status` and the dashboard's top-level kill flag show only the root file. Check `var/smallcap/KILL` yourself
-  before you trust that Gap Hunter is stopped.
+- `make status` shows each desk's file on its own line. The dashboard's Risk page lists Gap Hunter's file and the
+  root file, but not the clone's own `var/options/KILL`. Check the line for the desk you meant to stop.
 
 ## Flatten now
 

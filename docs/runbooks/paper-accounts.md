@@ -10,10 +10,10 @@ owner named them in Alpaca, with the last three characters of the account number
 | Clone options (host) | …3VG | `APCA_CLONE_KEY_ID` / `APCA_CLONE_SECRET_KEY` | the options clone (`paper-o`) | yes: the clone's option orders |
 | Gap Hunter | …JU0 | `APCA_S_KEY_ID` / `APCA_S_SECRET_KEY` | the stock desk, Gap Hunter (`paper-s`, `wt.live.runner_s`) | only once a rule is in `S.switched_on` (none is) |
 
-Where each pair lives (checked 2026-11-20, read-only):
+Where each pair lives (host checked 2026-11-25, read-only; Mac 2026-11-20):
 
-- Host (`/run/wt-secrets/env`): `APCA_API_*` (…Y7I) and `APCA_CLONE_*` (…3VG). `APCA_S_*` is not set yet: the owner
-  adds it with `sudo wt-set-secrets` when a Gap Hunter rule is switched on. `APCA_OPTIONS_*` is not set.
+- Host (`/run/wt-secrets/env`): `APCA_API_*` (…Y7I), `APCA_CLONE_*` (…3VG) and `APCA_S_*`. `APCA_OPTIONS_*` is not
+  set.
 - Mac (`~/trading/.env`): `APCA_API_*` (…Y7I) and `APCA_S_*` (…JU0).
 - No two pairs share a key.
 

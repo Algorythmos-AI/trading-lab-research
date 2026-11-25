@@ -13,11 +13,11 @@ Three layers keep orders away from a live account.
 | The paper-only lock | Refuses unless `MODE` is `paper`, `LIVE_TRADING_ENABLED` is not true, the trading URL (and `APCA_API_BASE_URL` if set) is exactly `https://paper-api.alpaca.markets`, and the account number starts with `PA`. All four are checked when an adapter is built; before every order, `place()` checks the environment part again (`MODE`, `LIVE_TRADING_ENABLED`, `APCA_API_BASE_URL`) | `src/wt/core/safety.py` |
 | `MODE` is set per job | `wt.ops.jobs` starts each job's process with that job's `MODE`. The runners also refuse to start unless `MODE=paper` | `src/wt/ops/jobs.py` (`run_child`), `src/wt/live/runner_s.py`, `src/wt/live/runner_o.py` |
 
-On a host with `WT_ROLE=shadow`, Gap Hunter (and the retired QQQ runner) wrap their broker in `ShadowBroker`, which
-raises on every order, cancel and replace call (`src/wt/brokers/shadow.py`, `runner_s.py`). **The options clone does
-not read `WT_ROLE`.** On a shadow host its kill file blocks only new entries; a plan it already holds still manages
-its exits and can send paper exit orders. A shadow run is order-free for the clone only if the clone holds nothing,
-or if `wt-paper-o` is not running.
+On a host with `WT_ROLE=shadow`, Gap Hunter, the options clone (and the retired QQQ runner) wrap their broker in
+`ShadowBroker`, which raises on every order, cancel and replace call (`src/wt/brokers/shadow.py`; `runner_s.py`,
+`runner_o.py` `for_role`). The clone's session is also exits-only there, so it tries no entry. A plan it already
+holds is still read and its exits are still worked out, but no exit order can leave: manage such a position by hand.
+The host runs `WT_ROLE=primary` (checked 2026-11-25), where none of this applies.
 
 `MODE`, `LIVE_TRADING_ENABLED` and any live key belong to the owner alone ([AGENTS.md](../../AGENTS.md), rule 1).
 
@@ -29,16 +29,16 @@ own file, and **no single file stops every desk**.
 
 | Desk | Job | File it reads (on the host, under `/home/wt/trading`) | Read by | Turn on | Turn off |
 |---|---|---|---|---|---|
-| Gap Hunter (stock desk, "sleeve S") | `paper-s` | `var/smallcap/KILL` **only** | `src/wt/live/runner_s.py` (`KILL = DIR / "KILL"`) | no `make` target, see below | `sudo -u wt rm /home/wt/trading/var/smallcap/KILL` |
+| Gap Hunter (stock desk, "sleeve S") | `paper-s` | `var/smallcap/KILL` **only** | `src/wt/live/runner_s.py` (`KILL = DIR / "KILL"`) | `make kill DESK=s REASON="…"` | `make unkill DESK=s` |
 | Options clone | `paper-o` | the root `KILL` **or** `var/options/KILL` | `src/wt/live/runner_o.py` (`KILLS`) | `make kill REASON="…"` (root) or `make kill DESK=options REASON="…"` | `make unkill` (root) or `make unkill DESK=options` |
 | Retired QQQ rule (DEC-0069) | none | the root `KILL` | `src/wt/live/runner_b.py` | — | — |
 
-**The root `KILL` does not stop Gap Hunter.** `make kill` without `DESK=options` writes the root file
-(`Makefile`, target `kill`), and `DESK=stocks` or any other value also writes the root file. To stop Gap Hunter's
-entries on the host:
+**The root `KILL` does not stop Gap Hunter.** `make kill` with no `DESK` (or `DESK=stocks`) writes the root file
+(`Makefile`, target `kill`). `DESK=s` writes Gap Hunter's file and `DESK=options` the clone's own file; any other value
+is refused and writes nothing. To stop Gap Hunter's entries on the host:
 
 ```bash
-sudo -u wt sh -c 'mkdir -p /home/wt/trading/var/smallcap && echo "why ($(date))" > /home/wt/trading/var/smallcap/KILL'
+sudo -u wt make -C /home/wt/trading kill DESK=s REASON="why"
 ```
 
 To stop every desk, write both files. Gap Hunter re-reads its file on every loop of its session (`runner_s.py`).
@@ -47,18 +47,26 @@ Either way, a change takes effect without a restart.
 
 ### What records it, and what shows it
 
-- **Audit log.** `make kill` (root file) writes a `kill_on` entry to the hash-chained audit log (`wt.ops.audit`). It
-  runs with `|| true`, so a failed write is not reported (`Makefile`, target `kill`). `make unkill` removes the root
-  file through `wt.ops.control unkill`, which takes the runner lock and writes `kill_off`.
-- **Not audited.** `make kill DESK=options`, `make unkill DESK=options` (a plain `rm -f`, with no lock check) and a
-  hand-written `var/smallcap/KILL` write no audit entry. Gap Hunter logs `kill_state` in its own journal.
-- **`make status` reads only the root file.** It prints `KILL switch: ON (no new entries)` when only the root file
-  exists (`src/wt/ops/jobs.py`, `status`), even while Gap Hunter can still enter.
-- **The forward-test summary's "new entries are paused" line** also reads only the root file.
-- **The dashboard.** Its top-level kill flag reads the root file (`src/wt/ops/publish.py`); Gap Hunter's own panel
-  shows its own file.
+- **Audit log.** `make kill` writes a `kill_on` entry to the hash-chained audit log (`wt.ops.audit`) for every desk's
+  file, with the desk (`root`, `s` or `options`) as the entry's detail; the detail stays on the host. The file is
+  written first: a failed audit write prints `audit log not written` and does not undo the kill (`Makefile`, target
+  `kill`). `make unkill [DESK=…]` removes the file through `wt.ops.control unkill` and writes `kill_off`. For the root
+  file it takes the retired QQQ rule's runner lock first; `DESK=s` and `DESK=options` remove the file without a lock
+  check, and each runner logs the change.
+- **Not audited.** A file written or removed by hand (`echo … > var/smallcap/KILL`, `rm`) writes no audit entry. Gap
+  Hunter logs `kill_state` in its own journal either way.
+- **`make status` shows every desk's file.** One line each for Gap Hunter, the clone's own file and the root file,
+  `ON (no new entries)` or `off` (`src/wt/ops/jobs.py`, `status`; the files are named in `src/wt/ops/control.py`,
+  `kill_states`). A file it cannot check counts as on.
+- **The forward-test summary** names each desk whose file is on ("Kill switch on: Gap Hunter. New entries there are
+  paused.").
+- **The dashboard.** The snapshot carries the root file (`kill.on`) and Gap Hunter's own file (`gap_hunter.kill`,
+  `src/wt/ops/publish.py`). The Risk page's kill panel lists both, and the health banner turns amber for each one
+  that is on (`dashboard/src/lib/kill.ts`). The clone's own `var/options/KILL` is not sent to the site: adding it
+  changes the snapshot types, which sit inside the Options desk's frozen code hashes (DEC-0051). Use `make status`.
 
-**Check each desk's file before you trust a stop.**
+These read the files the code names. A desk can also be stopped by its other gates (a latch, a stop rule); the kill
+files are only one of them.
 
 ## 3. Loss latches
 
@@ -73,10 +81,8 @@ A latch stops entries until it is cleared on purpose. Only the owner clears one.
 See [latch-reset.md](../runbooks/latch-reset.md) and [options-clone.md](../runbooks/options-clone.md).
 
 Gap Hunter trades on the host only while the host holds its `APCA_S_*` keys. Without them, `paper-s` is refused at
-its preflight (`src/wt/ops/jobs.py`). The last recorded check of the host's keys, on 2026-11-20
-([paper-accounts.md](../runbooks/paper-accounts.md)), found them not set. Release #589 of 2026-11-22 is titled
-"Gap Hunter goes live", so treat Gap Hunter as **able to trade** until you have checked. **(host state, unverified
-2026-11-25)**
+its preflight (`src/wt/ops/jobs.py`). A read-only check of the host on 2026-11-25 found them set
+([paper-accounts.md](../runbooks/paper-accounts.md)), with `WT_ROLE=primary`: Gap Hunter **can trade** there.
 
 ## 4. Flatten
 

@@ -34,7 +34,7 @@ import shutil
 import subprocess
 import sys
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -408,10 +408,38 @@ def _switch(target: str, staged: bool, green: ci.Verdict, ci_override: str, why_
     return 0, rec
 
 
-def broker_cleanup_before_rollback(broker_factory: Any = None) -> str | None:
-    """Older code doesn't know the GTC stops this version places. If strategy B is flat, cancel this repo's
-    resting orders so none can outlive a rollback and open a short. If B holds a position, refuse (None = ok).
-    Positions outside B's mandate (a manual test buy) don't block a rollback: no version of this code touches them."""
+# The paper accounts the desks trade (docs/runbooks/paper-accounts.md), beside the APCA_API_ pair's account that the
+# retired QQQ rule traded: (desk, key id variable, secret variable). Their orders and positions are all the desk's own.
+DESK_ACCOUNTS = (("Gap Hunter", "APCA_S_KEY_ID", "APCA_S_SECRET_KEY"),
+                 ("the options clone", "APCA_CLONE_KEY_ID", "APCA_CLONE_SECRET_KEY"))
+
+
+def _desk_keys(environ: Any = None) -> list[tuple[str, tuple[str, str]]]:
+    """(desk, key pair) for each desk account whose pair is set here. A desk without its pair here cannot trade from
+    this checkout (`paper-s` is refused without APCA_S_*, the clone does nothing without a pair), so it has nothing
+    here for older code to meet: it says so and checks the rest. The host holds both pairs
+    (docs/runbooks/paper-accounts.md)."""
+    import os
+    e = os.environ if environ is None else environ
+    out: list[tuple[str, tuple[str, str]]] = []
+    for desk, kid, sec in DESK_ACCOUNTS:
+        k, v = e.get(kid, "").strip(), e.get(sec, "").strip()
+        if k and v:
+            out.append((desk, (k, v)))
+        else:
+            print(f"{desk}: no {kid} key pair on this checkout; its account was not checked")
+    return out
+
+
+def broker_cleanup_before_rollback(broker_factory: Any = None,
+                                   desk_factories: Sequence[tuple[str, Any]] | None = None) -> str | None:
+    """Older code doesn't know the GTC stops this version places. It checks every paper account a desk trades, and
+    the APCA_API_ pair's account. If one holds a position, it refuses (None = ok) and cancels nothing. Only once all
+    of them are flat does it cancel this repo's resting orders on each, so none can outlive a rollback and open a
+    short. On the APCA_API_ account only strategy B's allowlist counts: a position outside it (a manual test buy)
+    doesn't block a rollback, since no version of this code touches it. On a desk's own account (Gap Hunter's
+    APCA_S_, the clone's APCA_CLONE_) every position is the desk's. An account that can't be read refuses the
+    rollback, because a check that did not run is not a pass."""
     import os
 
     from wt.brokers.cancel_only import connect
@@ -422,12 +450,29 @@ def broker_cleanup_before_rollback(broker_factory: Any = None) -> str | None:
     os.environ["MODE"] = "paper"                    # the paper adapter asserts it; restored below so it can't leak
     try:
         b = connect(broker_factory)                 # positions, open orders, cancel: nothing that adds exposure
+        flat = [b]                                  # accounts checked flat, whose resting orders are cancelled below
+        accounts: list[tuple[str, Any]] = list(desk_factories) if desk_factories is not None else \
+            [(desk, keys) for desk, keys in _desk_keys()]
+        for desk, how in accounts:
+            who = f"{desk}'s paper account"
+            try:
+                d = connect(how) if callable(how) else connect(keys=how)   # tests pass a factory; the host a pair
+                held = any(p.qty for p in d.positions())
+            except Exception as e:  # noqa: BLE001 — an account we can't read must stop the rollback, not pass it
+                from wt.core.safety import PaperOnlyError
+                if isinstance(e, PaperOnlyError):
+                    raise                           # not a paper account: never a retry
+                return f"{who} could not be checked ({e.__class__.__name__}): try again"
+            if held:
+                return f"{who} holds a position: flatten it (or let the session finish) before rolling back"
+            flat.append(d)
         if any(p.qty for p in b.positions() if p.symbol in allow):
             return "strategy B holds a position: flatten it (or let the session finish) before rolling back"
-        for o in b.open_orders():
-            if is_ours(o.client_order_id):
-                b.cancel(o.client_order_id)
-                print(f"cancelled resting {o.client_order_id} {o.symbol}")
+        for c in flat:                              # every account is flat: now cancel what we left resting
+            for o in c.open_orders():
+                if is_ours(o.client_order_id):
+                    c.cancel(o.client_order_id)
+                    print(f"cancelled resting {o.client_order_id} {o.symbol}")
         return None
     finally:
         if prev is None:

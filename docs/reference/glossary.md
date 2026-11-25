@@ -58,4 +58,4 @@ There are three Alpaca **paper** accounts: "Robot B stocks (host)" (`APCA_API_*`
 | **KILL** | A desk's kill file: no new entries while it exists. There is one per desk ([safety.md](../operations/safety.md)) |
 | **Latch** | A loss limit that stops entries until the owner clears it ([safety.md](../operations/safety.md)) |
 | **Lease** | The primary-host lease that lets a host trade (`src/wt/ops/lease.py`; [backups-and-lease.md](../runbooks/backups-and-lease.md)) |
-| **Shadow host** | A host with `WT_ROLE=shadow`. Gap Hunter's broker refuses every order there; the clone does not read the role ([safety.md](../operations/safety.md)) |
+| **Shadow host** | A host with `WT_ROLE=shadow`. Gap Hunter's and the options clone's brokers refuse every order there ([safety.md](../operations/safety.md)) |

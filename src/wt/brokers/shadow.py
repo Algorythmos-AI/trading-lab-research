@@ -6,6 +6,8 @@ wrapper is the second, independent guarantee that nothing can reach the broker's
 """
 from __future__ import annotations
 
+from typing import Any
+
 from wt.brokers.base import Broker, BrokerClock, BrokerRejected
 from wt.core.types import AccountState, Order, Position
 
@@ -17,8 +19,17 @@ class ShadowRole(BrokerRejected):
 class ShadowBroker(Broker):
     name = "shadow"
 
+    # Reads an adapter may offer beyond the base Broker, passed through so a shadow session sees what a primary one
+    # does (the options adapter's level check, own-account flag and marks). Order calls are never on this list.
+    READS = frozenset({"options_level", "own_account", "marks"})
+
     def __init__(self, inner: Broker) -> None:
         self._inner = inner
+
+    def __getattr__(self, name: str) -> Any:
+        if name in ShadowBroker.READS:
+            return getattr(self._inner, name)          # AttributeError if the inner adapter has none: hasattr works
+        raise AttributeError(name)
 
     def account(self) -> AccountState:
         return self._inner.account()

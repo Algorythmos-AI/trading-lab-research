@@ -144,5 +144,5 @@ def test_rollback_cleanup_goes_through_the_wrapper(monkeypatch):
         return c
 
     monkeypatch.setattr(co, "connect", spy)
-    assert deploy.broker_cleanup_before_rollback(lambda: FullBroker()) is None
-    assert seen == [CancelOnlyClient]
+    assert deploy.broker_cleanup_before_rollback(lambda: FullBroker(), [("Gap Hunter", lambda: FullBroker())]) is None
+    assert seen == [CancelOnlyClient, CancelOnlyClient]          # the desk account goes through it too
