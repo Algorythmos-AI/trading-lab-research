@@ -32,8 +32,10 @@
 ## Decision
 
 1. **The forward source is fiscal.ai through Alpaca.**
-   - Every item is copied daily into the private repository `Algorythmos-AI/trading-news-archive` by
-     `scripts/news_archive.py` (`docs/runbooks/news-archive.md`), from its first item on.
+   - Every item is copied into the private repository `Algorythmos-AI/trading-news-archive` by
+     `scripts/news_archive.py --publish` (PR #678; `docs/runbooks/news-archive.md`), from its first item on.
+   - The backfill to 2026-11-25 was pushed on 2026-11-26. Until the host job exists, the Mac runs the catch-up by
+     hand. The daily host job is a later owner step (a unit, plus a write credential for that repository only).
    - Headlines stay RESTRICTED and never enter this repository, which is public.
    - The owner directed the GitHub copy on 2026-11-26. It is for his own research and is never redistributed.
 2. **The 2019–2025 stand-in is SEC EDGAR filings**, read from `data/edgar/events.parquet`
