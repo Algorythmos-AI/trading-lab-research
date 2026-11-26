@@ -21,8 +21,7 @@ sudo -u wt /usr/local/bin/wt-deploy 'rollback runtime-YYYYMMDD-N'
    or if a desk account can't be read, and then cancels nothing. Once all are flat it cancels this repo's resting
    orders (`wt-…` ids) on each. A checkout without a desk's key pair says so and skips that account: that desk can't
    trade from it. The host holds both desks' pairs ([paper-accounts.md](paper-accounts.md)), so both are checked
-   there. A clone that runs on the shared `APCA_OPTIONS_*` pair instead of its own is not covered (the host has
-   none set): check that account in the Alpaca UI.
+   there. The clone trades only with its own pair, so there is no other account to check.
 
    There is no override. If it refuses because a desk holds a position, flatten that desk first
    ([kill-and-flatten.md](kill-and-flatten.md)) and run the rollback again. If an account could not be read (a broker

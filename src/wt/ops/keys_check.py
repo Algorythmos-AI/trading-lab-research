@@ -41,8 +41,8 @@ PAIRS = (
          "the site and make feed-agreement when the ALPACA_ pair is not set"),
     Pair("APCA_OPTIONS_KEY_ID", "APCA_OPTIONS_SECRET_KEY",
          "the deleted 'Manual options (mine)' account's pair (unset since 2026-11-20): options-live positions when "
-         "set, and the options clone when the clone pair is not set"),
-    Pair("APCA_CLONE_KEY_ID", "APCA_CLONE_SECRET_KEY", "the options clone's own paper account (wins over APCA_OPTIONS_)"),
+         "set; never the options clone's, which has no fallback any more"),
+    Pair("APCA_CLONE_KEY_ID", "APCA_CLONE_SECRET_KEY", "the options clone's own paper account, its only pair"),
     Pair("APCA_S_KEY_ID", "APCA_S_SECRET_KEY",
          "Gap Hunter's (the stock desk's) own paper account (DEC-0066): runner_s, for orders and market data; it "
          "never falls back to APCA_API_"),
