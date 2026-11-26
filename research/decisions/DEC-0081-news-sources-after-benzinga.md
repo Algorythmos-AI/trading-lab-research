@@ -1,7 +1,7 @@
 # DEC-0081: News after the Benzinga history: fiscal.ai forward, an SEC EDGAR proxy for 2019–2025
 
-- **Status: PROPOSED on 2026-11-26.** The owner accepts it by merging a pull request that changes this line to
-  ACCEPTED. Until then, no count in EXP-0057 is taken.
+- **Status: ACCEPTED on 2026-11-26.** The owner accepted it by merging the pull request that changed this line
+  from PROPOSED (2026-11-26), with the three owner readings as set below. Phase 1 of EXP-0057 may now be run, once.
 - **What it settles:**
   - the news source the repository uses from now on;
   - how the lost 2019–2025 history is partly replaced;

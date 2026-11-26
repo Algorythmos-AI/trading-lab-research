@@ -72,6 +72,10 @@ def main(argv: list[str] | None = None) -> int:
     if a.start < FIRST or a.end > LAST:
         print(f"EXP-0057: phase 1 is frozen to {FIRST}..{LAST}")
         return 2
+    done = [f for f in ("phase1_report.json", "phase1_report.md") if (a.out / f).exists()]
+    if done:
+        print(f"EXP-0057: phase 1 has run once ({', '.join(done)} exist); a re-run needs a new EXP id")
+        return 2
     days, n = [], 0
     for p in sorted((a.data / "candidates").glob("*.parquet")):
         if not a.start.isoformat() <= p.stem <= a.end.isoformat():
