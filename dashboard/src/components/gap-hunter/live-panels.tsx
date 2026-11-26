@@ -319,7 +319,7 @@ export function SafetyPanel({ live }: { live: Live | null }) {
           ) : null}
           {live.rotation ? (
             <p className="text-muted-foreground text-xs">
-              Rotation shadow (counts only, not traded): {live.rotation.names ?? "?"} names watched, {live.rotation.changes ?? "?"} changes{live.rotation.done ? `, done ${shortDate(live.rotation.done)}` : ""}.
+              {live.rotation.live ? "Rotation (HYP-0072, trading)" : "Rotation shadow (counts only, not traded)"}: {live.rotation.names ?? "?"} names watched, {live.rotation.changes ?? "?"} changes{live.rotation.done ? `, ended: ${live.rotation.done.replace(/_/g, " ")}` : ""}.
             </p>
           ) : null}
         </div>

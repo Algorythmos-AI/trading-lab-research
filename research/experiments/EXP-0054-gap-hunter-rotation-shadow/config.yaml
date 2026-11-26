@@ -25,6 +25,7 @@ shadow:                         # counts only: no R, no P&L, no exit, no price a
     - attempts (a bar reached the resting order); attempts the engine would fill; attempts the spread must refused
     - sessions where both rules made an attempt, and whether it was the same name and bar
   switch_on: a dated note in DEC-0076, after the owner has seen at least 10 sessions of these counts
+  switched_on: 2026-11-25 by the owner, after 2 counted shadow sessions (24 and 25 Nov); the 10-session wait waived (DEC-0076 note of that date)
 measures:                       # from the switch-on: as EXP-0053
   primary: mean R per closed trade, 95% bootstrap interval, sessions resampled (HYP-0072)
   cost_haircut: DEC-0074's H1 and H2, reported beside paper R, gating nothing

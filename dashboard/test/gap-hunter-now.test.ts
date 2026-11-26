@@ -59,6 +59,17 @@ describe("the block, read field by field", () => {
     expect(readLive(null)).toBeNull();
   });
 
+  it("tells the traded rotation (HYP-0072) from its shadow, and keeps how it ended as a code", () => {
+    expect(readLive({ rotation: { names: 3, changes: 2, live: true, done: "attempt" } })!.rotation).toEqual({ names: 3, changes: 2, live: true, done: "attempt" });
+    expect(readLive({ rotation: { names: 3, changes: 1, done: "Free Text" } })!.rotation).toEqual({ names: 3, changes: 1, live: false, done: null });
+    const traded = liveDoc("gap-watch");
+    traded.gap_hunter.rotation = { names: 3, changes: 2, live: true, done: "no_signal" };
+    expect(page(ok(traded))).toContain("Rotation (HYP-0072, trading): 3 names watched, 2 changes, ended: no signal.");
+    const shadow = liveDoc("gap-watch");
+    shadow.gap_hunter.rotation = { names: 3, changes: 1, done: null };
+    expect(page(ok(shadow))).toContain("Rotation shadow (counts only, not traded): 3 names watched, 1 changes.");
+  });
+
   it("says a rule's state, never what it looks for, and shows an unknown code as itself", () => {
     expect(ruleWords("ok").words).toBe("Order ready");
     expect(ruleWords("closed").words).toBe("Window over");

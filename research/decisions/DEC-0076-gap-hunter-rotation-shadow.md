@@ -94,3 +94,38 @@ DEC-0068 left rotation out to keep one trade a day simple. This record tests it 
 - The shadow's code is in `wt.live.runner_s` (journal rows `rotation_shadow`), merged to `integration`. EXP-0054
   counts from the first session at or after this acceptance in which that code runs on the host.
 - Nothing about any shadow attempt's outcome had been computed or seen when this was accepted.
+
+### 2026-11-25: HYP-0072 is switched on in place of HYP-0071
+
+The owner switched the rotation rule on in chat on 2026-11-25 (New York; 26 Nov in Sydney), choosing "Switch rotation
+on now" on a decision card that recommended waiting for the 10 sessions of shadow counts this record sets. Shown first:
+HYP-0071's three sessions on the host (23, 24 and 25 Nov), each ending `no_signal` with a primary and no valid or
+reached order (25 Nov: 2 tier-2 names, 0 shadow changes). The 24 Nov primary was shut all day by the first-minute
+volume must; the owner was advised against loosening that must and did not.
+
+**What this note changes:**
+
+- `S.switched_on` is `[HYP-0072]` (config/risk.yaml), in place of `[HYP-0071]`, in one pull request with this note.
+- **The 10-session wait is waived** by the owner: the shadow ran 2 counted sessions (24 and 25 Nov). This is the
+  owner's choice against the (set here) point above, recorded as such. No outcome of any shadow attempt was computed
+  or shown: there was none to show.
+- `wt.live.runner_s` trades the rule: the day's tier-2 names are journaled once (`gap_names`); each minute
+  `rotation_walk` (the shadow's own walk, unchanged) says which one order rests, and the desk's one resting order
+  follows it in that name, replaced after a confirmed cancel (`rotation_live` rows). The first closed bar in the
+  resting name to reach its trigger spends the day. Every order still passes `gap_stage`, the spread must, the collar,
+  the quote-age and clock gates and the size; the exit, the 11:00 end, one trade a day, the book, the day stop and
+  the stop rule are HYP-0071's. The shadow does not run while HYP-0072 trades.
+- **DEC-0073's X4** (off-rule entry) reads a day with a `gap_names` row as allowing any of that row's tier-2 names,
+  once. Another name, or a second entry, still latches the desk. Nothing else in DEC-0073 changes.
+- Trades are booked with trial HYP-0072 and the dashboard's Gap Hunter block counts both gap trials' sessions and
+  trades. HYP-0071's sample ends here with 3 sessions and no trade, reported as it stands.
+- Not yet done: the DEC-0074 cost haircut report (`wt.risk.cost_haircut`) still reads HYP-0071's trades only. A
+  follow-up adds HYP-0072 beside it; it gates nothing.
+
+**When it takes effect:** once merged into `integration`, carried to `main` by a Release PR the owner merges, and
+deployed to the host. Until then the host keeps trading HYP-0071 with the shadow beside it. The 26 Nov holiday means
+the first possible session is 27 Nov (a half day; the entry windows end at 11:00, before its close).
+
+**Risk taken, stated plainly:** lower-ranked names may carry a weaker edge than the primary, and resting whichever
+name has a valid order first can lean toward the fastest, noisiest names. The book's 1% risk, the day stop and the
+-6.0R stop rule are the limits on that; HYP-0072 is judged on its own trades from here.

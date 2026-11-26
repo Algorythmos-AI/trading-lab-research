@@ -560,6 +560,12 @@
                 "null"
               ]
             },
+            "live": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "done": {
               "type": [
                 "string",

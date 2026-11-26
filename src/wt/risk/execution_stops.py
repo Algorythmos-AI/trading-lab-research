@@ -8,7 +8,8 @@ Read from the desk's own journal, so a restart, a later session and the scorecar
   * X3 unprotected:    an `unprotected` row: a position the desk owns had no resting stop at `unprotected_polls`
                        polls in a row (a DEC-0071 hold is not counted);
   * X4 off-rule entry: on a Gap Hunter day (one with a `gap_primary` row), an entry filled in another name, or with no
-                       primary at all, or a second entry that day;
+                       primary at all, or a second entry that day. On a day that traded HYP-0072 (DEC-0076: a
+                       `gap_names` row), "another name" is one outside that row's tier-2 names;
   * X5 stop slippage:  `stop_slips` stop exits, each filled under its stop price by more than the larger of
                        `stop_slip_r` R and `stop_slip_min_usd` a share (the stop order's own fill, `stop_fill` and
                        `stop_price` on `trade_closed`).
@@ -116,10 +117,14 @@ def slips(rows: Iterable[Mapping[str, Any]], rules: Rules) -> int:
 
 def _off_rule(rows: list[Mapping[str, Any]]) -> str | None:
     primary: dict[str, str | None] = {}
+    names: dict[str, set[str]] = {}                       # HYP-0072's days: the tier-2 names it may trade
     for r in rows:
         if r.get("event") == "gap_primary":
             day = str(r.get("day") or "")[:10]
             primary.setdefault(day, r.get("symbol") or None)
+        elif r.get("event") == "gap_names":
+            day = str(r.get("day") or "")[:10]
+            names.setdefault(day, {str(x[1]) for x in (r.get("names") or []) if isinstance(x, list | tuple) and len(x) == 2})
     filled: dict[str, set[str]] = {}
     for r in rows:
         if r.get("event") != "entry_filled":
@@ -128,9 +133,12 @@ def _off_rule(rows: list[Mapping[str, Any]]) -> str | None:
         day = tid[:10]
         if day not in primary or tid.endswith("-orphan"):
             continue                                      # not a Gap Hunter day, or not one of its entries
-        if primary[day] is None:
+        if day in names:
+            if r.get("symbol") not in names[day]:
+                return f"an entry filled on {day} in a name outside the day's tier-2 names"
+        elif primary[day] is None:
             return f"an entry filled on {day}, a day with no primary"
-        if r.get("symbol") != primary[day]:
+        elif r.get("symbol") != primary[day]:
             return f"an entry filled on {day} in a name other than the day's primary"
         filled.setdefault(day, set()).add(tid)
         if len(filled[day]) > 1:
