@@ -1,7 +1,7 @@
 # EXP-0057: can SEC filings stand in for the lost 2019–2025 headlines?
 
-- **Records:** decision DEC-0081 and hypothesis HYP-0074, both PROPOSED on 2026-11-26. This is a measurement, not a
-  trial: no family, no R, no P&L.
+- **Records:** decision DEC-0081 and hypothesis HYP-0074, proposed on 2026-11-26; DEC-0081 ACCEPTED on 2026-11-26.
+  This is a measurement, not a trial: no family, no R, no P&L.
 - **Frozen:** `config.yaml`, together with DEC-0081, before any agreement figure or count is taken. A changed value
   is a new experiment.
 - **Why:** Alpaca removed the Benzinga news history (ticket 402305), so the 2019–2025 pools carry no headlines.
