@@ -26,10 +26,12 @@ import datetime as dt
 import hashlib
 import json
 import os
+import re
 import subprocess
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import pandas as pd
 
@@ -171,16 +173,34 @@ def archive_day(get: Getter, root: Path, day: dt.date, now: dt.datetime) -> dict
     """Fetch one day, store it, and mark it done when the day is over in New York. Returns the marker's content
     (counts only). A day still running (today, or later) is stored but never marked done."""
     rows, pages = fetch_day(get, day)
-    store(root, rows)
-    p = day_path(root, day)
+    touched = store(root, rows)
     finished = now.astimezone(ET).date() > day
     info: dict[str, Any] = {"day": day.isoformat(), "items_fetched": len(rows), "pages": pages,
-                            "items_on_day": len(read_day(root, day)),
-                            "sha256": hashlib.sha256(p.read_bytes()).hexdigest() if p.exists() else None,
+                            "items_on_day": len(read_day(root, day)), "sha256": _sha(root, day),
                             "complete": finished, "fetched_at": to_utc_iso(now)}
     if finished:
-        _atomic(marker_path(root, day), (json.dumps(info, sort_keys=True, indent=1) + "\n").encode())
+        _write_marker(root, day, info)
+    for other in touched:                 # an item filed on a neighbouring date changed that date's file too
+        if other != day and is_done(root, other):
+            refresh_marker(root, other)
     return info
+
+
+def _sha(root: Path, day: dt.date) -> str | None:
+    p = day_path(root, day)
+    return hashlib.sha256(p.read_bytes()).hexdigest() if p.exists() else None
+
+
+def _write_marker(root: Path, day: dt.date, info: Mapping[str, Any]) -> None:
+    _atomic(marker_path(root, day), (json.dumps(dict(info), sort_keys=True, indent=1) + "\n").encode())
+
+
+def refresh_marker(root: Path, day: dt.date) -> None:
+    """Bring a done marker's count and checksum back in line with its day file, keeping the rest of the marker."""
+    info = json.loads(marker_path(root, day).read_text())
+    info["items_on_day"] = len(read_day(root, day))
+    info["sha256"] = _sha(root, day)
+    _write_marker(root, day, info)
 
 
 def days(start: dt.date, end: dt.date) -> list[dt.date]:
@@ -207,18 +227,39 @@ def _git(args: list[str], cwd: Path) -> str:
     return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout
 
 
+_SCP = re.compile(r"git@github\.com:(?P<path>[^/]+/[^/]+)")
+
+
 def check_remote(url: str) -> None:
-    """Refuse every remote but the private archive repository (the headlines must never reach a public one)."""
-    tail = url.strip().removesuffix(".git").removesuffix("/")
-    if not (tail.endswith(f"github.com/{ARCHIVE_REPO}") or tail.endswith(f"github.com:{ARCHIVE_REPO}")):
-        raise ArchiveError("the archive's origin is not the private archive repository; nothing pushed")
+    """Refuse every remote but the private archive repository (the headlines must never reach a public one): the host
+    must be exactly github.com and the path exactly the archive repository, in https, ssh or scp-like form."""
+    url = url.strip()
+    m = _SCP.fullmatch(url)
+    if m:
+        path = m["path"]
+    else:
+        u = urlsplit(url)
+        if u.scheme not in ("https", "ssh") or (u.hostname or "").lower() != "github.com" or u.port not in (None, 443, 22) \
+                or u.query or u.fragment:
+            raise ArchiveError("the archive's remote is not the private archive repository; nothing pushed")
+        path = u.path.lstrip("/")
+    path = path.removesuffix("/").removesuffix(".git")
+    if path.lower() != ARCHIVE_REPO.lower():
+        raise ArchiveError("the archive's remote is not the private archive repository; nothing pushed")
 
 
 def publish(clone: Path, message: str, run: Runner = _git) -> bool:
     """Commit the archive folder in the clone and push it. Returns False when there was nothing to commit."""
     if not (clone / ".git").exists():
         raise ArchiveError("no clone of the archive repository there (docs/runbooks/news-archive.md)")
-    check_remote(run(["remote", "get-url", "origin"], clone))
+    # Every URL git would fetch from or push to (pushurl wins over url for a push; insteadOf rules are applied).
+    urls = [*run(["remote", "get-url", "--all", "origin"], clone).splitlines(),
+            *run(["remote", "get-url", "--push", "--all", "origin"], clone).splitlines()]
+    if not [u for u in urls if u.strip()]:
+        raise ArchiveError("the archive clone has no origin; nothing pushed")
+    for u in urls:
+        if u.strip():
+            check_remote(u)
     run(["add", "--", ROOT_IN_REPO], clone)
     if not run(["status", "--porcelain", "--", ROOT_IN_REPO], clone).strip():
         return False

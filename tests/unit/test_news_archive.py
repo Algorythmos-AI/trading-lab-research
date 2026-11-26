@@ -171,20 +171,29 @@ def test_the_private_archive_remote_is_accepted(url: str) -> None:
 
 @pytest.mark.parametrize("url", ["https://github.com/Algorythmos-AI/trading-lab-research.git",
                                  "https://github.com/someone/trading-news-archive.git",
-                                 "https://github.com/Algorythmos-AI/trading-news-archive-public", ""])
+                                 "https://github.com/Algorythmos-AI/trading-news-archive-public", "",
+                                 "https://evilgithub.com/Algorythmos-AI/trading-news-archive.git",
+                                 "https://github.com.evil.io/Algorythmos-AI/trading-news-archive.git",
+                                 "https://github.com@evil.io/Algorythmos-AI/trading-news-archive.git",
+                                 "git@evilgithub.com:Algorythmos-AI/trading-news-archive.git",
+                                 "http://github.com/Algorythmos-AI/trading-news-archive.git",
+                                 "file:///tmp/github.com/Algorythmos-AI/trading-news-archive",
+                                 "/tmp/github.com/Algorythmos-AI/trading-news-archive",
+                                 "https://github.com/x/Algorythmos-AI/trading-news-archive"])
 def test_any_other_remote_is_refused(url: str) -> None:
     with pytest.raises(na.ArchiveError):
         na.check_remote(url)
 
 
 class Git:
-    def __init__(self, origin: str, dirty: bool) -> None:
+    def __init__(self, origin: str, dirty: bool, push: str | None = None) -> None:
         self.origin, self.dirty, self.calls = origin, dirty, []  # type: ignore[var-annotated]
+        self.push = origin if push is None else push
 
     def __call__(self, args: list[str], cwd: Path) -> str:
         self.calls.append(args)
         if args[:2] == ["remote", "get-url"]:
-            return self.origin
+            return (self.push if "--push" in args else self.origin) + "\n"
         if args[0] == "status":
             return " M alpaca-news/2026/11/2026-11-20.jsonl\n" if self.dirty else ""
         return ""
@@ -195,8 +204,8 @@ def test_publish_commits_rebases_then_pushes(tmp_path: Path) -> None:
     git = Git("https://github.com/Algorythmos-AI/trading-news-archive.git", dirty=True)
     assert na.publish(tmp_path, "alpaca-news: x", git) is True
     verbs = [c[0] if c[0] != "-c" else c[4] for c in git.calls]
-    assert verbs == ["remote", "add", "status", "commit", "pull", "push"]
-    assert git.calls[1] == ["add", "--", "alpaca-news"]
+    assert verbs == ["remote", "remote", "add", "status", "commit", "pull", "push"]
+    assert git.calls[2] == ["add", "--", "alpaca-news"]
 
 
 def test_publish_with_nothing_new_pushes_nothing(tmp_path: Path) -> None:
@@ -211,9 +220,31 @@ def test_publish_refuses_a_public_remote_before_touching_git(tmp_path: Path) -> 
     git = Git("https://github.com/Algorythmos-AI/trading-lab-research.git", dirty=True)
     with pytest.raises(na.ArchiveError):
         na.publish(tmp_path, "m", git)
-    assert git.calls == [["remote", "get-url", "origin"]]
+    assert all(c[0] == "remote" for c in git.calls)
+
+
+def test_publish_refuses_a_push_url_that_differs_from_the_fetch_url(tmp_path: Path) -> None:
+    (tmp_path / ".git").mkdir()
+    git = Git("https://github.com/Algorythmos-AI/trading-news-archive.git", dirty=True,
+              push="https://github.com/Algorythmos-AI/trading-news-archive.git\nhttps://evil.io/x.git")
+    with pytest.raises(na.ArchiveError):
+        na.publish(tmp_path, "m", git)
+    assert not any(c[0] in ("add", "commit", "push") for c in git.calls)
+    assert ["remote", "get-url", "--push", "--all", "origin"] in git.calls
 
 
 def test_publish_needs_a_clone(tmp_path: Path) -> None:
     with pytest.raises(na.ArchiveError):
         na.publish(tmp_path, "m", Git("", dirty=False))
+
+
+def test_an_item_filed_on_a_marked_neighbour_day_refreshes_that_days_marker(tmp_path: Path) -> None:
+    prev = DAY - dt.timedelta(days=1)
+    na.archive_day(Pages([{"news": [item(1, "2026-11-19T14:00:00Z")]}]), tmp_path, prev, NOW)
+    # the API returns, in the 20th's window, an item created at 23:30 ET on the 19th
+    na.archive_day(Pages([{"news": [item(2, "2026-11-20T04:30:00Z"), item(3, "2026-11-20T14:00:00Z")]}]),
+                   tmp_path, DAY, NOW)
+    marker = json.loads(na.marker_path(tmp_path, prev).read_text())
+    assert marker["items_on_day"] == 2
+    assert marker["sha256"] == hashlib.sha256(na.day_path(tmp_path, prev).read_bytes()).hexdigest()
+    assert marker["items_fetched"] == 1                      # the rest of the marker is kept
