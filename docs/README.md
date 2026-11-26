@@ -44,6 +44,7 @@ link to that page instead of repeating it.
 | What went to `main`, and when | [releases/README.md](releases/README.md) |
 | Past incidents | [incidents/README.md](incidents/README.md) |
 | Point-in-time audits | [audits/](audits/) |
+| Point-in-time data discovery notes (what a source can stand in for, checked before a record) | [notes/](notes/) |
 | Research records and their rules | [research/README.md](../research/README.md) |
 | The dashboard | [dashboard/README.md](../dashboard/README.md) |
 | Security, the public-repository exception | [SECURITY.md](../SECURITY.md), [NOTICE.md](../NOTICE.md) |
