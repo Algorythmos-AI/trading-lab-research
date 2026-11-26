@@ -188,3 +188,11 @@ stop's cancel, it is asked again on the next poll. Until DEC-0071 takes effect, 
 fresh stop back, and the exit has to cancel it too: about a loop and two orders each time. Robot B lost up to two
 such rounds on its end-of-day flattens. With DEC-0071, the stop is not replaced for up to 15 s, so the next poll
 sells. The simulation exits at the bar's open in both cases. No reading of the rule changes.
+
+### 2026-11-26: a partial check on 2019 to 2025 is proposed (DEC-0081)
+
+The line "This rule cannot be checked on 2019 to 2025" still holds for headlines. Alpaca confirmed on 2026-11-24 that
+the Benzinga history is gone for good. DEC-0081 (PROPOSED) and EXP-0057 propose SEC filings as a partial stand-in
+for the catalyst columns. It must first pass an agreement test, and then gives counts only, on the development span
+only. Nothing in this rule changes, and its evidence stays the forward paper sessions until a later record says
+otherwise.

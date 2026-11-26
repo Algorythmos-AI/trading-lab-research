@@ -1,0 +1,8 @@
+id: HYP-0074
+trial: "EDGAR-CATALYST-PROXY"
+status: pre-registered          # DEC-0081 (PROPOSED 2026-11-26). A measurement, not a trial: no family, no R, no P&L
+statement: "SEC filings accepted in the pool's window (previous session 16:00 to 09:25 New York), read through DEC-0081's frozen proxy table, mark at least 80% of the name-days that classifier v3 marks as a buyout offer, and at least 80% of those it marks as an earnings release, on fiscal.ai headlines, each on at least 20 name-days, so the proxy may stand in for the headline columns when DEC-0068's funnel is counted on 2019-01-02 to 2025-09-25."
+rule: edgar_catalyst_proxy      # DEC-0081 point 4 (the table), point 5 (unknown), point 6 (the test)
+frozen: {window: [prev_session_16:00_ET, "09:25_ET"], time: accepted_at_et, measure: recall_vs_classifier_v3, buyout_recall_min: 0.80, earnings_recall_min: 0.80, min_name_days: 20, interval: wilson_95, unknown: excluded_from_test, phase1_sessions: ["2026-04-30", "2026-11-25"], phase2_span: ["2019-01-02", "2025-09-25"], phase2_output: counts_only}
+config: research/experiments/EXP-0057-edgar-catalyst-proxy/config.yaml
+evidence: {decision: DEC-0081, experiments: [EXP-0057-edgar-catalyst-proxy], base: [DEC-0068, EXP-0015a]}

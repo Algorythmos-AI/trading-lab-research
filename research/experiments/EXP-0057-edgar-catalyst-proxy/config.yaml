@@ -1,0 +1,40 @@
+# EXP-0057: frozen with DEC-0081 before any agreement figure or count is taken. A changed value is a new experiment.
+experiment: EXP-0057
+decision: DEC-0081
+hypothesis: HYP-0074
+status: registered                  # PROPOSED with DEC-0081; nothing runs until it is accepted
+family: none                        # a measurement: no trial, no R, no P&L
+data:
+  edgar: data/edgar/events.parquet  # wt.data.edgar_events; SC TO-C and SC14D9C added before phase 1 (DEC-0081 point 4)
+  time: accepted_at_et              # true UTC converted to New York (discovery note R1); never filing_date
+  window: {from: "16:00 New York, previous session", to: "09:25 New York, the session"}
+  ticker_map: data/edgar/ticker_cik.parquet
+  headlines: the pool's own catalyst columns (classifier v3 on fiscal.ai items, as built)
+proxy:                               # first match wins
+  - {category: buyout, reads_as: {status: excluded, category: buyout_offer},
+     target_only_forms: [SC 14D9, SC14D9C, PREM14A, DEFM14A],
+     subject_role_forms: [SC TO-T, SC TO-T/A, SC TO-C, "425", SC 13E3]}   # role from the filing's EDGAR index page
+  - {category: offering, reads_as: {status: non_qualifying, headlines_n: 1}, forms: [424B1, 424B4, 424B5]}
+  - {category: earnings, reads_as: {status: qualifying, category: earnings_release}, forms: [8-K, 8-K/A], items: ["2.02"]}
+  - {category: other, reads_as: {status: non_qualifying, headlines_n: 1}, forms: [8-K, 8-K/A], items: ["7.01", "8.01"]}
+  - {category: none, reads_as: {status: none, headlines_n: 0}}
+unknown:                             # never read as none in the test
+  when: [no CIK in today's map, map_suspect (no filing by the CIK that year, or names disagree), index page unreadable]
+  phase1: excluded and counted
+  phase2: counted twice, as none and left out; reported on its own line
+phase1:                              # the test
+  sessions: ["2026-04-30", "2026-11-25"]   # 04-29's window starts before the first fiscal.ai item
+  pools: host forward pools from 2026-09-28 (copied read-only) and Mac builds for 2026-04-30..2026-09-25
+  reads: [symbol, catalyst_status, catalyst_category, headlines_n, first_catalyst_at]   # no price, entry, exit or result
+  measures:
+    buyout_recall: share of v3 buyout_offer name-days the proxy marks buyout
+    earnings_recall: share of v3 earnings_release name-days the proxy marks earnings
+    reported_only: [buyout_precision, earnings_precision, presence_agreement, median_lag_minutes]
+  interval: wilson_95
+  pass: {buyout_recall_min: 0.80, earnings_recall_min: 0.80, min_name_days_each: 20}
+  not_decidable: either measure under 20 name-days -> phase 2 waits for the owner's dated note in DEC-0081
+  secondary: same measures on the 2018-12 and 2025-09 Benzinga pools; reported, not part of the pass
+phase2:                              # only after a pass
+  span: ["2019-01-02", "2025-09-25"]       # DEC-0010 development span; the holdout is not read
+  counts: scripts/gap_hunter_counts.py columns, per year, US$600, with the proxy in place of the headline columns
+  output: counts only                      # no R, P&L, exit or price; a result needs another record
