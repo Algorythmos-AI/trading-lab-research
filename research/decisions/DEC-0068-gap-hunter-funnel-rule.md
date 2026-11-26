@@ -196,3 +196,9 @@ the Benzinga history is gone for good. DEC-0081 (PROPOSED) and EXP-0057 propose 
 for the catalyst columns. It must first pass an agreement test, and then gives counts only, on the development span
 only. Nothing in this rule changes, and its evidence stays the forward paper sessions until a later record says
 otherwise.
+
+### 2026-11-26: the SEC-filing stand-in failed its test (DEC-0081)
+
+EXP-0057 phase 1 measured the EDGAR proxy against the forward headlines. Earnings agreement was 74.5%, below the 0.80
+bar, and buyouts matched 3 of 14. DEC-0081's note of 2026-11-26 closes the proxy. "This rule cannot be checked on
+2019 to 2025" therefore still holds in full. Nothing in this rule changes.

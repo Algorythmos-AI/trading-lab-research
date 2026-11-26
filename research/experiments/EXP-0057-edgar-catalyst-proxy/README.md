@@ -58,3 +58,8 @@
   - Earnings recall was 2 of 5 and earnings precision 2 of 25.
   - Presence agreement was 86.6%.
 - **What it shows:** these n are far too small to read anything into. It changes nothing about the phase-1 verdict.
+
+## Closed (2026-11-26)
+
+DEC-0081's dated note of 2026-11-26 closes the proxy. Phase 2 is not run, and HYP-0074 is falsified on the earnings
+half. The pool and sidecar inputs stay on the Mac in the git-ignored `data/`.
