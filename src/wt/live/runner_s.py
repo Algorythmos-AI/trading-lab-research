@@ -109,6 +109,7 @@ from wt.ops.alerts import Alerts, Pager
 from wt.risk import execution_stops, stop_rule
 from wt.risk.pretrade import Context, PreTradeGuard, load_limits
 from wt.risk.virtual_account import StateError, VirtualAccount
+from wt.signals.musts import spread_ok
 
 OMS = MultiOMS                  # the order manager of both rules: the base manager, plus selling in parts
 STRATEGY = "S"
@@ -597,7 +598,7 @@ def rotation_walk(rot: Rotation, bars: Mapping[str, pd.DataFrame], upto: pd.Time
                 rot.attempt = {"rank": rank, "symbol": sym, "code": order.code, "trigger": trig, "stop": stop,
                                "bar": prev, "engine_fill": sl.engine_entry(order, float(row.o.iloc[0]),
                                                                            sl.MIN_SLIP) is not None,
-                               "nbbo": q, "spread_ok": sl.spread_ok(q[1] - q[0] if q else None)}
+                               "nbbo": q, "spread_ok": spread_ok(q[1] - q[0] if q else None)}
                 rot.done = "attempt"
                 out.append({"kind": "attempt", **rot.attempt})
                 break
@@ -970,6 +971,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             p.recorded = True
             store.save(p)
 
+    p: TradePlan | None                                       # the loop variable below also walks [plan, *held]
     for p in plans:                                           # a close nobody booked, from this day or an earlier one
         book(p, dt.date.fromisoformat(p.date))
 
@@ -1160,9 +1162,10 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             tier2, info2 = rotation_tier2(day)
         except Exception as e:  # noqa: BLE001 — no names: no entry this session
             tier2, info2 = [], {"why": "selection_failed", "error": e.__class__.__name__}
-        grot[0], missing = rot_names(tier2)
+        today_rot, missing = rot_names(tier2)
+        grot[0] = today_rot
         log("gap_names", day=day, trial=trial, names=[[k, s] for k, s in tier2], no_context=missing, **info2)
-        allow({s for _, s, _ in grot[0].names})
+        allow({s for _, s, _ in today_rot.names})
     gap_n = max((p.attempt for p in today if p.origin == "entry"), default=0)
     wt: sl.WTState | None = None    # the exit's state for the plan in play
     wt_tries: dict[float, int] = {}
