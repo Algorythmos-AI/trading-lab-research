@@ -277,6 +277,18 @@ def test_the_overlap_script_keeps_to_the_frozen_span(tmp_path: Path) -> None:
     assert mod.main(["2026-04-29", "2026-11-25", "--data", str(tmp_path), "--decision", str(dec)]) == 2
 
 
+def test_the_overlap_script_runs_once_and_refuses_a_second_run(tmp_path: Path) -> None:
+    dec, out = tmp_path / "dec.md", tmp_path / "o"
+    dec.write_text("- **Status: ACCEPTED on 2026-11-27.**\n")
+    (tmp_path / "candidates").mkdir()
+    mod = _script("exp0057_overlap")
+    args = ["2026-04-30", "2026-11-25", "--data", str(tmp_path), "--out", str(out), "--decision", str(dec)]
+    assert mod.main(args) == 0 and (out / "phase1_report.json").exists()
+    first = (out / "phase1_report.json").read_bytes()
+    assert mod.main(args) == 2
+    assert (out / "phase1_report.json").read_bytes() == first
+
+
 # ---- the annotator end to end -------------------------------------------------------------------------------------
 def _data(tmp_path: Path, forms: frozenset[str]) -> Path:
     d = tmp_path / "data"
