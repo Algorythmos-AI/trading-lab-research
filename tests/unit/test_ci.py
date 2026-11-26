@@ -77,7 +77,7 @@ def test_check_fails_closed_on_api_trouble(monkeypatch):
 
 def test_required_names_come_from_the_environment(monkeypatch):
     monkeypatch.delenv("WT_REQUIRED_CHECKS", raising=False)
-    assert ci.required_names() == ("test",)                # the ml job left with the crypto code (DEC-0036)
+    assert ci.required_names() == ("test", "dashboard-gate")    # as the rulesets require (ADR 0009)
     monkeypatch.setenv("WT_REQUIRED_CHECKS", "test, security / scan ,dashboard-gate")
     assert ci.required_names() == ("test", "security / scan", "dashboard-gate")
 

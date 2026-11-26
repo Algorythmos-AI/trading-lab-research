@@ -35,7 +35,8 @@ USER = "wt"
 HELPER_DIR = Path("deploy/oci/bin")           # installed to /usr/local/bin by wt-install-units
 STATIC_DIR = Path("deploy/oci/systemd")       # installed to /etc/systemd/system by wt-install-units
 
-# cgroup memory per job on the 4 GB VM (e2-medium): (MemoryHigh, MemoryMax, MemorySwapMax). The heavy jobs throttle at
+# cgroup memory per job: (MemoryHigh, MemoryMax, MemorySwapMax), sized for the 4 GB e2-medium the host first ran on;
+# it is an 8 GB e2-standard-2 now (docs/operations/host.md), and the limits were kept. The heavy jobs throttle at
 # High and are killed at Max rather than pushing the paper runner, which runs at the same time, into the OOM killer.
 # The tail loader keeps them near 1 GB, so these are fuses, not budgets. The publisher's limit covers its collector
 # child too. The runners themselves are never capped (OOMScoreAdjust=-500 instead): killing one mid-session is the

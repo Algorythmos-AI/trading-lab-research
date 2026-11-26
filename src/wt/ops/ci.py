@@ -4,7 +4,7 @@
 
 A deploy (wt.ops.deploy) takes only a commit on main whose required checks all concluded "success" on that exact
 commit. Pending, cancelled, skipped, failed or missing count as not green. When a check was re-run, its newest run
-decides. Required names come from WT_REQUIRED_CHECKS (comma-separated; default "test").
+decides. Required names come from WT_REQUIRED_CHECKS (comma-separated; default "test,dashboard-gate").
 
 Auth: GH_TOKEN or GITHUB_TOKEN when set (a read-only token; the repository may be private), else the `gh` CLI's
 token when it is logged in (the Mac), else unauthenticated (a public repository, 60 requests an hour per IP).
@@ -34,7 +34,8 @@ API = "https://api.github.com"
 # What a verdict says when GitHub refused the token itself (HTTP 401: expired, revoked or mistyped). Kept apart from
 # "not green" so the deploy can say the fix (a new GH_TOKEN) instead of waiting as if CI had failed.
 TOKEN_REFUSED = "the GitHub token was refused (HTTP 401)"
-DEFAULT_REQUIRED = ("test",)         # the ml job left with the crypto desk's code (DEC-0036)
+DEFAULT_REQUIRED = ("test", "dashboard-gate")   # as the main and integration rulesets require (ADR 0009); ci.yml
+# runs both on every push to main, with no path filter. The ml job left with the crypto desk's code (DEC-0036).
 
 
 @dataclass(frozen=True)

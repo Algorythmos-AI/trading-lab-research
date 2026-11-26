@@ -14,8 +14,8 @@
 #   * the Webull read-only timer, when the owner has put the key on the host (wt-set-webull-secret) and the copy
 #     loads as wt-webull;
 #   sudo wt-install-units [--webull-tree <sha256>]
-#   * /etc/wt/installed.sha256, the fingerprint of all of it: an unattended deploy compares it with the target
-#     commit's (python -m wt.ops.units fingerprint) and leaves any release that changes it to the owner.
+#   * /etc/wt/installed.sha256, the fingerprint of all of it (python -m wt.ops.units fingerprint), kept as a record.
+#     Nothing reads it today: the unattended deploy decides by path (deploy.OWNER_PATHS) and by units.diff.
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo "run with sudo" >&2; exit 2; }
 webull_tree=""

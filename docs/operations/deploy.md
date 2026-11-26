@@ -40,9 +40,9 @@ Automated contributors never start a deploy and never create or remove `AUTO_ON`
 3. **Target.** It runs `git fetch origin main`. The target must be on `main` and a fast-forward of the checkout
    (`resolve_target`).
 4. **CI.** The target's checks must be green (`wt.ops.ci`).
-   - The owner's deploy reads `WT_REQUIRED_CHECKS`, default `test`; the automatic deploy always asks for
-     `ci.DEFAULT_REQUIRED`, which is `("test",)`.
-   - **Neither checks `dashboard-gate` by default,** although the rulesets require it.
+   - The owner's deploy reads `WT_REQUIRED_CHECKS`, default `test,dashboard-gate`; the automatic deploy always
+     asks for `ci.DEFAULT_REQUIRED`, which is `("test", "dashboard-gate")`, the same two checks the rulesets
+     require. `ci.yml` runs both on every push to `main`, with no path filter.
    - A refused GitHub token stops the deploy. The automatic deploy also pages about it, once a day.
    - The owner may pass a commit whose checks are red or unreadable with `WT_DEPLOY_CI_OVERRIDE='reason'`, for that
      one deploy. The automatic deploy never reads it.
