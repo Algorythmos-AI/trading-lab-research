@@ -32,3 +32,15 @@
   3. Run `scripts/exp0057_overlap.py 2026-04-30 2026-11-25`, then commit its two report files by pull request.
 - **Results:** `phase1_report.json` and `phase1_report.md` here, then `phase2_counts.json` here, each added by its own
   pull request.
+
+## Phase 1 result (run once on 2026-11-26, integration 6c0e45af)
+
+- **Verdict: not_decidable**, by the frozen rule. Buyout recall had 14 name-days, below the minimum of 20. The
+  report is `phase1_report.json` and `.md`, both written by `scripts/exp0057_overlap.py` and committed unedited.
+- **Earnings:** recall was 74.5% (536 of 719; Wilson 95% 71.2%–77.6%). That is below the 0.80 threshold on far more
+  than 20 name-days, so the earnings half would fail even if the buyout half could be decided.
+- **Buyout:** recall was 21.4% (3 of 14) and precision 8.6% (3 of 35).
+- **Lag:** the report's lag is filing time minus headline time. Its median of −74 minutes means the earnings filing
+  is usually accepted about 74 minutes before the first qualifying headline.
+- **What follows:** phase 2 does not run. By DEC-0081, a result other than pass leaves the next step to the owner.
+  This experiment is closed; any change to the table or the thresholds is a new EXP id.
