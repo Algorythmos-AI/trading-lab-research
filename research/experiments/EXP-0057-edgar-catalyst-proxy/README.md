@@ -32,3 +32,29 @@
   3. Run `scripts/exp0057_overlap.py 2026-04-30 2026-11-25`, then commit its two report files by pull request.
 - **Results:** `phase1_report.json` and `phase1_report.md` here, then `phase2_counts.json` here, each added by its own
   pull request.
+
+## Phase 1 result (run once on 2026-11-26, integration 6c0e45af)
+
+- **Verdict: not_decidable**, by the frozen rule. Buyout recall had 14 name-days, below the minimum of 20. The
+  report is `phase1_report.json` and `.md`, both written by `scripts/exp0057_overlap.py` and committed unedited.
+- **Earnings:** recall was 74.5% (536 of 719; Wilson 95% 71.2%–77.6%). That is below the 0.80 threshold on far more
+  than 20 name-days, so the earnings half would fail even if the buyout half could be decided.
+- **Buyout:** recall was 21.4% (3 of 14) and precision 8.6% (3 of 35).
+- **Lag:** the report's lag is filing time minus headline time. Its median of −74 minutes means the earnings filing
+  is usually accepted about 74 minutes before the first qualifying headline.
+- **What follows:** phase 2 does not run. By DEC-0081, a result other than pass leaves the next step to the owner.
+  This experiment is closed; any change to the table or the thresholds is a new EXP id.
+
+## Phase 1 secondary (run once on 2026-11-26; reported only, not part of the pass)
+
+- **What it is:** the same measures on the Benzinga pools, as the frozen config's `phase1.secondary` asks. It ran on
+  21 sessions: 2018-12-19..21 and 2025-09-02..25 (2025-09-25 is the last development session). The output is
+  `secondary_report.json` and `.md`, written by `scripts/exp0057_overlap.py --secondary` and committed unedited.
+- **Template errata in the `.md`:** its reference line says "fiscal.ai headlines" and two rows say "(the test)".
+  These are wording from the phase-1 template, fixed in the script after the run. Read them as Benzinga headlines,
+  reported only.
+- **Counts:** 1,158 name-days, 15 of them unknown, so 1,143 compared.
+  - There was no v3 buyout name-day.
+  - Earnings recall was 2 of 5 and earnings precision 2 of 25.
+  - Presence agreement was 86.6%.
+- **What it shows:** these n are far too small to read anything into. It changes nothing about the phase-1 verdict.

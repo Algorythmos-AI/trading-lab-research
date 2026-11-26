@@ -1,0 +1,67 @@
+{
+ "buyout_precision": {
+  "hits": 0,
+  "n": 4,
+  "share": 0.0,
+  "wilson95": [
+   0.0,
+   0.4898908364545973
+  ]
+ },
+ "buyout_recall": {
+  "hits": 0,
+  "n": 0,
+  "share": null,
+  "wilson95": null
+ },
+ "compared_name_days": 1143,
+ "earnings_precision": {
+  "hits": 2,
+  "n": 25,
+  "share": 0.08,
+  "wilson95": [
+   0.022220401284847563,
+   0.24966108950395313
+  ]
+ },
+ "earnings_recall": {
+  "hits": 2,
+  "n": 5,
+  "share": 0.4,
+  "wilson95": [
+   0.11762077423264783,
+   0.769275718723987
+  ]
+ },
+ "lag_n": 2,
+ "median_lag_minutes": 5.583333333333333,
+ "name_days": 1158,
+ "part_of_pass": false,
+ "presence_agreement": {
+  "hits": 990,
+  "n": 1143,
+  "share": 0.8661417322834646,
+  "wilson95": [
+   0.8451704976590078,
+   0.8846601110640964
+  ]
+ },
+ "reference": "agreement with classifier v3 on fiscal.ai headlines, not accuracy",
+ "sessions": 21,
+ "span": [
+  [
+   "2018-12-01",
+   "2018-12-31"
+  ],
+  [
+   "2025-09-01",
+   "2025-09-25"
+  ]
+ ],
+ "thresholds": {
+  "min_name_days": 20,
+  "recall_min": 0.8
+ },
+ "unknown_name_days": 15,
+ "verdict": "not_decidable"
+}
