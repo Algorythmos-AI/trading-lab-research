@@ -33,9 +33,11 @@ The **Catalysts** row above is no longer true. It is left as written in 2026-09;
 - Effect: pools built for 2019 to 2025 carry no headlines (`headlines_n = 0`), so no rule that needs a headline can be
   checked on those years from this source. DEC-0068 already says so for the Gap Hunter funnel. Pools built in
   2026-09 for 2018-12 and 2025-09 still hold the Benzinga headlines they were built with.
-- From 2026-11-26 the API's news is copied to the git-ignored `data/news/` by `scripts/news_archive.py`
-  (`wt.data.news_archive`), from its first item (2026-04-29T02:31Z, the evening of 2026-04-28 in New York) on, so a later change of provider cannot remove it again. Headlines stay
-  RESTRICTED. Whether keeping that copy is within Alpaca's data terms is the owner's question to settle.
+- From 2026-11-26 the API's news is copied by `scripts/news_archive.py` (`wt.data.news_archive`), from its first
+  item (2026-04-29T02:31Z, the evening of 2026-04-28 in New York) on, into the PRIVATE repository
+  `Algorythmos-AI/trading-news-archive` (`docs/runbooks/news-archive.md`), so a later change of provider cannot
+  remove it again. Headlines stay RESTRICTED: they never enter this repository, which is public. The owner directed
+  the copy to GitHub on 2026-11-26; it is kept for his own research and never redistributed.
 - The classifier's accuracy (EXP-0015a, 84% at decision level) was measured on Benzinga headlines only. It has not
   been measured on fiscal.ai headlines.
 - A partial stand-in for 2019 to 2025 from SEC EDGAR filings is proposed separately, in its own records, before any
