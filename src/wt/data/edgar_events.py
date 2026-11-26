@@ -50,8 +50,10 @@ OUT = EDGAR / "events.parquet"
 PARTS = EDGAR / "events_parts"
 SINCE = "2018-06-01"
 EIGHT_K = frozenset({"8-K", "8-K/A"})
-FORMS = frozenset({"SC TO-T", "SC TO-T/A", "SC 14D9", "PREM14A", "DEFM14A", "SC 13E3",
+FORMS = frozenset({"SC TO-T", "SC TO-T/A", "SC TO-C", "SC 14D9", "SC14D9C", "PREM14A", "DEFM14A", "SC 13E3",
                    "425", "424B1", "424B2", "424B3", "424B4", "424B5"}) | EIGHT_K
+# SC TO-C and SC14D9C, the tender-offer announcement-day forms, were added by DEC-0081 point 4 (2026-11-26). A store
+# built before then lacks them: `events_meta.json` lists the forms a build kept, and readers check it.
 COLUMNS = ["cik", "ticker", "form", "items", "accepted_at_et", "filing_date", "accession", "entity"]
 ROW_COLUMNS = ["cik", "form", "items", "accepted_at_et", "filing_date", "accession", "entity"]   # before the ticker join
 COUNT_COLUMNS = ["cik", "year", "form", "n"]
@@ -221,7 +223,15 @@ def assemble(ticker_map: pd.DataFrame, parts: Path = PARTS, out: Path = OUT) -> 
             lambda t: meta.astype({"cik": "int64"}).reset_index(drop=True).to_parquet(t, index=False))
     _atomic(out.with_name("cik_form_years.parquet"), lambda t: counts.reset_index(drop=True).to_parquet(t, index=False))
     _atomic(out, lambda t: ev.to_parquet(t, index=False))
+    meta_text = json.dumps({"forms": sorted(FORMS), "since": SINCE, "rows": len(ev)}, indent=1) + "\n"
+    _atomic(out.with_name("events_meta.json"), lambda t: t.write_text(meta_text))
     return ev
+
+
+def built_forms(out: Path = OUT) -> frozenset[str]:
+    """The forms the build at `out` kept (empty for a build that predates events_meta.json)."""
+    p = out.with_name("events_meta.json")
+    return frozenset(json.loads(p.read_text())["forms"]) if p.exists() else frozenset()
 
 
 def build(get: Getter | None = None, ticker_map: pd.DataFrame | None = None, parts: Path = PARTS, out: Path = OUT,
