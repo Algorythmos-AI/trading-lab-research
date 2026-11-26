@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -66,7 +67,7 @@ def test_items_are_filed_by_their_own_new_york_date(tmp_path: Path) -> None:
             na._row(item(2, "2026-11-21T05:00:00Z"))]      # 00:00 ET on the 21st
     counts = na.store(tmp_path, rows)
     assert counts == {dt.date(2026, 11, 20): 1, dt.date(2026, 11, 21): 1}
-    assert na.read_day(tmp_path, dt.date(2026, 11, 20))["id"].tolist() == [1]
+    assert [r["id"] for r in na.read_day(tmp_path, dt.date(2026, 11, 20))] == [1]
 
 
 def test_merge_keeps_one_row_per_id_with_the_latest_edit(tmp_path: Path) -> None:
@@ -74,18 +75,21 @@ def test_merge_keeps_one_row_per_id_with_the_latest_edit(tmp_path: Path) -> None
     na.store(tmp_path, [na._row(item(1, "2026-11-20T14:00:00Z", "2026-11-20T16:00:00Z", "new")),
                         na._row(item(2, "2026-11-20T13:00:00Z"))])
     na.store(tmp_path, [na._row(item(1, "2026-11-20T14:00:00Z", "2026-11-20T15:00:00Z", "middle"))])
-    df = na.read_day(tmp_path, DAY)
-    assert df["id"].tolist() == [2, 1]                       # by created_at
-    assert df.set_index("id").loc[1, "headline"] == "new"
+    rows = na.read_day(tmp_path, DAY)
+    assert [r["id"] for r in rows] == [2, 1]                 # by created_at
+    assert rows[1]["headline"] == "new" and rows[1]["symbols"] == ["AAA"]
 
 
 def test_a_finished_day_is_marked_and_a_rerun_adds_no_duplicates(tmp_path: Path) -> None:
     page = {"news": [item(1, "2026-11-20T14:00:00Z"), item(2, "2026-11-20T15:00:00Z")]}
     info = na.archive_day(Pages([page]), tmp_path, DAY, NOW)
     assert info["complete"] and info["items_on_day"] == 2 and na.is_done(tmp_path, DAY)
-    assert json.loads(na.marker_path(tmp_path, DAY).read_text())["items_fetched"] == 2
+    marker = json.loads(na.marker_path(tmp_path, DAY).read_text())
+    assert marker["items_fetched"] == 2
+    first = na.day_path(tmp_path, DAY).read_bytes()
+    assert marker["sha256"] == hashlib.sha256(first).hexdigest()
     na.archive_day(Pages([page]), tmp_path, DAY, NOW)
-    assert len(na.read_day(tmp_path, DAY)) == 2
+    assert na.day_path(tmp_path, DAY).read_bytes() == first          # byte-identical: a rerun makes no git diff
 
 
 def test_today_is_stored_but_not_marked(tmp_path: Path) -> None:
@@ -148,3 +152,99 @@ def test_the_script_never_prints_a_headline(tmp_path: Path, monkeypatch: pytest.
     assert mod.main(["--day", "2026-11-20", "--root", str(tmp_path)]) == 0
     out = capsys.readouterr().out
     assert "SECRET" not in out and "items=1" in out
+
+
+def test_files_are_one_json_object_a_line_in_a_fixed_key_order(tmp_path: Path) -> None:
+    na.store(tmp_path, [na._row(item(7, "2026-11-20T14:00:00Z", headline="Café ü"))])
+    lines = na.day_path(tmp_path, DAY).read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1 and list(json.loads(lines[0])) == na.COLUMNS and "Café ü" in lines[0]
+    assert na.day_path(tmp_path, DAY).name == "2026-11-20.jsonl"
+    assert na.load(tmp_path, DAY, DAY)["id"].tolist() == [7]
+
+
+@pytest.mark.parametrize("url", ["https://github.com/Algorythmos-AI/trading-news-archive.git",
+                                 "git@github.com:Algorythmos-AI/trading-news-archive.git",
+                                 "https://x-access-token@github.com/Algorythmos-AI/trading-news-archive"])
+def test_the_private_archive_remote_is_accepted(url: str) -> None:
+    na.check_remote(url)
+
+
+@pytest.mark.parametrize("url", ["https://github.com/Algorythmos-AI/trading-lab-research.git",
+                                 "https://github.com/someone/trading-news-archive.git",
+                                 "https://github.com/Algorythmos-AI/trading-news-archive-public", "",
+                                 "https://evilgithub.com/Algorythmos-AI/trading-news-archive.git",
+                                 "https://github.com.evil.io/Algorythmos-AI/trading-news-archive.git",
+                                 "https://github.com@evil.io/Algorythmos-AI/trading-news-archive.git",
+                                 "git@evilgithub.com:Algorythmos-AI/trading-news-archive.git",
+                                 "http://github.com/Algorythmos-AI/trading-news-archive.git",
+                                 "file:///tmp/github.com/Algorythmos-AI/trading-news-archive",
+                                 "/tmp/github.com/Algorythmos-AI/trading-news-archive",
+                                 "https://github.com/x/Algorythmos-AI/trading-news-archive"])
+def test_any_other_remote_is_refused(url: str) -> None:
+    with pytest.raises(na.ArchiveError):
+        na.check_remote(url)
+
+
+class Git:
+    def __init__(self, origin: str, dirty: bool, push: str | None = None) -> None:
+        self.origin, self.dirty, self.calls = origin, dirty, []  # type: ignore[var-annotated]
+        self.push = origin if push is None else push
+
+    def __call__(self, args: list[str], cwd: Path) -> str:
+        self.calls.append(args)
+        if args[:2] == ["remote", "get-url"]:
+            return (self.push if "--push" in args else self.origin) + "\n"
+        if args[0] == "status":
+            return " M alpaca-news/2026/11/2026-11-20.jsonl\n" if self.dirty else ""
+        return ""
+
+
+def test_publish_commits_rebases_then_pushes(tmp_path: Path) -> None:
+    (tmp_path / ".git").mkdir()
+    git = Git("https://github.com/Algorythmos-AI/trading-news-archive.git", dirty=True)
+    assert na.publish(tmp_path, "alpaca-news: x", git) is True
+    verbs = [c[0] if c[0] != "-c" else c[4] for c in git.calls]
+    assert verbs == ["remote", "remote", "add", "status", "commit", "pull", "push"]
+    assert git.calls[2] == ["add", "--", "alpaca-news"]
+
+
+def test_publish_with_nothing_new_pushes_nothing(tmp_path: Path) -> None:
+    (tmp_path / ".git").mkdir()
+    git = Git("https://github.com/Algorythmos-AI/trading-news-archive.git", dirty=False)
+    assert na.publish(tmp_path, "m", git) is False
+    assert not any(c[0] == "push" for c in git.calls)
+
+
+def test_publish_refuses_a_public_remote_before_touching_git(tmp_path: Path) -> None:
+    (tmp_path / ".git").mkdir()
+    git = Git("https://github.com/Algorythmos-AI/trading-lab-research.git", dirty=True)
+    with pytest.raises(na.ArchiveError):
+        na.publish(tmp_path, "m", git)
+    assert all(c[0] == "remote" for c in git.calls)
+
+
+def test_publish_refuses_a_push_url_that_differs_from_the_fetch_url(tmp_path: Path) -> None:
+    (tmp_path / ".git").mkdir()
+    git = Git("https://github.com/Algorythmos-AI/trading-news-archive.git", dirty=True,
+              push="https://github.com/Algorythmos-AI/trading-news-archive.git\nhttps://evil.io/x.git")
+    with pytest.raises(na.ArchiveError):
+        na.publish(tmp_path, "m", git)
+    assert not any(c[0] in ("add", "commit", "push") for c in git.calls)
+    assert ["remote", "get-url", "--push", "--all", "origin"] in git.calls
+
+
+def test_publish_needs_a_clone(tmp_path: Path) -> None:
+    with pytest.raises(na.ArchiveError):
+        na.publish(tmp_path, "m", Git("", dirty=False))
+
+
+def test_an_item_filed_on_a_marked_neighbour_day_refreshes_that_days_marker(tmp_path: Path) -> None:
+    prev = DAY - dt.timedelta(days=1)
+    na.archive_day(Pages([{"news": [item(1, "2026-11-19T14:00:00Z")]}]), tmp_path, prev, NOW)
+    # the API returns, in the 20th's window, an item created at 23:30 ET on the 19th
+    na.archive_day(Pages([{"news": [item(2, "2026-11-20T04:30:00Z"), item(3, "2026-11-20T14:00:00Z")]}]),
+                   tmp_path, DAY, NOW)
+    marker = json.loads(na.marker_path(tmp_path, prev).read_text())
+    assert marker["items_on_day"] == 2
+    assert marker["sha256"] == hashlib.sha256(na.day_path(tmp_path, prev).read_bytes()).hexdigest()
+    assert marker["items_fetched"] == 1                      # the rest of the marker is kept
