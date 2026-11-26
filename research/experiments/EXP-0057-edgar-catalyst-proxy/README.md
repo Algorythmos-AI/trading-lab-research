@@ -44,3 +44,17 @@
   is usually accepted about 74 minutes before the first qualifying headline.
 - **What follows:** phase 2 does not run. By DEC-0081, a result other than pass leaves the next step to the owner.
   This experiment is closed; any change to the table or the thresholds is a new EXP id.
+
+## Phase 1 secondary (run once on 2026-11-26; reported only, not part of the pass)
+
+- **What it is:** the same measures on the Benzinga pools, as the frozen config's `phase1.secondary` asks. It ran on
+  21 sessions: 2018-12-19..21 and 2025-09-02..25 (2025-09-25 is the last development session). The output is
+  `secondary_report.json` and `.md`, written by `scripts/exp0057_overlap.py --secondary` and committed unedited.
+- **Template errata in the `.md`:** its reference line says "fiscal.ai headlines" and two rows say "(the test)".
+  These are wording from the phase-1 template, fixed in the script after the run. Read them as Benzinga headlines,
+  reported only.
+- **Counts:** 1,158 name-days, 15 of them unknown, so 1,143 compared.
+  - There was no v3 buyout name-day.
+  - Earnings recall was 2 of 5 and earnings precision 2 of 25.
+  - Presence agreement was 86.6%.
+- **What it shows:** these n are far too small to read anything into. It changes nothing about the phase-1 verdict.

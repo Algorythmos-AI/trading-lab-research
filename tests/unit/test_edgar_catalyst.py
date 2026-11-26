@@ -331,3 +331,20 @@ def test_the_annotator_refuses_a_store_built_without_the_announcement_forms(tmp_
     d = _data(tmp_path, ee.FORMS - {"SC TO-C", "SC14D9C"})
     with pytest.raises(SystemExit):
         _script("annotate_edgar").main(["2026-11-23", "2026-11-23", "--data", str(d)])
+
+
+def test_the_secondary_reads_only_the_two_benzinga_months_once(tmp_path: Path) -> None:
+    dec, out, data = tmp_path / "dec.md", tmp_path / "o", tmp_path / "d"
+    dec.write_text("- **Status: ACCEPTED on 2026-11-27.**\n")
+    for sub in ("candidates", "candidates_edgar"):
+        (data / sub).mkdir(parents=True)
+    for day in ("2018-12-19", "2025-09-25", "2025-09-26", "2026-05-01"):    # 09-26 is the holdout; 05-01 phase 1
+        pool_day([("A", "qualifying", "earnings_release", 1, None)]).to_parquet(data / "candidates" / f"{day}.parquet")
+        side_day([("A", "earnings", "")]).to_parquet(data / "candidates_edgar" / f"{day}.parquet")
+    mod = _script("exp0057_overlap")
+    args = ["--secondary", "--data", str(data), "--out", str(out), "--decision", str(dec)]
+    assert mod.main(args) == 0
+    rep = json.loads((out / "secondary_report.json").read_text())
+    assert rep["sessions"] == 2 and rep["part_of_pass"] is False and not (out / "phase1_report.json").exists()
+    assert mod.main(args) == 2
+    assert mod.main(["2018-12-01", "2018-12-31", *args]) == 2
