@@ -1,0 +1,8 @@
+id: HYP-0075
+trial: "V3-ON-FISCAL"
+status: pre-registered          # DEC-0082 (PROPOSED 2026-11-27). A measurement, not a trial: no family, no R, no P&L
+statement: "Classifier v3 (config/catalysts_spec.yaml version 3, unrevised) reads fiscal.ai headlines for Gap Hunter pool names, in the pool's window (previous session 16:00 to 09:25 New York), at the same decision level (qualifying, excluded, non-qualifying) as the reference labels on at least 85% of a frozen stratified blind sample of 100 headlines, the CAT-01 target that v3 missed at 84% on Benzinga (EXP-0015a)."
+rule: catalyst_classifier_v3    # wt.scanner.catalyst.classify_spec; QUALIFYING and EXCLUDED as in that module
+frozen: {classifier_sha256: "96411f7a9016c3b8aee4ef2a6981a8c8bef9f6dd7943c6710fc6b2cf015d157f", frame_sessions: ["2026-09-28", "2026-11-25"], window: [prev_session_16:00_ET, "09:25_ET"], time: created_at_le_cut, n: 100, measure: decision_level_agreement, target: 0.85, interval: wilson_95, min_labelled: 80, reference: [owner_review, owner_blind, agent_blind]}
+config: research/experiments/EXP-0058-v3-on-fiscal/config.yaml
+evidence: {decision: DEC-0082, experiments: [EXP-0058-v3-on-fiscal], base: [EXP-0015a, DEC-0068, DEC-0081]}
