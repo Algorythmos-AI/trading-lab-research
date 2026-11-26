@@ -25,7 +25,7 @@ TYPED_MODULES := src/wt/research/b_audit.py src/wt/research/b_exec_audit.py src/
                  src/wt/analytics/risk_view.py src/wt/analytics/ops_view.py src/wt/ops/audit.py src/wt/ops/control.py \
                  src/wt/core/desk.py src/wt/data/news_archive.py \
                  src/wt/brokers/alpaca_options_paper.py src/wt/oms/options.py src/wt/risk/options_guard.py \
-                 src/wt/live/runner_o.py src/wt/options/review.py \
+                 src/wt/live/runner_o.py src/wt/live/runner_s.py src/wt/options/review.py \
                  src/wt/options/clone_site.py \
                  src/wt/options/dryrun.py src/wt/options/variants.py src/wt/options/exp0037.py \
                  src/wt/options/pipeline_check.py src/wt/research/external_posts.py \
