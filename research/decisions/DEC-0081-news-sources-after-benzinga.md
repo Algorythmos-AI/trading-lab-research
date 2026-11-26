@@ -134,8 +134,10 @@ EXP-0057 phase 1 ran once (#685). The report is `phase1_report.json` and `.md`.
 
 What follows:
 
-1. **Phase 2 is not run, and the proxy is not used for DEC-0068.** This is the outcome point 6 gives a fail. HYP-0074
-   is marked falsified on the earnings half.
+1. **Phase 2 is not run, and the proxy is not used for DEC-0068.** The pre-registered verdict stays not_decidable.
+   It is not a fail under point 6. Closing the proxy is the owner's choice in this note, made after that result.
+   Point 6 would have given a fail the same effect. HYP-0074 is marked falsified on the owner's reading of the
+   earnings half.
 2. **DEC-0068's line stands.** "This rule cannot be checked on 2019 to 2025" still holds. Its evidence stays the
    forward paper sessions.
 3. **The rest of this record stands.**
