@@ -112,6 +112,11 @@ no mail). Its prompt:
 > headline, an account balance or a P&L in dollars. If the scorecard for this week is missing, say so in one line
 > and stop.
 
+**Stale since 2026-11-20.** The prompt above still asks about strategy B and B's stop rule (DEC-0037). DEC-0069
+retired that rule (the QQQ rule, `paper-b`), so a run should report the options clone (`paper-o`) and Gap Hunter
+(`paper-s`) instead, and say that B is retired. The prompt is quoted here as it was written; on 2026-11-26 this
+routine was not among the project's enabled scheduled tasks, so check it still exists before editing it.
+
 ## The daily review (created 2026-11-13)
 
 A short, read-only pass over the whole project every weekday at 16:45 New York, 45 minutes after the close (its
