@@ -77,6 +77,7 @@ without fixing it. Read the records themselves for what they decide.
 | Options lab, after the close (host, `lab-tape`) | the day's option trade prints of tier-1 contracts; listed open interest (trading API `/v2/options/contracts`) | none: these endpoints take no feed | - | DEC-0060 | lab-tape runbook |
 | Options lab probe (hand, `python -m wt.lab.probe`) | one option snapshot per key pair; the focus names' stock snapshots and chains; one tier-1 sweep | opra; sip | literals in `wt/lab/probe.py` | DEC-0060 | lab-tape runbook |
 | News (`AlpacaREST.news`), option bars (`options_clone_dry_run`) | news; historical option bars | none: these endpoints take no feed | - | - | - |
+| News archive (hand for now, `scripts/news_archive.py`) | every news item of a New York day, all symbols, headlines kept in git-ignored `data/news/` and never printed; fiscal.ai only, from 2026-04-29 (Alpaca dropped the Benzinga history) | none: news takes no feed | - | DEC-0003 amendment 2026-11-26 | - |
 
 Every request names its feed, so a plan change does not change any request's source. Two settings outside the code
 choose a feed. Check them after any plan change: `ALPACA_FEED` on Vercel (unset or `iex` keeps the board, its bars
