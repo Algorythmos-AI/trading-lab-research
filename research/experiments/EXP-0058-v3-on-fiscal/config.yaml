@@ -24,13 +24,17 @@ sample:
   reported_only: [exact-category agreement, population-weighted decision-level agreement, per-category confusion counts]
 labels:
   agent_blind: every item, by the agent labeller, from the blind file only, before the key is opened
-  owner_blind: 20 items drawn at random by the same seed, labelled by the owner without seeing any other label
+  owner_blind: 30 items drawn at random by the same seed, labelled by the owner without seeing any other label
   owner_review: every item where v3 and the best available label so far disagree at the decision level
   precedence: [owner_review, owner_blind, agent_blind]
+labeller_check:                      # items where v3 and the agent agree reach no owner review, so shared errors would count as correct
+  measure: agent_blind vs owner_blind, decision level, on the 30 owner-blind items
+  min: 0.85                           # below it the mixed reference is not trusted
+  reported_with_verdict: v3 vs owner_blind on the same 30 items (an owner-only figure, Wilson 95%)
 verdict:
-  pass: decision-level agreement >= 0.85 on at least 80 items with a reference label
-  fail: below 0.85 on at least 80 items
-  not_decidable: fewer than 80 items with a reference label
+  pass: decision-level agreement >= 0.85 on at least 80 items with a reference label, and the labeller check >= 0.85
+  fail: below 0.85 on at least 80 items, and the labeller check >= 0.85
+  not_decidable: fewer than 80 items with a reference label, or the labeller check below 0.85
   interval: wilson_95                 # reported with the figure; the verdict reads the point figure, as CAT-01 did
 storage:                              # headlines are RESTRICTED (AGENTS.md); this repository is public
   private: trading-news-archive/experiments/EXP-0058/ holds the blind file, the key, both label files and the review

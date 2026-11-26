@@ -11,11 +11,14 @@
   window (16:00 the previous session to the 09:25 cut), on the 43 post-holdout sessions 2026-09-28..11-25.
 - **Labels:**
   - the agent labeller labels all 100 blind;
-  - the owner labels 20 of them blind;
+  - the owner labels 30 of them blind;
   - the owner then rules on every decision-level disagreement;
   - precedence: owner review, then owner blind, then agent blind.
+- **The labeller check:** the agent labeller must match the owner on at least 0.85 of the 30 owner-blind items.
+  Agreements between v3 and the agent are not reviewed, so shared errors would otherwise count as correct.
 - **The verdict:** decision-level agreement on the stratified sample, with a Wilson 95% interval. It passes at ≥ 0.85
-  on at least 80 labelled items, fails below that, and is not decidable under 80.
+  on at least 80 labelled items, fails below that, and is not decidable under 80 or when the labeller check falls
+  below 0.85. v3's agreement with the owner alone, on the 30, is reported beside it.
 - **Where the text lives:** headlines are RESTRICTED and this repository is public. The blind file, the key and every
   label file stay in the private `trading-news-archive` repository. This folder gets only item ids, sha256 sums,
   counts and the report.

@@ -41,28 +41,35 @@
 4. **Reference labels**, highest precedence first:
    - **owner review:** the owner's ruling on every item where v3 and the best label so far disagree at the decision
      level;
-   - **owner blind:** 20 items drawn by the same seed, which the owner labels without seeing any other label;
+   - **owner blind:** 30 items drawn by the same seed, which the owner labels without seeing any other label;
    - **agent blind:** all 100 items, labelled by the agent labeller from the blind file only, before the key is
      opened.
-5. **The verdict** (decision level is qualifying, excluded or non-qualifying, as `wt.scanner.catalyst` defines it):
-   - **Pass:** agreement of at least 0.85 on at least 80 items with a reference label.
-   - **Fail:** below 0.85 on at least 80 items.
-   - **Not decidable:** fewer than 80 items with a reference label.
+5. **The labeller check.** Where v3 and the agent labeller agree, no owner review is triggered, so an error the two
+   share would count as correct. The 30 owner-blind items guard against that.
+   - **The check:** the agent labeller must agree with the owner on at least 0.85 of them, at the decision level.
+     Below that, the mixed reference is not trusted.
+   - **The owner-only figure:** v3 against the owner on the same 30 items, with its Wilson interval. It is reported
+     with the verdict.
+6. **The verdict** (decision level is qualifying, excluded or non-qualifying, as `wt.scanner.catalyst` defines it):
+   - **Pass:** agreement of at least 0.85 on at least 80 items with a reference label, and a labeller check of at
+     least 0.85.
+   - **Fail:** below 0.85 on at least 80 items, and a labeller check of at least 0.85.
+   - **Not decidable:** fewer than 80 items with a reference label, or a labeller check below 0.85.
    - **The figure:** the Wilson 95% interval is reported with it. The verdict reads the point figure, as CAT-01 did.
-6. **What each outcome does.** No live rule changes on any of them.
+7. **What each outcome does.** No live rule changes on any of them.
    - **Pass:** DEC-0068 gets a dated note giving the measured figure.
    - **Fail:** DEC-0068 gets a dated note giving the figure and the pattern of the misses. Whether to revise the
      classifier (v4) is then a new record. DEC-0010's acceptance of the limitation stands until such a record says
      otherwise.
    - **Not decidable:** the owner decides by a dated note here.
-7. **No headline text enters this repository.** Headlines are RESTRICTED, and this repository is public.
+8. **No headline text enters this repository.** Headlines are RESTRICTED, and this repository is public.
    - **Private:** the blind file, the key, both label files and the review are kept in the private
      `trading-news-archive` repository under `experiments/EXP-0058/`.
    - **Public:** `research/experiments/EXP-0058-v3-on-fiscal/` gets only item ids, sha256 sums of the private files,
      counts and the report.
    - **EXP-0015a:** it committed its sample files with headline text. This record does not repeat that, and leaves
      those files for the owner to decide on.
-8. **Code comes after acceptance and before the draw.** A sampler and a scorer, each with tests, come in their own
+9. **Code comes after acceptance and before the draw.** A sampler and a scorer, each with tests, come in their own
    pull request. Nothing is drawn until that pull request is merged.
 
 ## Owner readings (each is his to change before acceptance)
@@ -74,8 +81,12 @@
    - 0.85 at the decision level, CAT-01's target;
    - 100 items;
    - at least 80 labelled.
-3. **The owner's labelling load (set here):** 20 blind items, plus a ruling on each disagreement. In EXP-0015a that
-   was 9 to 10 per sample. Labelling is done in a local file in the private repository. The alternative is a hosted
+3. **The owner's labelling load (set here):** 30 blind items, plus a ruling on each disagreement. In EXP-0015a the
+   rulings came to 9 to 10 per sample.
+   - **Why 30:** the labeller check needs enough items to catch shared errors.
+   - **Residual risk:** an error v3 and the agent share on items outside those 30 still goes unreviewed. The
+     labeller check bounds that risk; it does not remove it.
+   - **The alternative:** owner labels for all 100. That costs more and leaves no shared-error gap. Labelling is done in a local file in the private repository. The alternative is a hosted
    review page, as EXP-0015a used, which would put the headlines on a page outside the repositories.
 4. **The licence:** DEC-0081's open question about keeping fiscal.ai text in a private repository covers this sample
    too.
