@@ -15,10 +15,20 @@
 - **Bias stated in advance:** the proxy cannot see FDA decisions, clinical results, upgrades, rumours or other
   breaking news. So it moves names to "no headline", where DEC-0068 asks for more relative volume. Names it cannot
   read are counted as "unknown", never as "none".
-- **Code (to come, step 4 of the plan):**
-  - `wt.scanner.edgar_catalyst`, the table as a pure function;
-  - `scripts/annotate_edgar.py`, which writes sidecars `data/candidates_edgar/DATE.parquet` and never touches the
-    pools;
-  - `scripts/exp0057_overlap.py`, the phase-1 report, counts only.
+- **Code (step 4, built before any count):**
+  - `wt.scanner.edgar_catalyst`: the table as pure functions, with the window, the map check and the pool columns;
+  - `wt.data.edgar_roles`: the subject role of a shared deal filing, read from its EDGAR index page and cached in
+    `data/edgar/roles.json`;
+  - `scripts/annotate_edgar.py`: writes sidecars `data/candidates_edgar/DATE.parquet`. It never touches the pools,
+    checking their sha256 sums before and after, and prints no category tally;
+  - `scripts/exp0057_overlap.py` with `wt.research.exp0057`: the phase-1 report, counts only. It refuses to run
+    while DEC-0081 is not ACCEPTED or outside the frozen span.
+  - `wt.data.edgar_events` keeps SC TO-C and SC14D9C and records its forms in `data/edgar/events_meta.json`. The
+    annotator refuses a store built without them.
+- **Running phase 1, once DEC-0081 is accepted:**
+  1. Bring the pools for 2026-04-30 to 2026-11-25 to the Mac: copy the host's forward pools read-only, and build
+     the rest with `scripts/build_pool.py`.
+  2. Run `scripts/annotate_edgar.py 2026-04-30 2026-11-25`.
+  3. Run `scripts/exp0057_overlap.py 2026-04-30 2026-11-25`, then commit its two report files by pull request.
 - **Results:** `phase1_report.json` and `phase1_report.md` here, then `phase2_counts.json` here, each added by its own
   pull request.

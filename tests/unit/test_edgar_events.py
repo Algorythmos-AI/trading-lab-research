@@ -103,13 +103,13 @@ def test_form_filter_keeps_only_the_listed_forms_and_8k_items() -> None:
     assert res.rows is not None
     got = dict(zip(res.rows.form, res.rows["items"], strict=True))
     assert got == {"SC 14D9": "", "8-K/A": "1.01", "424B5": "", "PREM14A": "", "DEFM14A": "", "SC 13E3": "",
-                   "424B4": ""}
+                   "424B4": "", "SC TO-C": "", "SC14D9C": ""}     # the two announcement forms DEC-0081 added
     # near misses are not events, but they are counted
     assert res.counts is not None
     assert {"SC TO-C", "SC14D9C", "DEFA14A", "10-Q"} <= set(res.counts.form)
-    assert not ({"SC TO-C", "SC14D9C", "DEFA14A", "10-Q", "4"} & ee.FORMS)
+    assert not ({"DEFA14A", "10-Q", "4"} & ee.FORMS)
     assert {"SC TO-T", "SC TO-T/A", "SC 14D9", "PREM14A", "DEFM14A", "SC 13E3", "425", "424B1", "424B2", "424B3",
-            "424B4", "424B5", "8-K", "8-K/A"} == ee.FORMS
+            "424B4", "424B5", "8-K", "8-K/A", "SC TO-C", "SC14D9C"} == ee.FORMS
 
 
 def test_acceptance_time_is_utc_converted_to_et_across_dst() -> None:
@@ -132,7 +132,7 @@ def test_et_survives_the_chunk_files_and_assemble(tmp_path: Path) -> None:
     assert row.accepted_at_et.strftime("%H:%M:%S") == "16:30:23"
     assert row.ticker == "BIG,BIG-PA" and row.entity == "BIG BANK CORP" and row["items"] == "2.02,9.01"
     assert str(row.filing_date) == "2026-11-02"
-    assert back.groupby("cik").size().to_dict() == {BIG: 5, SMALL: 7}
+    assert back.groupby("cik").size().to_dict() == {BIG: 5, SMALL: 9}
     meta = pd.read_parquet(tmp_path / "cik_meta.parquet").set_index("cik")
     assert meta.status.to_dict() == {BIG: "ok", SMALL: "ok", GONE: "missing"}
     assert json.loads(meta.loc[SMALL, "former_names"]) == [{"name": "OLD NAME INC", "from": "2016-01-01",
@@ -237,3 +237,31 @@ def test_fetcher_gives_up_with_throttled() -> None:
     with pytest.raises(ee.Throttled):
         f("CIK0000000001.json")
     assert len(s.urls) == len(ee.BACKOFF) + 1
+
+
+def _legacy(parts: Path) -> None:
+    """Turn every checkpoint into one written before FORMS grew: no `forms` field, no announcement-form rows."""
+    for cp in sorted(parts.glob("chunk-*.json")):
+        doc = json.loads(cp.read_text())
+        doc.pop("forms", None)
+        cp.write_text(json.dumps(doc))
+        rows = Path(str(cp.with_suffix("")) + ".rows.parquet")
+        df = pd.read_parquet(rows)
+        df[~df.form.isin({"SC TO-C", "SC14D9C"})].to_parquet(rows, index=False)
+
+
+def test_stale_checkpoints_are_fetched_again_and_never_claim_new_forms(tmp_path: Path) -> None:
+    parts, out = tmp_path / "parts", tmp_path / "events.parquet"
+    ee.build(get=FakeGet(PAGES), ticker_map=MAP, parts=parts, out=out, chunk=1, log=lambda _: None)
+    assert ee.built_forms(out) == ee.FORMS
+    _legacy(parts)
+    assert ee.done_ciks(parts) == set()                       # every CIK's latest checkpoint kept too few forms
+    ee.assemble(MAP, parts, out)
+    assert ee.built_forms(out) == ee.LEGACY_FORMS             # the manifest says what the parts really hold
+    assert not ({"SC TO-C", "SC14D9C"} & set(pd.read_parquet(out).form))
+    get = FakeGet(PAGES)
+    ev = ee.build(get=get, ticker_map=MAP, parts=parts, out=out, chunk=1, log=lambda _: None)
+    assert get.calls and ev is not None                       # refetched
+    assert ee.built_forms(out) == ee.FORMS
+    assert {"SC TO-C", "SC14D9C"} <= set(ev.form)
+    assert ev.groupby("cik").size().to_dict() == {BIG: 5, SMALL: 9}   # each CIK from its latest checkpoint only

@@ -33,10 +33,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--assemble-only", action="store_true", help="rebuild events.parquet from the checkpoints")
     ap.add_argument("--summary", action="store_true", help="print filings per form per year after the build")
     ap.add_argument("--data", type=Path, help="data directory (default: the checkout's data/)")
+    ap.add_argument("--parts", default="events_parts",
+                    help="checkpoint folder under data/edgar/ (a new name re-crawls every CIK, e.g. after FORMS grew)")
     a = ap.parse_args(argv)
     data = a.data or ee.DATA_DIR
     tm = pd.read_parquet(data / "edgar" / "ticker_cik.parquet")
-    parts, out = data / "edgar" / "events_parts", data / "edgar" / "events.parquet"
+    parts, out = data / "edgar" / a.parts, data / "edgar" / "events.parquet"
     if a.assemble_only:
         ev = ee.assemble(tm, parts, out)
     else:
