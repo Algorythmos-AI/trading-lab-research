@@ -18,6 +18,8 @@ comes back only under a new hypothesis, a new experiment id and a new decision, 
 | B on QQQ (QQQM orders), "the QQQ rule" | — | DEC-0069 | see DEC-0069 | Retired by the owner on 2026-11-20; its job `paper-b` left the schedule |
 
 Strategy B on QQQ was the last forward candidate (stop rule DEC-0037) until DEC-0069 retired it on 2026-11-20. Its
-frozen config `research/active_strategies/B_intraday_momentum_qqqm.yaml` is still read by the status and dashboard
-code (`src/wt/ops/status.py`, `publish.py`, `assemble.py`), so it stays until the owner decides how to move it. The
-desks that trade now, Gap Hunter and the options clone, are configured in `config/` ([config/README.md](../../config/README.md)).
+frozen config, unchanged, moved here from `research/active_strategies/` on 2026-11-26 at the owner's choice:
+[B_intraday_momentum_qqqm.yaml](B_intraday_momentum_qqqm.yaml). Older records (DEC-0007, DEC-0037, DEC-0061,
+DEC-0062, EXP-0042) cite the old path; they are left as written. The status code lists this folder's `*.yaml` as
+retired (`src/wt/ops/status.py`). The desks that trade now, Gap Hunter and the options clone, are configured in
+`config/` ([config/README.md](../../config/README.md)).

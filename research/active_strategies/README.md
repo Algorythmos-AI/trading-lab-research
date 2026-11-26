@@ -1,9 +1,8 @@
 # Active strategies
 
-**Nothing in this folder trades.** The one file here, `B_intraday_momentum_qqqm.yaml`, is the frozen config of the
-QQQ rule (strategy B), which DEC-0069 retired on 2026-11-20; its job `paper-b` is archived. It stays here only
-because the status code lists this folder (`src/wt/ops/status.py`) and older decision records cite the path, until
-the owner decides whether to move it to `research/retired_strategies/` ([its index](../retired_strategies/README.md)).
+**Empty: no strategy in this folder trades.** The QQQ rule (strategy B), the last config here, was retired by
+DEC-0069 on 2026-11-20, and its frozen yaml moved, unchanged, to
+[research/retired_strategies/](../retired_strategies/README.md) on 2026-11-26. Older records cite its old path here.
 
 The desks that place paper orders today are configured in `config/`, not here:
 
