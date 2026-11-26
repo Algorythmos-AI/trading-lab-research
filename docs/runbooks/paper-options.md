@@ -4,6 +4,11 @@ The dashboard's **Paper** page (`/paper`) shows every closed paper option trade 
 and never added together: the options clone, the option trades the owner places by hand in the manual paper
 account, and the research arms' simulated trades. This note covers the document that feeds its history.
 
+> **Status, 2026-11-26.** Two of the three sources no longer grow. The manual paper account ("Manual options
+> (mine)", …ISF) was deleted by the owner on 2026-11-20 ([paper-accounts.md](paper-accounts.md)), and no host holds
+> `APCA_OPTIONS_*`, so `manual` keeps only what was read before then. The research arms stopped booking after
+> 2026-11-17 (DEC-0059). Only the options clone adds trades now.
+
 | Part | Where | What it does |
 |---|---|---|
 | `wt-options-live.timer` | the VM | every 5 minutes in the US session, every 15 otherwise. No unit of its own |
