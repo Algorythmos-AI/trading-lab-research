@@ -20,8 +20,8 @@ There is no "QQQ account": QQQ is a ticker ([paper-accounts.md](../runbooks/pape
 
 There are three Alpaca **paper** accounts: "Robot B stocks (host)" (`APCA_API_*`, market data only), "Clone options
 (host)" (`APCA_CLONE_*`) and "Gap Hunter" (`APCA_S_*`). See [paper-accounts.md](../runbooks/paper-accounts.md).
-`APCA_OPTIONS_*` is a legacy pair. The code still falls back to it when `APCA_CLONE_*` is missing
-(`src/wt/brokers/alpaca_options_paper.py`).
+`APCA_OPTIONS_*` is a legacy pair: only `options-live` still reads it when set. The clone trades with
+`APCA_CLONE_*` alone and never falls back (`src/wt/brokers/alpaca_options_paper.py`).
 
 ## Owner's desk and research pipeline
 

@@ -62,7 +62,6 @@ RESEND_S = 12 * 3600.0            # an unchanged document is sent again after th
                                   # quiet week from a host that stopped
 SEND_TRIES = 2
 CLONE_KEYS = ("APCA_CLONE_KEY_ID", "APCA_CLONE_SECRET_KEY")
-SHARED_KEYS = ("APCA_OPTIONS_KEY_ID", "APCA_OPTIONS_SECRET_KEY")
 
 _CODE = re.compile(r"^[a-z0-9_-]{1,32}$")
 _OCC = re.compile(r"^[A-Z]{1,6}\d{6}[CP]\d{8}$")
@@ -157,11 +156,11 @@ def windows() -> list[dict[str, Any]]:
 
 
 def own_account(env: Mapping[str, str]) -> bool | None:
-    """True when the clone has a paper account of its own, False when it shares the manual one, None with no keys.
-    The same rule as wt.brokers.alpaca_options_paper.keys, without importing an order path."""
-    for pair, own in ((CLONE_KEYS, True), (SHARED_KEYS, False)):
-        if env.get(pair[0], "").strip() and env.get(pair[1], "").strip():
-            return own
+    """True when the clone has its own paper account's keys, None without them. The same rule as
+    wt.brokers.alpaca_options_paper.keys, without importing an order path: the shared `APCA_OPTIONS_*` pair no
+    longer counts, so False (a clone sharing the manual account) is never answered now."""
+    if env.get(CLONE_KEYS[0], "").strip() and env.get(CLONE_KEYS[1], "").strip():
+        return True
     return None
 
 
