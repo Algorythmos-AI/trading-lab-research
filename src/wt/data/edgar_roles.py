@@ -33,8 +33,9 @@ _PAIR = re.compile(r'class="companyName">\s*(?P<name>.*?)\s*\((?P<role>[^()]*)\)
 Fetch = Callable[[str], "tuple[int, str]"]
 
 
-def index_url(cik: int, accession: str) -> str:
-    return f"{ARCHIVES}{int(cik)}/{accession.replace('-', '')}/{accession}-index.htm"
+def index_url(cik: int, accession: str, ext: str = "html") -> str:
+    """The filing's index page: `-index.html` as EDGAR's directory listings name it, `-index.htm` as a fallback."""
+    return f"{ARCHIVES}{int(cik)}/{accession.replace('-', '')}/{accession}-index.{ext}"
 
 
 def parse_roles(html: str) -> list[tuple[int, str]]:
@@ -81,9 +82,13 @@ class RoleCache:
 
     def roles(self, accession: str, cik: int) -> list[tuple[int, str]] | None:
         if accession not in self.data:
-            status, html = self.fetch(index_url(cik, accession))
-            self.fetched += 1
-            pairs = parse_roles(html) if status == 200 else []
+            pairs: list[tuple[int, str]] = []
+            for ext in ("html", "htm"):
+                status, html = self.fetch(index_url(cik, accession, ext))
+                self.fetched += 1
+                pairs = parse_roles(html) if status == 200 else []
+                if pairs:
+                    break
             if not pairs:
                 self.unreadable += 1
                 return None

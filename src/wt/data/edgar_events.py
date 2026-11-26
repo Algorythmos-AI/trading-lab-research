@@ -52,8 +52,11 @@ SINCE = "2018-06-01"
 EIGHT_K = frozenset({"8-K", "8-K/A"})
 FORMS = frozenset({"SC TO-T", "SC TO-T/A", "SC TO-C", "SC 14D9", "SC14D9C", "PREM14A", "DEFM14A", "SC 13E3",
                    "425", "424B1", "424B2", "424B3", "424B4", "424B5"}) | EIGHT_K
-# SC TO-C and SC14D9C, the tender-offer announcement-day forms, were added by DEC-0081 point 4 (2026-11-26). A store
-# built before then lacks them: `events_meta.json` lists the forms a build kept, and readers check it.
+# SC TO-C and SC14D9C, the tender-offer announcement-day forms, were added by DEC-0081 point 4 (2026-11-26). Each
+# checkpoint records the forms it kept (a checkpoint without the field kept LEGACY_FORMS). A CIK whose checkpoint lacks
+# a form in FORMS is fetched again; `assemble` reads each CIK from its latest checkpoint only, and `events_meta.json`
+# lists the forms every such checkpoint kept, so a store with stale parts can never claim forms it does not hold.
+LEGACY_FORMS = FORMS - {"SC TO-C", "SC14D9C"}
 COLUMNS = ["cik", "ticker", "form", "items", "accepted_at_et", "filing_date", "accession", "entity"]
 ROW_COLUMNS = ["cik", "form", "items", "accepted_at_et", "filing_date", "accession", "entity"]   # before the ticker join
 COUNT_COLUMNS = ["cik", "year", "form", "n"]
@@ -175,12 +178,20 @@ def _checkpoints(parts: Path) -> list[Path]:
     return sorted(parts.glob("chunk-*.json"))
 
 
+def _cp_forms(cp: dict[str, Any]) -> frozenset[str]:
+    return frozenset(cp["forms"]) if "forms" in cp else LEGACY_FORMS
+
+
 def done_ciks(parts: Path = PARTS) -> set[int]:
-    """Every CIK a chunk checkpoint names as fetched ("ok" or "missing"); "failed" ones are retried."""
-    out: set[int] = set()
+    """Every CIK whose latest checkpoint fetched it ("ok" or "missing") with every form in FORMS kept; "failed" ones,
+    and ones fetched by a build that kept fewer forms, are fetched again."""
+    latest: dict[int, bool] = {}
     for p in _checkpoints(parts):
-        out.update(int(m["cik"]) for m in json.loads(p.read_text())["meta"] if m["status"] != "failed")
-    return out
+        cp = json.loads(p.read_text())
+        current = FORMS <= _cp_forms(cp)
+        for m in cp["meta"]:
+            latest[int(m["cik"])] = m["status"] != "failed" and current
+    return {c for c, ok in latest.items() if ok}
 
 
 def _concat(frames: list[pd.DataFrame], columns: list[str]) -> pd.DataFrame:
@@ -195,23 +206,36 @@ def _write_chunk(parts: Path, results: list[CikResult]) -> None:
     _atomic(parts / f"{stem}.rows.parquet", lambda t: rows.to_parquet(t, index=False))
     _atomic(parts / f"{stem}.counts.parquet", lambda t: counts.to_parquet(t, index=False))
     meta = [{**r.meta, "status": r.status} for r in results]
-    _atomic(parts / f"{stem}.json", lambda t: t.write_text(json.dumps({"meta": meta, "rows": len(rows)})))
+    text = json.dumps({"meta": meta, "rows": len(rows), "forms": sorted(FORMS)})
+    _atomic(parts / f"{stem}.json", lambda t: t.write_text(text))
 
 
 def assemble(ticker_map: pd.DataFrame, parts: Path = PARTS, out: Path = OUT) -> pd.DataFrame:
     """Join every checkpointed chunk to its tickers and write events, cik_meta and cik_form_years atomically.
 
-    A CIK fetched twice (failed, then retried) keeps its latest result."""
+    A CIK fetched twice (failed then retried, or re-fetched after FORMS grew) keeps its latest checkpoint only, rows
+    and counts included; the manifest lists the forms every checkpoint in use kept."""
     cps = _checkpoints(parts)
-    meta = pd.DataFrame([m for p in cps for m in json.loads(p.read_text())["meta"]])
+    docs = [json.loads(p.read_text()) for p in cps]
+    owner: dict[int, int] = {}                           # cik -> index of its latest checkpoint
+    for i, d in enumerate(docs):
+        for m in d["meta"]:
+            owner[int(m["cik"])] = i
+    meta = pd.DataFrame([m for i, d in enumerate(docs) for m in d["meta"] if owner[int(m["cik"])] == i])
     if meta.empty:
         meta = pd.DataFrame(columns=["cik", "status", "entity", "sec_tickers", "former_names"])
-    meta = meta.drop_duplicates("cik", keep="last")
     good = set(meta.loc[meta.status == "ok", "cik"].astype(int))
+    used = sorted(set(owner.values()))
+    forms = frozenset.intersection(*(_cp_forms(docs[i]) for i in used)) if used else frozenset()
     stems = [p.with_suffix("") for p in cps]
-    rows = _concat([pd.read_parquet(f"{s}.rows.parquet") for s in stems], ROW_COLUMNS)
-    counts = _concat([pd.read_parquet(f"{s}.counts.parquet") for s in stems], COUNT_COLUMNS)
+
+    def mine(df: pd.DataFrame, i: int) -> pd.DataFrame:
+        return df[df.cik.astype(int).map(owner).eq(i)]
+
+    rows = _concat([mine(pd.read_parquet(f"{stems[i]}.rows.parquet"), i) for i in used], ROW_COLUMNS)
+    counts = _concat([mine(pd.read_parquet(f"{stems[i]}.counts.parquet"), i) for i in used], COUNT_COLUMNS)
     rows = rows[rows.cik.astype(int).isin(good)].astype({"cik": "int64"}).drop_duplicates(["cik", "accession"])
+    rows = rows[rows.form.isin(forms)]
     counts = counts[counts.cik.astype(int).isin(good)].astype({"cik": "int64", "year": "int64", "n": "int64"})
     counts = counts.drop_duplicates(["cik", "year", "form"], keep="last")
     tick = (ticker_map[["ticker", "cik"]].drop_duplicates().astype({"cik": "int64"}).groupby("cik").ticker
@@ -223,7 +247,7 @@ def assemble(ticker_map: pd.DataFrame, parts: Path = PARTS, out: Path = OUT) -> 
             lambda t: meta.astype({"cik": "int64"}).reset_index(drop=True).to_parquet(t, index=False))
     _atomic(out.with_name("cik_form_years.parquet"), lambda t: counts.reset_index(drop=True).to_parquet(t, index=False))
     _atomic(out, lambda t: ev.to_parquet(t, index=False))
-    meta_text = json.dumps({"forms": sorted(FORMS), "since": SINCE, "rows": len(ev)}, indent=1) + "\n"
+    meta_text = json.dumps({"forms": sorted(forms), "since": SINCE, "rows": len(ev)}, indent=1) + "\n"
     _atomic(out.with_name("events_meta.json"), lambda t: t.write_text(meta_text))
     return ev
 

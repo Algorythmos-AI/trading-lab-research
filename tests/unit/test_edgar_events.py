@@ -237,3 +237,31 @@ def test_fetcher_gives_up_with_throttled() -> None:
     with pytest.raises(ee.Throttled):
         f("CIK0000000001.json")
     assert len(s.urls) == len(ee.BACKOFF) + 1
+
+
+def _legacy(parts: Path) -> None:
+    """Turn every checkpoint into one written before FORMS grew: no `forms` field, no announcement-form rows."""
+    for cp in sorted(parts.glob("chunk-*.json")):
+        doc = json.loads(cp.read_text())
+        doc.pop("forms", None)
+        cp.write_text(json.dumps(doc))
+        rows = Path(str(cp.with_suffix("")) + ".rows.parquet")
+        df = pd.read_parquet(rows)
+        df[~df.form.isin({"SC TO-C", "SC14D9C"})].to_parquet(rows, index=False)
+
+
+def test_stale_checkpoints_are_fetched_again_and_never_claim_new_forms(tmp_path: Path) -> None:
+    parts, out = tmp_path / "parts", tmp_path / "events.parquet"
+    ee.build(get=FakeGet(PAGES), ticker_map=MAP, parts=parts, out=out, chunk=1, log=lambda _: None)
+    assert ee.built_forms(out) == ee.FORMS
+    _legacy(parts)
+    assert ee.done_ciks(parts) == set()                       # every CIK's latest checkpoint kept too few forms
+    ee.assemble(MAP, parts, out)
+    assert ee.built_forms(out) == ee.LEGACY_FORMS             # the manifest says what the parts really hold
+    assert not ({"SC TO-C", "SC14D9C"} & set(pd.read_parquet(out).form))
+    get = FakeGet(PAGES)
+    ev = ee.build(get=get, ticker_map=MAP, parts=parts, out=out, chunk=1, log=lambda _: None)
+    assert get.calls and ev is not None                       # refetched
+    assert ee.built_forms(out) == ee.FORMS
+    assert {"SC TO-C", "SC14D9C"} <= set(ev.form)
+    assert ev.groupby("cik").size().to_dict() == {BIG: 5, SMALL: 9}   # each CIK from its latest checkpoint only

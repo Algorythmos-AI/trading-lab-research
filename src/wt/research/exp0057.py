@@ -121,9 +121,13 @@ def check_schema(obj: object, path: str = "") -> None:
             check_schema(v, path)
 
 
+_STATUS = re.compile(r"^\s*-?\s*\*\*Status:\s*([A-Za-z-]+)\b")
+
+
 def accepted(decision_text: str) -> bool:
-    """True when the record's status line reads ACCEPTED (DEC-0081: no count before acceptance)."""
+    """True only when the record's status line's value is exactly ACCEPTED (DEC-0081: no count before acceptance)."""
     for line in decision_text.splitlines():
-        if line.lstrip("- ").startswith("**Status:"):
-            return "ACCEPTED" in line.split(".")[0]
+        m = _STATUS.match(line)
+        if m:
+            return m.group(1) == "ACCEPTED"
     return False

@@ -151,7 +151,8 @@ def test_annotate_gives_one_row_per_pool_name_in_order() -> None:
 def test_parse_roles_reads_the_real_index_page_layout() -> None:
     assert parse_roles(INDEX_HTML) == [(OTHER, "Filed by"), (CIK, "Subject")]
     assert index_url(OTHER, "0001193125-22-275080") == (
-        "https://www.sec.gov/Archives/edgar/data/200406/000119312522275080/0001193125-22-275080-index.htm")
+        "https://www.sec.gov/Archives/edgar/data/200406/000119312522275080/0001193125-22-275080-index.html")
+    assert index_url(OTHER, "0001193125-22-275080", "htm").endswith("-index.htm")
 
 
 def test_role_cache_fetches_once_and_never_caches_an_unreadable_page(tmp_path: Path) -> None:
@@ -167,10 +168,17 @@ def test_role_cache_fetches_once_and_never_caches_an_unreadable_page(tmp_path: P
     assert rc.is_subject("0001193125-22-275080", OTHER) is False
     assert rc.is_subject("0000000000-00-000001", CIK) is None
     assert rc.is_subject("0000000000-00-000001", CIK) is None
-    assert len(calls) == 3 and rc.unreadable == 2
+    assert len(calls) == 5 and rc.unreadable == 2          # one good page; the bad one tries .html and .htm, twice
     rc.save()
     again = RoleCache(tmp_path / "roles.json", fetch)
-    assert again.is_subject("0001193125-22-275080", CIK) is True and len(calls) == 3
+    assert again.is_subject("0001193125-22-275080", CIK) is True and len(calls) == 5
+
+
+def test_role_cache_falls_back_to_the_htm_index_name(tmp_path: Path) -> None:
+    def fetch(url: str) -> tuple[int, str]:
+        return (200, INDEX_HTML) if url.endswith(".htm") else (404, "")
+
+    assert RoleCache(tmp_path / "roles.json", fetch).is_subject("0001193125-22-275080", CIK) is True
 
 
 # ---- the store manifest -------------------------------------------------------------------------------------------
@@ -233,10 +241,16 @@ def test_the_real_report_schema_is_counts_only() -> None:
     exp0057.check_schema(exp0057.measure([]))
 
 
-def test_accepted_reads_only_the_status_line() -> None:
-    assert not exp0057.accepted("- **Status: PROPOSED on 2026-11-26.** It is ACCEPTED by a later merge.")
-    assert exp0057.accepted("- **Status: ACCEPTED on 2026-11-27.** The owner merged it.")
-    assert not exp0057.accepted("no status line")
+@pytest.mark.parametrize("text,ok", [
+    ("- **Status: PROPOSED on 2026-11-26.** It is ACCEPTED by a later merge.", False),
+    ("- **Status: ACCEPTED on 2026-11-27.** The owner merged it.", True),
+    ("- **Status: NOT ACCEPTED on 2026-11-27.**", False),
+    ("- **Status: UNACCEPTED**", False),
+    ("- **Status: ACCEPTED-PENDING**", False),
+    ("no status line, ACCEPTED", False),
+])
+def test_accepted_compares_the_status_value_exactly(text: str, ok: bool) -> None:
+    assert exp0057.accepted(text) is ok
 
 
 def _script(name: str) -> Any:
