@@ -141,7 +141,7 @@ def test_the_clones_old_fills_in_the_hand_account_are_left_out_whatever_its_keys
 
 
 def test_the_account_is_the_clones_own_shared_or_unknown(tmp_path: Path) -> None:
-    assert build(tmp_path, [], {"APCA_OPTIONS_KEY_ID": "k", "APCA_OPTIONS_SECRET_KEY": "x"})["clone"]["own_account"] is False
+    assert build(tmp_path, [], {"APCA_OPTIONS_KEY_ID": "k", "APCA_OPTIONS_SECRET_KEY": "x"})["clone"]["own_account"] is None
     assert build(tmp_path, [], {})["clone"]["own_account"] is None
     assert build(tmp_path, [])["clone"]["trades"] == [] and paper_site.validate(build(tmp_path, [])) == []
 

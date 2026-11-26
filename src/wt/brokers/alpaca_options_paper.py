@@ -6,8 +6,10 @@ order it checks the environment again. It can
 buy to open and sell to close a single option contract with a limit, market or stop order, cancel an order and read
 orders and option positions. It never closes all positions, exercises, replaces or sends a multi-leg order.
 
-Keys: the clone's own account (`APCA_CLONE_KEY_ID` / `APCA_CLONE_SECRET_KEY`) when both are set, otherwise the
-second paper account (`APCA_OPTIONS_KEY_ID` / `APCA_OPTIONS_SECRET_KEY`), which the owner also trades by hand.
+Keys: the clone's own account only (`APCA_CLONE_KEY_ID` / `APCA_CLONE_SECRET_KEY`, "Clone options (host)",
+docs/runbooks/paper-accounts.md). The old fallback to the shared `APCA_OPTIONS_*` pair is gone: that account was
+deleted on 2026-11-20, and a clone that silently took whatever that pair named could trade in another desk's
+account. Without both CLONE keys the clone does not trade.
 
 Errors follow the Broker contract (wt.brokers.base): None from get_order only for "not found", TransportError when
 the outcome is unknown, BrokerRejected or DuplicateOrder when the broker refused.
@@ -37,7 +39,6 @@ _MAP = {"new": OrderStatus.ACCEPTED, "accepted": OrderStatus.ACCEPTED, "pending_
         "pending_replace": OrderStatus.ACCEPTED, "stopped": OrderStatus.ACCEPTED}
 TIMEOUT = (3.05, 10.0)         # connect, read (seconds)
 CLONE_KEYS = ("APCA_CLONE_KEY_ID", "APCA_CLONE_SECRET_KEY")
-SHARED_KEYS = ("APCA_OPTIONS_KEY_ID", "APCA_OPTIONS_SECRET_KEY")
 
 
 def _status(e: APIError) -> int | None:
@@ -48,13 +49,11 @@ def _status(e: APIError) -> int | None:
 
 
 def keys(environ: dict[str, str] | None = None) -> tuple[str, str, bool] | None:
-    """The key pair to trade with and whether the account is the clone's own, or None when neither pair is set."""
+    """The clone's own key pair, and True (the account is the clone's own), or None when the pair is not set.
+    `APCA_OPTIONS_*` is never used: a missing CLONE pair means no trading, not another account."""
     e = os.environ if environ is None else environ
-    for pair, own in ((CLONE_KEYS, True), (SHARED_KEYS, False)):
-        k, s = e.get(pair[0], "").strip(), e.get(pair[1], "").strip()
-        if k and s:
-            return k, s, own
-    return None
+    k, s = e.get(CLONE_KEYS[0], "").strip(), e.get(CLONE_KEYS[1], "").strip()
+    return (k, s, True) if k and s else None
 
 
 class AlpacaOptionsPaperBroker(Broker):

@@ -1,5 +1,10 @@
 # Stocks desk forensic audit, 8 October 2026
 
+> **Historical (point-in-time, 2026-10-08).** This audit describes the stocks desk before DEC-0069 retired the QQQ rule
+> (strategy B, job `paper-b`) on 2026-11-20. Nothing here is the current state: the stock desk now is Gap Hunter
+> (`paper-s`, `wt.live.runner_s`). Read [docs/operations/jobs.md](../operations/jobs.md) and the glossary
+> ([docs/reference/glossary.md](../reference/glossary.md)) for what runs today.
+
 Scope: why the stocks desk has placed no order, what the scanner sees, and what has to be true before learning is
 added. Code read at `630e6f1`. Host evidence was read by the owner on `trading-lab-host` on 8 October 2026 at
 10:22 UTC with three read-only commands (`make status`, `git rev-parse HEAD`, a counts-only tally of

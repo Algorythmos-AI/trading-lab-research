@@ -23,9 +23,9 @@ TYPED_MODULES := src/wt/research/b_audit.py src/wt/research/b_exec_audit.py src/
                  src/wt/options/regime.py src/wt/options/setups.py src/wt/options/chain.py src/wt/options/session.py \
                  src/wt/live/scan_s.py src/wt/live/setups_live.py src/wt/ops/backup.py src/wt/brokers/shadow.py src/wt/analytics/performance.py src/wt/analytics/forward_book.py src/wt/analytics/funnel_agreement.py src/wt/scanner/gap_hunter.py src/wt/scanner/quality.py \
                  src/wt/analytics/risk_view.py src/wt/analytics/ops_view.py src/wt/ops/audit.py src/wt/ops/control.py \
-                 src/wt/core/desk.py \
+                 src/wt/core/desk.py src/wt/data/news_archive.py src/wt/scanner/edgar_catalyst.py src/wt/data/edgar_roles.py src/wt/research/exp0057.py \
                  src/wt/brokers/alpaca_options_paper.py src/wt/oms/options.py src/wt/risk/options_guard.py \
-                 src/wt/live/runner_o.py src/wt/options/review.py \
+                 src/wt/live/runner_o.py src/wt/live/runner_s.py src/wt/options/review.py \
                  src/wt/options/clone_site.py \
                  src/wt/options/dryrun.py src/wt/options/variants.py src/wt/options/exp0037.py \
                  src/wt/options/pipeline_check.py src/wt/research/external_posts.py \
@@ -37,7 +37,7 @@ TYPED_MODULES := src/wt/research/b_audit.py src/wt/research/b_exec_audit.py src/
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
-.PHONY: seed-vm help bootstrap research-index lint typecheck restricted test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
+.PHONY: seed-vm help bootstrap research-index lint typecheck restricted test ci hooks status gate deploy rollback migrate-state sync-ml preflight publish-verify \
         uninstall-agents lease-break \
         watchdog-drill feed-watch-drill feed-agreement feed-agreement-recheck feed-agreement-summary feed-agreement-edition dashboard-deploy vm-deploy \
         agents-diff install-trading-agents install-dashboard-agent publish schema kill unkill reset-latch reset-latch-s evidence visibility keys-check
@@ -92,6 +92,9 @@ rollback: ## Back to a runtime-* tag: make rollback TAG=runtime-YYYYMMDD-N
 
 migrate-state: ## Move runtime files from tracked paths into var/ (gated, lossless)
 	$(PY) -m wt.ops.deploy migrate
+
+sync-ml: ## Finish an ML environment the deploy built but could not swap in (the deploy's pages name this)
+	$(PY) -m wt.ops.deploy sync-ml
 
 preflight: ## Run every job's preflight as its scheduler would (launchd's minimal environment; the unit's on Linux)
 	@if [ "$$(uname)" = Linux ]; then for j in routine paper-s forward weekly; do echo "== $$j"; \

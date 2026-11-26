@@ -337,9 +337,10 @@ def test_latches_are_durable_and_keyed(tmp_path):
 
 
 # ---------------------------------------------------------------- the account's keys
-def test_the_clones_own_account_is_preferred_then_the_shared_one():
+def test_the_clone_trades_only_with_its_own_account():
     both = {"APCA_CLONE_KEY_ID": "c", "APCA_CLONE_SECRET_KEY": "cs", "APCA_OPTIONS_KEY_ID": "o",
             "APCA_OPTIONS_SECRET_KEY": "os"}
     assert keys(both) == ("c", "cs", True)
-    assert keys({k: v for k, v in both.items() if "CLONE" not in k}) == ("o", "os", False)
+    # No fallback: the shared pair alone never reaches an order path (three-accounts rule, paper-accounts.md).
+    assert keys({k: v for k, v in both.items() if "CLONE" not in k}) is None
     assert keys({"APCA_CLONE_KEY_ID": "c"}) is None

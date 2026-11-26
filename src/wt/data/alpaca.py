@@ -3,7 +3,9 @@
 Free plan facts (verified 2026-09-27, see research/decisions/DEC-0003):
   * SIP historical bars back to 2016; the most recent 15 minutes are not permitted.
   * IEX historical bars start mid-2020.
-  * News (Benzinga) available back to at least 2019.
+  * News: Benzinga back to at least 2019 when checked in 2026-09. Since then (found 2026-11-19, confirmed by Alpaca
+    support on 2026-11-24, ticket 402305) the API serves only fiscal.ai items from 2026-04-29 on, for every plan, and
+    nothing earlier. wt.data.news_archive keeps a local copy from that day (DEC-0003 amendment of 2026-11-26).
 """
 from __future__ import annotations
 

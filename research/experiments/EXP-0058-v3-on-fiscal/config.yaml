@@ -1,0 +1,41 @@
+# EXP-0058: frozen with DEC-0082 before any headline in the frame is read. A changed value is a new experiment.
+experiment: EXP-0058
+decision: DEC-0082
+hypothesis: HYP-0075
+status: registered                  # PROPOSED with DEC-0082; nothing is sampled until it is accepted
+family: none                        # a measurement: no trial, no R, no P&L
+classifier:
+  file: config/catalysts_spec.yaml
+  version: 3
+  sha256: "96411f7a9016c3b8aee4ef2a6981a8c8bef9f6dd7943c6710fc6b2cf015d157f"                      # the sampler refuses any other file; no revision inside this experiment
+  decision_level: {qualifying: wt.scanner.catalyst.QUALIFYING, excluded: wt.scanner.catalyst.EXCLUDED, non_qualifying: everything else}
+frame:
+  sessions: ["2026-09-28", "2026-11-25"]      # post-holdout only (DEC-0010 holdout ends 2026-09-25); 43 sessions
+  names: the symbols of each session's pool, data/candidates/DATE.parquet (the 43 forward pools, as copied from the host)
+  items: private archive (trading-news-archive, alpaca-news/), items whose symbols include a pool name
+  window: {from: "16:00 New York, previous session", to: "09:25 New York, the session"}
+  time: created_at <= the 09:25 cut     # what the pool could see; later edits are ignored
+  dedupe: one item per (lower-cased, whitespace-collapsed headline, session); the lowest id is kept
+sample:
+  n: 100
+  seed: 5801
+  strata: v3 category of each item; up to 9 per category first, the rest at random from the remaining frame
+  headline_figure: the stratified sample's decision-level agreement (comparable with EXP-0015a's 84%)
+  reported_only: [exact-category agreement, population-weighted decision-level agreement, per-category confusion counts]
+labels:
+  agent_blind: every item, by the agent labeller, from the blind file only, before the key is opened
+  owner_blind: 30 items drawn at random by the same seed, labelled by the owner without seeing any other label
+  owner_review: every item where v3 and the best available label so far disagree at the decision level
+  precedence: [owner_review, owner_blind, agent_blind]
+labeller_check:                      # items where v3 and the agent agree reach no owner review, so shared errors would count as correct
+  measure: agent_blind vs owner_blind, decision level, on the 30 owner-blind items
+  min: 0.85                           # below it the mixed reference is not trusted
+  reported_with_verdict: v3 vs owner_blind on the same 30 items (an owner-only figure, Wilson 95%)
+verdict:
+  pass: decision-level agreement >= 0.85 on at least 80 items with a reference label, and the labeller check >= 0.85
+  fail: below 0.85 on at least 80 items, and the labeller check >= 0.85
+  not_decidable: fewer than 80 items with a reference label, or the labeller check below 0.85
+  interval: wilson_95                 # reported with the figure; the verdict reads the point figure, as CAT-01 did
+storage:                              # headlines are RESTRICTED (AGENTS.md); this repository is public
+  private: trading-news-archive/experiments/EXP-0058/ holds the blind file, the key, both label files and the review
+  public: this folder holds only item ids, sha256 sums of the private files, counts and the report (no headline text)
