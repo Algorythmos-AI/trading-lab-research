@@ -1,24 +1,32 @@
-"""A local archive of Alpaca news items (DEC-0003 amendment of 2026-11-26).
+"""The archive of Alpaca news items (DEC-0003 amendment of 2026-11-26).
 
 Alpaca dropped its Benzinga news history in 2026 (support ticket 402305, answered 2026-11-24): `/v1beta1/news` now
-returns only fiscal.ai items, the earliest dated 2026-04-29, and nothing before. News had only ever been read at run
-time, so no copy of the old history exists. This module keeps one of what the API serves now, so the next change of
-provider does not take the history with it.
+returns only fiscal.ai items, the earliest at 2026-04-29T02:31Z, and nothing before. News had only ever been read at
+run time, so no copy of the old history exists. This module keeps one of what the API serves now, so the next change
+of provider does not take the history with it.
 
-Layout under `root` (default `data/news`, git-ignored):
-  YYYY/MM/YYYY-MM-DD.parquet   one row per item whose `created_at` falls on that New York date
-  _done/YYYY-MM-DD.json        written last, only when every page of a finished day was read
+The copy lives in the PRIVATE repository `Algorythmos-AI/trading-news-archive`, cloned (git-ignored) at
+`data/archive/trading-news-archive` (`docs/runbooks/news-archive.md`). Headlines are RESTRICTED (AGENTS.md): they are
+never written to this repository, which is public, and this module never prints or logs them. `publish` refuses any
+remote other than that private repository.
+
+Layout under the clone (`ROOT_IN_REPO`):
+  alpaca-news/YYYY/MM/YYYY-MM-DD.jsonl   one JSON object per item whose `created_at` falls on that New York date,
+                                         keys in COLUMNS order, sorted by (created_at, id); byte-identical on a rerun
+  alpaca-news/_done/YYYY-MM-DD.json      written last, only when every page of a finished day was read; it carries
+                                         the day's item count and the sha256 of its file
 
 A day is fetched as one window (00:00 to 24:00 New York time, all symbols, ascending, 50 a page). Each item is filed
 under the New York date of its own `created_at`, so an item the API returns in a neighbouring window still lands on
 its own day. Files are merged by item id, keeping the copy with the latest `updated_at`, and written atomically.
-Headlines are RESTRICTED (AGENTS.md): this module stores them and never prints or logs them.
 """
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import os
+import subprocess
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import Any
@@ -26,18 +34,24 @@ from typing import Any
 import pandas as pd
 
 from wt.core.clock import ET, et, to_utc_iso
+from wt.core.config import DATA_DIR
 
 NEWS_URL = "https://data.alpaca.markets/v1beta1/news"
 FIRST_DAY = dt.date(2026, 4, 28)          # New York date of the earliest item, 2026-04-29T02:31:18Z (22:31 ET)
 COLUMNS = ["id", "created_at", "updated_at", "symbols", "headline", "source", "url"]
 PAGE = 50
-MAX_PAGES = 2000                          # 100,000 items in one day: far above the ~2,000 seen; a loop guard
+MAX_PAGES = 2000                          # 100,000 items in one day: far above the ~7,600 seen; a loop guard
+ARCHIVE_REPO = "Algorythmos-AI/trading-news-archive"
+CLONE = DATA_DIR / "archive" / "trading-news-archive"
+ROOT_IN_REPO = "alpaca-news"
+DEFAULT_ROOT = CLONE / ROOT_IN_REPO
 
 Getter = Callable[[str, dict[str, Any]], Any]
+Row = dict[str, Any]
 
 
 class ArchiveError(RuntimeError):
-    """A day could not be read in full; nothing is marked done for it."""
+    """A day could not be read in full, or the archive cannot be published safely; nothing is marked or pushed."""
 
 
 def day_window(day: dt.date) -> tuple[str, str]:
@@ -46,12 +60,16 @@ def day_window(day: dt.date) -> tuple[str, str]:
     return to_utc_iso(et(day, "00:00")), to_utc_iso(et(nxt, "00:00"))
 
 
+def _utc(ts: str) -> pd.Timestamp:
+    return pd.Timestamp(ts).tz_convert("UTC") if pd.Timestamp(ts).tzinfo else pd.Timestamp(ts).tz_localize("UTC")
+
+
 def et_date(ts: str) -> dt.date:
-    d: dt.date = pd.Timestamp(ts).tz_convert(ET).date()
+    d: dt.date = _utc(ts).tz_convert(ET).date()
     return d
 
 
-def _row(item: Mapping[str, Any]) -> dict[str, Any]:
+def _row(item: Mapping[str, Any]) -> Row:
     if not isinstance(item, Mapping) or item.get("id") is None or not item.get("created_at"):
         raise ArchiveError("a news item without an id or a created_at")
     syms = item.get("symbols") or []
@@ -59,16 +77,16 @@ def _row(item: Mapping[str, Any]) -> dict[str, Any]:
         raise ArchiveError("a news item whose symbols are not a list")
     return {"id": int(item["id"]), "created_at": str(item["created_at"]),
             "updated_at": str(item.get("updated_at") or item["created_at"]),
-            "symbols": ",".join(str(s) for s in syms), "headline": str(item.get("headline") or ""),
+            "symbols": [str(s) for s in syms], "headline": str(item.get("headline") or ""),
             "source": str(item.get("source") or ""), "url": str(item.get("url") or "")}
 
 
-def fetch_day(get: Getter, day: dt.date) -> tuple[list[dict[str, Any]], int]:
+def fetch_day(get: Getter, day: dt.date) -> tuple[list[Row], int]:
     """Every item of one New York day, all pages. Raises ArchiveError on a malformed answer or a runaway loop."""
     start, end = day_window(day)
     params: dict[str, Any] = {"start": start, "end": end, "limit": PAGE, "sort": "asc",
                               "include_content": "false"}
-    rows: list[dict[str, Any]] = []
+    rows: list[Row] = []
     seen_tokens: set[str] = set()
     for pages in range(1, MAX_PAGES + 1):
         body = get(NEWS_URL, dict(params))
@@ -86,56 +104,62 @@ def fetch_day(get: Getter, day: dt.date) -> tuple[list[dict[str, Any]], int]:
 
 
 def day_path(root: Path, day: dt.date) -> Path:
-    return root / f"{day:%Y}" / f"{day:%m}" / f"{day.isoformat()}.parquet"
+    return root / f"{day:%Y}" / f"{day:%m}" / f"{day.isoformat()}.jsonl"
 
 
 def marker_path(root: Path, day: dt.date) -> Path:
     return root / "_done" / f"{day.isoformat()}.json"
 
 
-def _atomic(path: Path, write: Callable[[Path], None]) -> None:
+def _atomic(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.tmp{os.getpid()}")
     try:
-        write(tmp)
+        tmp.write_bytes(data)
         os.replace(tmp, path)
     finally:
         if tmp.exists():
             tmp.unlink()
 
 
-def read_day(root: Path, day: dt.date) -> pd.DataFrame:
+def encode(rows: Iterable[Row]) -> bytes:
+    return "".join(json.dumps({k: r[k] for k in COLUMNS}, ensure_ascii=False, separators=(",", ":")) + "\n"
+                   for r in rows).encode("utf-8")
+
+
+def read_day(root: Path, day: dt.date) -> list[Row]:
     p = day_path(root, day)
-    return pd.read_parquet(p) if p.exists() else pd.DataFrame(columns=COLUMNS)
+    if not p.exists():
+        return []
+    return [json.loads(line) for line in p.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-def merge(old: pd.DataFrame, new: Iterable[dict[str, Any]]) -> pd.DataFrame:
+def load(root: Path, start: dt.date, end: dt.date) -> pd.DataFrame:
+    """Every archived item created from `start` to `end` (New York dates, inclusive), as one frame."""
+    rows = [r for d in days(start, end) for r in read_day(root, d)]
+    return pd.DataFrame(rows, columns=COLUMNS)
+
+
+def merge(old: Iterable[Row], new: Iterable[Row]) -> list[Row]:
     """Union by id; for a repeated id the copy with the latest updated_at wins (the newest edit)."""
-    add = pd.DataFrame(list(new), columns=COLUMNS)
-    frames = [f for f in (old, add) if len(f)]
-    if not frames:
-        return pd.DataFrame(columns=COLUMNS)
-    df = pd.concat(frames, ignore_index=True)
-    df["_u"] = pd.to_datetime(df["updated_at"], utc=True)
-    df = df.sort_values(["id", "_u"]).drop_duplicates("id", keep="last").drop(columns="_u")
-    df["_c"] = pd.to_datetime(df["created_at"], utc=True)
-    return df.sort_values(["_c", "id"]).drop(columns="_c").reset_index(drop=True)[COLUMNS]
+    best: dict[int, Row] = {}
+    for r in [*old, *new]:
+        cur = best.get(r["id"])
+        if cur is None or _utc(r["updated_at"]) >= _utc(cur["updated_at"]):
+            best[r["id"]] = r
+    return sorted(best.values(), key=lambda r: (_utc(r["created_at"]), r["id"]))
 
 
-def store(root: Path, rows: Iterable[dict[str, Any]]) -> dict[dt.date, int]:
+def store(root: Path, rows: Iterable[Row]) -> dict[dt.date, int]:
     """File rows under the New York date of their created_at, merged into what is there. Returns rows per day."""
-    by_day: dict[dt.date, list[dict[str, Any]]] = {}
+    by_day: dict[dt.date, list[Row]] = {}
     for r in rows:
         by_day.setdefault(et_date(r["created_at"]), []).append(r)
     counts: dict[dt.date, int] = {}
     for d, rs in sorted(by_day.items()):
-        df = merge(read_day(root, d), rs)
-
-        def write(p: Path, df: pd.DataFrame = df) -> None:
-            df.to_parquet(p, index=False)
-
-        _atomic(day_path(root, d), write)
-        counts[d] = len(df)
+        merged = merge(read_day(root, d), rs)
+        _atomic(day_path(root, d), encode(merged))
+        counts[d] = len(merged)
     return counts
 
 
@@ -148,16 +172,14 @@ def archive_day(get: Getter, root: Path, day: dt.date, now: dt.datetime) -> dict
     (counts only). A day still running (today, or later) is stored but never marked done."""
     rows, pages = fetch_day(get, day)
     store(root, rows)
+    p = day_path(root, day)
     finished = now.astimezone(ET).date() > day
     info: dict[str, Any] = {"day": day.isoformat(), "items_fetched": len(rows), "pages": pages,
-                            "items_on_day": len(read_day(root, day)), "complete": finished,
-                            "fetched_at": to_utc_iso(now)}
+                            "items_on_day": len(read_day(root, day)),
+                            "sha256": hashlib.sha256(p.read_bytes()).hexdigest() if p.exists() else None,
+                            "complete": finished, "fetched_at": to_utc_iso(now)}
     if finished:
-        text = json.dumps(info, sort_keys=True)
-        def write(p: Path) -> None:
-            p.write_text(text)
-
-        _atomic(marker_path(root, day), write)
+        _atomic(marker_path(root, day), (json.dumps(info, sort_keys=True, indent=1) + "\n").encode())
     return info
 
 
@@ -175,3 +197,32 @@ def catch_up_range(now: dt.datetime, n: int) -> tuple[dt.date, dt.date]:
     """The last n finished New York days, never before FIRST_DAY."""
     yesterday = now.astimezone(ET).date() - dt.timedelta(days=1)
     return max(FIRST_DAY, yesterday - dt.timedelta(days=n - 1)), yesterday
+
+
+# ---- publishing to the private archive repository --------------------------------------------------------------------
+Runner = Callable[[list[str], Path], str]
+
+
+def _git(args: list[str], cwd: Path) -> str:
+    return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout
+
+
+def check_remote(url: str) -> None:
+    """Refuse every remote but the private archive repository (the headlines must never reach a public one)."""
+    tail = url.strip().removesuffix(".git").removesuffix("/")
+    if not (tail.endswith(f"github.com/{ARCHIVE_REPO}") or tail.endswith(f"github.com:{ARCHIVE_REPO}")):
+        raise ArchiveError("the archive's origin is not the private archive repository; nothing pushed")
+
+
+def publish(clone: Path, message: str, run: Runner = _git) -> bool:
+    """Commit the archive folder in the clone and push it. Returns False when there was nothing to commit."""
+    if not (clone / ".git").exists():
+        raise ArchiveError("no clone of the archive repository there (docs/runbooks/news-archive.md)")
+    check_remote(run(["remote", "get-url", "origin"], clone))
+    run(["add", "--", ROOT_IN_REPO], clone)
+    if not run(["status", "--porcelain", "--", ROOT_IN_REPO], clone).strip():
+        return False
+    run(["-c", "user.name=skalaliya", "-c", "user.email=skalaliya@gmail.com", "commit", "-q", "-m", message], clone)
+    run(["pull", "-q", "--rebase", "origin", "main"], clone)     # another writer (the host) may have pushed first
+    run(["push", "-q", "origin", "HEAD:main"], clone)
+    return True

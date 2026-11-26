@@ -28,6 +28,7 @@ One page per incident or task. Each starts with how you'll notice it. Every job 
 | [The board's stock feed](board-feed.md) | Switching the owner's board between the IEX and SIP feeds, checking it, switching back (DEC-0050) |
 | [Feed agreement, IEX against SIP](feed-agreement.md) | You want to compare the board on the two stock feeds after a session, or read five sessions together |
 | [Keys and feeds](keys-and-feeds.md) | The Alpaca plan changed or lapsed, a tool answers 401, or a new market-data request is being added |
+| [News archive](news-archive.md) | You need past news items, an archive run printed FAILED, or Alpaca changed its news provider again (the private `trading-news-archive` repository) |
 | [Engine identity check over logged sessions](engine-identity-sessions.md) | A release changes the engine label: run the last 10 logged sessions through the old and the new engine first |
 | [EXP-0034's one read](exp0034-read.md) | EXP-0034 has 100 scored breaks in group a, or its close date has come |
 
