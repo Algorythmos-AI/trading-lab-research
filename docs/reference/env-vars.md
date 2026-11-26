@@ -53,7 +53,7 @@ reads through a variable (for example a key pair chosen per desk) are listed her
 |---|---|---|
 | `GH_TOKEN` | `ops/ci.py` (reads the checks), `ops/alerts.py` | Host secrets |
 | `GITHUB_TOKEN` | `ops/ci.py`, `ops/alerts.py`, as a fallback name | GitHub Actions; not passed on the host |
-| `WT_REQUIRED_CHECKS` | `ops/ci.py`: the checks an owner's deploy requires, default `test` | By hand, owner |
+| `WT_REQUIRED_CHECKS` | `ops/ci.py`: the checks an owner's deploy requires, default `test,dashboard-gate` | By hand, owner |
 | `WT_DEPLOY_CI_OVERRIDE` | `ops/deploy.py`: the owner deploys a commit whose checks can't be read, giving a reason | By hand, owner, one deploy |
 | `WT_DASHBOARD_GUARD_OVERRIDE` | `ops/dashguard.py`: the owner passes the dashboard guard, giving a reason | By hand, owner, one deploy |
 

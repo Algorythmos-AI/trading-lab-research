@@ -37,7 +37,7 @@ TYPED_MODULES := src/wt/research/b_audit.py src/wt/research/b_exec_audit.py src/
 JOB_PATH := /opt/homebrew/bin:$(HOME)/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 .DEFAULT_GOAL := help
-.PHONY: seed-vm help bootstrap research-index lint typecheck restricted test ci hooks status gate deploy rollback migrate-state preflight publish-verify \
+.PHONY: seed-vm help bootstrap research-index lint typecheck restricted test ci hooks status gate deploy rollback migrate-state sync-ml preflight publish-verify \
         uninstall-agents lease-break \
         watchdog-drill feed-watch-drill feed-agreement feed-agreement-recheck feed-agreement-summary feed-agreement-edition dashboard-deploy vm-deploy \
         agents-diff install-trading-agents install-dashboard-agent publish schema kill unkill reset-latch reset-latch-s evidence visibility keys-check
@@ -92,6 +92,9 @@ rollback: ## Back to a runtime-* tag: make rollback TAG=runtime-YYYYMMDD-N
 
 migrate-state: ## Move runtime files from tracked paths into var/ (gated, lossless)
 	$(PY) -m wt.ops.deploy migrate
+
+sync-ml: ## Finish an ML environment the deploy built but could not swap in (the deploy's pages name this)
+	$(PY) -m wt.ops.deploy sync-ml
 
 preflight: ## Run every job's preflight as its scheduler would (launchd's minimal environment; the unit's on Linux)
 	@if [ "$$(uname)" = Linux ]; then for j in routine paper-s forward weekly; do echo "== $$j"; \
