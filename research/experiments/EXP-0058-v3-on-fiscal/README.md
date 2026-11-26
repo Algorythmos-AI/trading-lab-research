@@ -1,7 +1,7 @@
 # EXP-0058: does classifier v3 read fiscal.ai headlines as well as it read Benzinga?
 
-- **Records:** decision DEC-0082 and hypothesis HYP-0075, both PROPOSED on 2026-11-27. This is a measurement, not a
-  trial: no family, no R, no P&L.
+- **Records:** decision DEC-0082 (ACCEPTED on 2026-11-27) and hypothesis HYP-0075 (pre-registered on 2026-11-27).
+  This is a measurement, not a trial: no family, no R, no P&L.
 - **Frozen:** `config.yaml`, together with DEC-0082, before any headline in the frame is read. A changed value is a
   new experiment.
 - **Why:** since 2026-04-29 the only news Alpaca serves is fiscal.ai (DEC-0081). DEC-0068's live funnel reads that

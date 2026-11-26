@@ -1,7 +1,8 @@
 # DEC-0082: measure classifier v3 on fiscal.ai headlines before relying on it further
 
-- **Status: PROPOSED on 2026-11-27.** The owner accepts it by merging a pull request that changes this line to
-  ACCEPTED. Until then, nothing in EXP-0058 is sampled or labelled.
+- **Status: ACCEPTED on 2026-11-27.** The owner accepted it by merging the pull request that changed this line
+  from PROPOSED (2026-11-27), with the owner readings as set below. The sampler and scorer come next, in their own
+  pull request (point 9); nothing in EXP-0058 is sampled or labelled before that pull request merges.
 - **What it settles:**
   - how v3's accuracy on the news source DEC-0068 now reads is measured;
   - what each outcome does.
