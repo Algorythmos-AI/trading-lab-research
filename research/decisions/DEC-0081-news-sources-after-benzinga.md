@@ -117,3 +117,33 @@
 - **fiscal.ai.** Daily item counts from 2026-04-28 to 2026-11-25 and the `source` field. No headline was read for
   this record.
 - **Not seen:** any agreement figure between EDGAR and headlines, any 2019–2025 Gap Hunter count, any R.
+
+## Dated notes
+
+### 2026-11-26: phase 1 closes the EDGAR proxy; phase 2 is not run (owner's note)
+
+EXP-0057 phase 1 ran once (#685). The report is `phase1_report.json` and `.md`.
+
+- **The frozen rule's reading is not_decidable.** Buyout recall rested on 14 name-days, below the minimum of 20.
+- **The owner reads the earnings half as decisive.** Earnings recall was 74.5% (536 of 719), with a Wilson 95%
+  interval of 71.2% to 77.6%. The whole interval lies below 0.80, on 36 times the minimum n. The hypothesis needs both
+  halves to reach 0.80, so no number of further buyout name-days could make it pass.
+- **The buyout half gives no reason to hope either.** The proxy found 3 of v3's 14 buyout name-days (21.4%), and 3 of
+  the 35 it marked as buyouts were buyouts to v3 (8.6%).
+- **The secondary comparison on the Benzinga pools** (2018-12 and 2025-09, reported only) had too few cases to read.
+
+What follows:
+
+1. **Phase 2 is not run, and the proxy is not used for DEC-0068.** This is the outcome point 6 gives a fail. HYP-0074
+   is marked falsified on the earnings half.
+2. **DEC-0068's line stands.** "This rule cannot be checked on 2019 to 2025" still holds. Its evidence stays the
+   forward paper sessions.
+3. **The rest of this record stands.**
+   - fiscal.ai remains the forward source (points 1–3).
+   - The private archive keeps running.
+   - The EDGAR event store stays in `data/edgar` as data.
+4. **A later proxy needs a new record.** Any changed table, window or threshold is a new HYP and EXP, registered
+   before any count. This note proposes none.
+5. **What this run suggests, not tested.** The median earnings filing came 74 minutes before the first qualifying
+   headline. Some of the misses may therefore be timing rather than coverage. A new record would have to test that
+   before it is relied on.
