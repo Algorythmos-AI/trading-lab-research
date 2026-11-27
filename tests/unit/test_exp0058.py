@@ -237,6 +237,10 @@ def _world(tmp: Path, status: str = "ACCEPTED") -> dict[str, Path]:
     return {"data": data, "archive": archive, "private": priv, "public": pub, "decision": dec}
 
 
+def _slots(w: dict[str, Path], who: str = "owner") -> None:
+    (w["private"] / "owner_slots.json").write_text(json.dumps({"filled_by": who}))
+
+
 def _args(w: dict[str, Path], *keys: str) -> list[str]:
     return [a for k in keys for a in (f"--{k}", str(w[k]))]
 
@@ -273,6 +277,7 @@ def test_sample_then_score_end_to_end(tmp_path: Path, capsys: pytest.CaptureFixt
     sampler, scorer = _script("exp0058_sample"), _script("exp0058_score")
     assert sampler.main(_args(w, *SAMPLE_KEYS)) == 0
     assert sampler.main(_args(w, *SAMPLE_KEYS)) == 2                      # drawn once
+    _slots(w)
     manifest = json.loads((w["public"] / "sample_manifest.json").read_text())
     text = (w["public"] / "sample_manifest.json").read_text()
     assert manifest["sample_n"] == 100 and len(manifest["owner_blind_ids"]) == 30
@@ -334,6 +339,7 @@ def test_publish_commits_only_the_named_folder(tmp_path: Path) -> None:
 def test_a_bad_label_is_refused_before_anything_is_locked(tmp_path: Path) -> None:
     w = _world(tmp_path)
     assert _script("exp0058_sample").main(_args(w, *SAMPLE_KEYS)) == 0
+    _slots(w)
     _rewrite(w["private"] / "agent_labels.csv", "agent_label", lambda r: "none")
     _rewrite(w["private"] / "owner_blind.csv", "owner_label", lambda r: "earnings")   # not a spec category
     assert _script("exp0058_score").main(_args(w, "private", "public")) == 2
@@ -343,6 +349,7 @@ def test_a_bad_label_is_refused_before_anything_is_locked(tmp_path: Path) -> Non
 def test_a_resaved_label_file_with_crlf_is_not_a_change(tmp_path: Path) -> None:
     w = _world(tmp_path)
     assert _script("exp0058_sample").main(_args(w, *SAMPLE_KEYS)) == 0
+    _slots(w)
     _rewrite(w["private"] / "agent_labels.csv", "agent_label", lambda r: "none")
     _rewrite(w["private"] / "owner_blind.csv", "owner_label", lambda r: "none")
     scorer = _script("exp0058_score")
@@ -350,3 +357,32 @@ def test_a_resaved_label_file_with_crlf_is_not_a_change(tmp_path: Path) -> None:
     p = w["private"] / "owner_blind.csv"
     p.write_bytes(p.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
     assert scorer.main(_args(w, "private", "public")) == 0
+
+
+def test_the_report_names_who_filled_the_owner_slots_and_lists_checksums_safely(tmp_path: Path) -> None:
+    w = _world(tmp_path)
+    assert _script("exp0058_sample").main(_args(w, *SAMPLE_KEYS)) == 0
+    key = {r["item_id"]: r["v3_category"] for r in csv.DictReader(open(w["private"] / "sample_key.csv"))}
+    _rewrite(w["private"] / "agent_labels.csv", "agent_label", lambda r: key[r["item_id"]])
+    _rewrite(w["private"] / "owner_blind.csv", "owner_label", lambda r: key[r["item_id"]])
+    _slots(w, "an independent expert agent")
+    assert _script("exp0058_score").main([*_args(w, "private", "public"), "--final"]) == 0
+    rep = json.loads((w["public"] / "report.json").read_text())
+    assert rep["owner_slots_filled_by"] == "an independent expert agent"
+    assert "owner_only" not in rep and "v3_vs_owner_slot" in rep
+    assert set(rep["reference_sources"]) <= {"owner_slot_review", "owner_slot_blind", "agent_blind"}
+    assert rep["labeller_check_compares"] == "agent_blind vs owner slot (an independent expert agent)"
+    assert "an independent expert agent" in (w["public"] / "report.md").read_text()
+    assert {f["file"] for f in rep["private_files"]} >= {"sample_key.csv", "owner_blind.csv"}
+    assert '_key.csv": "' not in (w["public"] / "report.json").read_text()
+
+
+def test_the_scorer_refuses_without_saying_who_filled_the_owner_slots(tmp_path: Path) -> None:
+    w = _world(tmp_path)
+    assert _script("exp0058_sample").main(_args(w, *SAMPLE_KEYS)) == 0
+    _rewrite(w["private"] / "agent_labels.csv", "agent_label", lambda r: "none")
+    _rewrite(w["private"] / "owner_blind.csv", "owner_label", lambda r: "none")
+    assert _script("exp0058_score").main(_args(w, "private", "public")) == 2
+    assert not (w["private"] / "labels_lock.json").exists()
+    _slots(w, " ")
+    assert _script("exp0058_score").main(_args(w, "private", "public")) == 2

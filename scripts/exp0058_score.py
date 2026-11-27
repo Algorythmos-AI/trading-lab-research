@@ -55,13 +55,15 @@ def _pct(s: dict[str, Any]) -> str:
 
 
 def markdown(rep: dict[str, Any]) -> str:
+    who = rep["owner_slots_filled_by"]
     lines = [
         "# EXP-0058 report: classifier v3 on fiscal.ai headlines", "",
         f"- **Verdict:** **{rep['verdict']}** (DEC-0082 point 6: pass at >= {x.TARGET:.0%} on >= {x.MIN_LABELLED} "
         f"labelled items, with the labeller check >= {x.LABELLER_MIN:.0%}).",
         f"- **Decision-level agreement (the figure):** {_pct(rep['decision_level'])}.",
-        f"- **Labeller check (agent vs owner, the {x.OWNER_BLIND} owner-blind items):** {_pct(rep['labeller_check'])}.",
-        f"- **v3 vs owner alone (the same items):** {_pct(rep['owner_only'])}.",
+        f"- **Owner slots (blind labels and rulings) filled by:** {who}.",
+        f"- **Labeller check (agent vs {who}, the {x.OWNER_BLIND} owner-blind items):** {_pct(rep['labeller_check'])}.",
+        f"- **v3 vs {who} alone (the same items):** {_pct(rep['v3_vs_owner_slot'])}.",
         "- **Reference labels:** " + ", ".join(f"{k} {v}" for k, v in sorted(rep["reference_sources"].items())) + ".",
         "", "Reported only:", "",
         f"- exact-category agreement: {_pct(rep['exact_category'])};",
@@ -105,6 +107,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"EXP-0058: v3 no longer gives the key's category on {len(drift)} items; refused")
         return 2
 
+    slots = a.private / "owner_slots.json"      # who filled the owner's slots (DEC-0082 owner note 2026-11-27)
+    filled_by = str(json.loads(slots.read_text()).get("filled_by", "")).strip() if slots.exists() else ""
+    if not filled_by:
+        print('EXP-0058: owner_slots.json must say who filled the owner slots ({"filled_by": "owner"} if he did); '
+              "nothing scored")
+        return 2
     agent = _labels(_read(a.private / "agent_labels.csv"), "agent_label")
     owner_ids = list(manifest["owner_blind_ids"])
     owner_blind = _labels(_read(a.private / "owner_blind.csv"), "owner_label")
@@ -151,6 +159,12 @@ def main(argv: list[str] | None = None) -> int:
 
     population = manifest["frame_by_category"]
     rep = x.score(key, population, agent, owner_ids, owner_blind, review)
+    # The JSON names the slots by role, not by person, and says who filled them (Codex on #692).
+    rep["owner_slots_filled_by"] = filled_by
+    rep["v3_vs_owner_slot"] = rep.pop("owner_only")
+    rep["labeller_check_compares"] = f"agent_blind vs owner slot ({filled_by})"
+    rep["reference_sources"] = {(f"owner_slot_{k[len('owner_'):]}" if k.startswith("owner_") else k): v
+                                for k, v in rep["reference_sources"].items()}
     print(json.dumps({"complete": rep["complete"], "missing": rep["missing"], "labelled_n": rep["labelled_n"]}))
     if a.publish:
         na.publish(na.CLONE, "EXP-0058: labels and owner review", folder=PRIVATE_IN_REPO)
@@ -163,8 +177,9 @@ def main(argv: list[str] | None = None) -> int:
     if done:
         print(f"EXP-0058: the report was written once ({', '.join(done)} exist); a re-run needs a new EXP id")
         return 2
-    rep["private_sha256"] = {f: x.sha256(a.private / f) for f in
-                             ("sample_blind.csv", "sample_key.csv", *LOCKED, "owner_review.csv")}
+    # A list of {file, sha256}: a "<name>_key.csv": "<hex>" pair reads as a secret to gitleaks.
+    rep["private_files"] = [{"file": f, "sha256": x.sha256(a.private / f)} for f in
+                            ("sample_blind.csv", "sample_key.csv", *LOCKED, "owner_review.csv")]
     x.check_public(rep)
     (a.public / "report.json").write_text(json.dumps(rep, indent=1) + "\n")
     (a.public / "report.md").write_text(markdown(rep))

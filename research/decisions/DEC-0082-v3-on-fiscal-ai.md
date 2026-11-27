@@ -101,3 +101,40 @@
   - any fiscal.ai headline text, for this record or EXP-0057;
   - any v3 category tally for this frame;
   - any accuracy figure for v3 on fiscal.ai.
+
+## Dated notes
+
+### 2026-11-27: the owner hands his labelling slots to an independent expert agent (owner's note)
+
+The owner did not label the 30 owner-blind items. On 2026-11-27 he asked for an independent expert agent to fill the
+owner's slots in point 4, and the agent labeller set one up. This note records the change before any label is
+compared with v3.
+
+- **What changes:**
+  - **Owner blind:** the 30 owner-blind items are labelled by an independent expert agent.
+    - It was started fresh, with no access to the agent labeller's labels, v3's output, the key or the keyword file.
+    - It saw only the 30 items, a category guide and the owner's own EXP-0015a labels and rulings, which were its
+      calibration.
+  - **Owner review:** the rulings on disagreements are made by an expert agent, which sees each item's v3 category
+    and best label, as the owner would.
+  - **The report:** `owner_slots.json` in the private folder says who filled the slots, and the scorer refuses to
+    score without it. The report names the filler, and its JSON fields name the slots by role (`v3_vs_owner_slot`,
+    `owner_slot_blind`, `owner_slot_review`), not as the owner's.
+- **What this costs:**
+  - **The labeller check no longer bounds shared error as point 5 intended.** It now compares two AI labellers. An
+    error both make, such as one from the same model family or from the category guide, which the agent labeller
+    wrote, passes unseen. It still catches errors the two do not share.
+  - **v3 against the expert alone** is an agent-only figure, not an owner figure.
+- **How the verdict is read:** the thresholds in point 6 are unchanged.
+  - **What is added:** the result is reported as **agent-referenced**. A pass or a fail does not carry the owner's
+    reading.
+  - **DEC-0068:** the dated note it gets under point 7 says so.
+  - **Upgrading the result:** the owner may still rule on any item himself, and a later record may ask him to label
+    the 30.
+- **One input error, corrected:** the expert's first input file was cut wrongly by the agent labeller, which
+  truncated three headlines that contain commas (F022, F029, F049). The expert found the fault itself. It then
+  relabelled from a corrected file that was checked against the source; no label changed.
+- **Where its labels are:** `expert_blind_labels.csv` in the private folder. They are copied into the owner-blind
+  slot only after this note is merged.
+- **Disclosure:** the agent labeller labelled all 100 items before this note (private repository commit cd622dc). No
+  label has been compared with v3's category, and the key has not been opened.
