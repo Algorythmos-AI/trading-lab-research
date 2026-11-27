@@ -159,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
 
     population = manifest["frame_by_category"]
     rep = x.score(key, population, agent, owner_ids, owner_blind, review)
-    # The JSON names the slots by role, not by person, and says who filled them (Codex on #692).
+    # The JSON names the slots by role, not by person, and says who filled them (review of #692).
     rep["owner_slots_filled_by"] = filled_by
     rep["v3_vs_owner_slot"] = rep.pop("owner_only")
     rep["labeller_check_compares"] = f"agent_blind vs owner slot ({filled_by})"
