@@ -64,8 +64,8 @@
   - agent blind: 60 items;
   - the expert's blind labels: 25;
   - the expert's rulings: 15.
-  - The 60 agent-only references had no second reading. The labeller check bounds that risk; it does not remove
-    it.
+  - The 60 agent-only references had no second reading. The labeller check compares two AI labellers, so it
+    only detects their disagreements. It cannot bound an error they share, and those 60 items stay exposed to one.
 - **Reported only:**
   - exact-category agreement: 79.0%;
   - population-weighted decision-level agreement: 92.2%.
