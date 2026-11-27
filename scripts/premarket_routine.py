@@ -65,6 +65,18 @@ def wait_until(d: dt.date, hhmm: str, replay: bool) -> None:
         time.sleep(min(60, (et(d, hhmm) - now).total_seconds()))
 
 
+def is_session(d: dt.date, client=None) -> bool:
+    """Whether d is a US session, asked before the 07:55 wait. The job gives a non-session only 15 minutes
+    (wt.ops.jobs.deadline_for), so waiting first turned every market holiday into a timeout alert. If the calendar
+    cannot be read, say yes: run() then asks again after the wait, as it always did."""
+    try:
+        a = client or AlpacaREST(per_minute=30, shared=True)
+        cal = a.calendar((d - dt.timedelta(days=10)).isoformat(), d.isoformat())
+        return d in set(cal.date)
+    except Exception:  # noqa: BLE001 — a calendar fault must not cost a real session
+        return True
+
+
 def spec_cands(pool: pd.DataFrame) -> list[SpecCandidate]:
     return [SpecCandidate(symbol=r.symbol, price=r.price_0925, gap_pct=r.gap_pct, pm_volume=r.pm_volume, rvol_pm=r.rvol_pm,
                           float_shares=None if pd.isna(r.float_shares) else r.float_shares, catalyst_status=r.catalyst_status,
@@ -263,6 +275,9 @@ if __name__ == "__main__":
         day, feed, replay = dt.date.fromisoformat(args.replay), args.feed or "sip", True
     else:
         day, feed, replay = dt.datetime.now(ET).date(), args.feed or "hybrid", False
+        if not is_session(day):
+            print(f"{day}: not a session; nothing to do")       # RTN-07, before the wait (see is_session)
+            sys.exit(0)
         wait_until(day, "07:55", False)
     folder = run(day, feed, replay)
     print("wrote", folder)

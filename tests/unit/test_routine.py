@@ -114,3 +114,26 @@ def test_a_live_pool_that_cannot_be_built_says_so_and_never_raises(tmp_path, mon
     assert not (tmp_path / "candidates_live").exists()
     src = Path(pr.__file__).read_text()                               # and the routine pages when it is False
     assert 'if not live_pool(' in src and '"routine:live-pool"' in src
+
+
+def test_a_market_holiday_is_known_before_the_morning_wait():
+    """Thanksgiving 2026-11-26: the job's 15-minute non-session deadline killed the routine while it waited for
+    07:55, and paged a timeout. The session check now comes first."""
+    import datetime as dt
+
+    class Cal:
+        def __init__(self, days):
+            self.days = days
+
+        def calendar(self, start, end):
+            return pd.DataFrame({"date": self.days})
+
+    days = [dt.date(2026, 11, 24), dt.date(2026, 11, 25), dt.date(2026, 11, 27)]
+    assert not pr.is_session(dt.date(2026, 11, 26), Cal(days))
+    assert pr.is_session(dt.date(2026, 11, 27), Cal(days))
+
+    class Broken:
+        def calendar(self, start, end):
+            raise OSError("no network")
+
+    assert pr.is_session(dt.date(2026, 11, 27), Broken())      # a calendar fault never skips a real session
