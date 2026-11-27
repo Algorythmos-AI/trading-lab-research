@@ -35,8 +35,9 @@
     2. It then locks both label sets (a digest of the sorted item-label pairs) and writes the owner review queue.
     3. `--final` writes `report.json` and `report.md` here, once, and only when every ruling is in.
 - **Blindness:** the agent labeller reads `sample_blind.csv` only. The key and the manifest's category counts are
-  not read before the labels are locked; the sampler prints no category tally. Items whose archived text was
-  edited after the cut are counted in the manifest (`frame_edited_after_cut`, `sample_edited_after_cut`).
+  not read before the labels are locked; the sampler prints no category tally. The archive keeps only an item's
+  latest edit, so an item updated after its session's cut is left out of the frame (config `frame.time`: later
+  edits are ignored) and counted in the manifest (`frame_left_out_edited_after_cut`).
 - **Disclosure (2026-11-27):** while reading the archive's file format for this code, the agent saw one archived
   item's headline (a 2026-10-01 file, created before that session's cut). It may fall in the frame. No other
   headline text, and no v3 category tally for the frame, was seen before the draw.

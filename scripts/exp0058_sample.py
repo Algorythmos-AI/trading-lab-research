@@ -97,7 +97,8 @@ def main(argv: list[str] | None = None) -> int:
     pools = {d: pd.read_parquet(a.data / "candidates" / f"{d}.parquet", columns=["symbol"]).symbol.tolist()
              for d in sessions}
     items = na.load(a.archive, first, sessions[-1])
-    rows = x.frame(pools, prev, items)
+    stats: dict[str, int] = {}
+    rows = x.frame(pools, prev, items, stats)
     try:
         sample, blind = x.draw(rows)
     except x.Refused as e:
@@ -120,9 +121,8 @@ def main(argv: list[str] | None = None) -> int:
         "seed": x.SEED, "frame": [str(x.FRAME[0]), str(x.FRAME[1])], "sessions": len(sessions),
         "pool_name_days": sum(len(v) for v in pools.values()), "archive_items_read": len(items),
         "frame_n": len(rows), "frame_by_category": dict(sorted(Counter(r["v3"] for r in rows).items())),
-        "frame_edited_after_cut": sum(r["edited_after_cut"] for r in rows),
+        "frame_left_out_edited_after_cut": stats.get("edited_after_cut", 0),
         "sample_n": len(sample), "sample_by_category": dict(sorted(Counter(r["v3"] for r in sample).items())),
-        "sample_edited_after_cut": sum(r["edited_after_cut"] for r in sample),
         "items": [{"item_id": r["item_id"], "archive_id": r["id"], "session": str(r["session"])} for r in by_id],
         "owner_blind_ids": blind,
         "private_folder": f"{na.ARCHIVE_REPO}/{PRIVATE_IN_REPO}",

@@ -84,13 +84,14 @@ def previous(sessions: Sequence[dt.date]) -> dict[dt.date, dt.date]:
 
 
 def frame(pools: Mapping[dt.date, Iterable[str]], prev: Mapping[dt.date, dt.date],
-          items: pd.DataFrame) -> list[dict[str, Any]]:
+          items: pd.DataFrame, stats: dict[str, int] | None = None) -> list[dict[str, Any]]:
     """DEC-0082 point 2. One row per (normalised headline, session), the lowest id kept.
 
     An item belongs to a session when its `created_at` is in that session's window and one of its symbols is in the
     session's pool; the row's symbol is the first such symbol in the item's own order. Only `created_at`
-    places an item. The archive keeps an item's latest edit, so `edited_after_cut` marks text the pool may not have
-    seen (plan R4); it is counted, not dropped.
+    places an item, and later edits are ignored (config `frame.time`). The archive keeps only an item's latest
+    edit, so an item updated after its session's cut holds text the pool may not have seen: it is left out of the
+    frame, before the dedupe, and counted in `stats["edited_after_cut"]` (plan R4).
     """
     created = pd.to_datetime(items["created_at"], utc=True) if len(items) else pd.Series([], dtype="datetime64[ns, UTC]")
     rows: dict[tuple[str, dt.date], dict[str, Any]] = {}
@@ -105,12 +106,15 @@ def frame(pools: Mapping[dt.date, Iterable[str]], prev: Mapping[dt.date, dt.date
             sym = next((s for s in (it.symbols or []) if s in names), None)
             if not headline or sym is None:
                 continue
+            if pd.Timestamp(str(it.updated_at)) > hi:
+                if stats is not None:
+                    stats["edited_after_cut"] = stats.get("edited_after_cut", 0) + 1
+                continue
             key = (normalise(headline), session)
             cur = rows.get(key)
             if cur is None or int(it.id) < cur["id"]:
                 rows[key] = {"id": int(it.id), "session": session, "symbol": sym, "headline": headline,
-                             "created_at": str(it.created_at),
-                             "edited_after_cut": bool(pd.Timestamp(str(it.updated_at)) > hi)}
+                             "created_at": str(it.created_at)}
     out = sorted(rows.values(), key=lambda r: (r["session"], r["id"]))
     for r in out:
         r["v3"] = classify_spec(r["headline"])

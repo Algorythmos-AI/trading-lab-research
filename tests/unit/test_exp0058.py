@@ -62,11 +62,15 @@ def test_repeats_count_once_per_session_and_the_lowest_id_is_kept() -> None:
     assert sorted(r["id"] for r in got) == [5, 7]
 
 
-def test_an_item_edited_after_the_cut_is_marked_not_dropped() -> None:
-    df = items([(1, "2026-10-06T12:00:00Z", ["AAA"], "edited later"), (2, "2026-10-06T12:00:00Z", ["AAA"], "plain")])
+def test_an_item_edited_after_the_cut_is_left_out_and_counted() -> None:
+    df = items([(1, "2026-10-06T12:00:00Z", ["AAA"], "Acme wins contract"),      # edited at 11:00 ET: left out
+                (2, "2026-10-06T12:30:00Z", ["AAA"], "acme wins contract"),      # its repeat represents it
+                (3, "2026-10-06T12:00:00Z", ["AAA"], "edited at the cut")])
     df.loc[0, "updated_at"] = "2026-10-06T15:00:00Z"
-    got = {r["id"]: r["edited_after_cut"] for r in x.frame({D: ["AAA"]}, {D: P}, df)}
-    assert got == {1: True, 2: False}
+    df.loc[2, "updated_at"] = "2026-10-06T13:25:00Z"                             # 09:25 ET: still kept
+    stats: dict[str, int] = {}
+    got = x.frame({D: ["AAA"]}, {D: P}, df, stats)
+    assert sorted(r["id"] for r in got) == [2, 3] and stats == {"edited_after_cut": 1}
 
 
 def test_the_code_constants_match_the_frozen_config() -> None:
