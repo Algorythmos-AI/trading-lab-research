@@ -248,8 +248,11 @@ def check_remote(url: str) -> None:
         raise ArchiveError("the archive's remote is not the private archive repository; nothing pushed")
 
 
-def publish(clone: Path, message: str, run: Runner = _git) -> bool:
-    """Commit the archive folder in the clone and push it. Returns False when there was nothing to commit."""
+def publish(clone: Path, message: str, run: Runner = _git, folder: str = ROOT_IN_REPO) -> bool:
+    """Commit one folder of the clone (the news archive by default) and push it. Returns False when there was nothing
+    to commit."""
+    if folder.startswith("/") or ".." in Path(folder).parts:
+        raise ArchiveError("the folder must be a path inside the clone")
     if not (clone / ".git").exists():
         raise ArchiveError("no clone of the archive repository there (docs/runbooks/news-archive.md)")
     # Every URL git would fetch from or push to (pushurl wins over url for a push; insteadOf rules are applied).
@@ -260,10 +263,11 @@ def publish(clone: Path, message: str, run: Runner = _git) -> bool:
     for u in urls:
         if u.strip():
             check_remote(u)
-    run(["add", "--", ROOT_IN_REPO], clone)
-    if not run(["status", "--porcelain", "--", ROOT_IN_REPO], clone).strip():
+    run(["add", "--", folder], clone)
+    if not run(["status", "--porcelain", "--", folder], clone).strip():
         return False
-    run(["-c", "user.name=skalaliya", "-c", "user.email=skalaliya@gmail.com", "commit", "-q", "-m", message], clone)
+    run(["-c", "user.name=skalaliya", "-c", "user.email=skalaliya@gmail.com", "commit", "-q", "-m", message,
+         "--", folder], clone)
     run(["pull", "-q", "--rebase", "origin", "main"], clone)     # another writer (the host) may have pushed first
     run(["push", "-q", "origin", "HEAD:main"], clone)
     return True
