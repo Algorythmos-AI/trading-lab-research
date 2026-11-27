@@ -1,0 +1,583 @@
+{
+ "experiment": "EXP-0058",
+ "decision": "DEC-0082",
+ "classifier_sha256": "96411f7a9016c3b8aee4ef2a6981a8c8bef9f6dd7943c6710fc6b2cf015d157f",
+ "seed": 5801,
+ "frame": [
+  "2026-09-28",
+  "2026-11-25"
+ ],
+ "sessions": 43,
+ "pool_name_days": 2524,
+ "archive_items_read": 83717,
+ "frame_n": 880,
+ "frame_by_category": {
+  "breaking_news": 111,
+  "buyout_offer": 7,
+  "clinical_study_results": 37,
+  "earnings_release": 269,
+  "fda_approval": 6,
+  "hype_only": 22,
+  "none": 345,
+  "offering_dilution": 12,
+  "price_target_upgrade": 65,
+  "reverse_split": 2,
+  "unconfirmed_rumor": 4
+ },
+ "frame_left_out_edited_after_cut": 0,
+ "sample_n": 100,
+ "sample_by_category": {
+  "breaking_news": 16,
+  "buyout_offer": 7,
+  "clinical_study_results": 9,
+  "earnings_release": 11,
+  "fda_approval": 6,
+  "hype_only": 9,
+  "none": 16,
+  "offering_dilution": 9,
+  "price_target_upgrade": 11,
+  "reverse_split": 2,
+  "unconfirmed_rumor": 4
+ },
+ "items": [
+  {
+   "item_id": "F001",
+   "archive_id": 109720910,
+   "session": "2026-11-02"
+  },
+  {
+   "item_id": "F002",
+   "archive_id": 111452181,
+   "session": "2026-11-03"
+  },
+  {
+   "item_id": "F003",
+   "archive_id": 120574937,
+   "session": "2026-11-12"
+  },
+  {
+   "item_id": "F004",
+   "archive_id": 128543548,
+   "session": "2026-11-23"
+  },
+  {
+   "item_id": "F005",
+   "archive_id": 121587248,
+   "session": "2026-11-13"
+  },
+  {
+   "item_id": "F006",
+   "archive_id": 121589299,
+   "session": "2026-11-13"
+  },
+  {
+   "item_id": "F007",
+   "archive_id": 122418046,
+   "session": "2026-10-01"
+  },
+  {
+   "item_id": "F008",
+   "archive_id": 122417282,
+   "session": "2026-10-01"
+  },
+  {
+   "item_id": "F009",
+   "archive_id": 119114898,
+   "session": "2026-11-11"
+  },
+  {
+   "item_id": "F010",
+   "archive_id": 121589451,
+   "session": "2026-11-13"
+  },
+  {
+   "item_id": "F011",
+   "archive_id": 122435132,
+   "session": "2026-10-15"
+  },
+  {
+   "item_id": "F012",
+   "archive_id": 106766218,
+   "session": "2026-10-29"
+  },
+  {
+   "item_id": "F013",
+   "archive_id": 128088351,
+   "session": "2026-11-23"
+  },
+  {
+   "item_id": "F014",
+   "archive_id": 128847789,
+   "session": "2026-11-23"
+  },
+  {
+   "item_id": "F015",
+   "archive_id": 128848403,
+   "session": "2026-11-23"
+  },
+  {
+   "item_id": "F016",
+   "archive_id": 110377843,
+   "session": "2026-11-02"
+  },
+  {
+   "item_id": "F017",
+   "archive_id": 127988250,
+   "session": "2026-11-23"
+  },
+  {
+   "item_id": "F018",
+   "archive_id": 128197861,
+   "session": "2026-11-23"
+  },
+  {
+   "item_id": "F019",
+   "archive_id": 124355610,
+   "session": "2026-11-17"
+  },
+  {
+   "item_id": "F020",
+   "archive_id": 113918007,
+   "session": "2026-11-05"
+  },
+  {
+   "item_id": "F021",
+   "archive_id": 122423022,
+   "session": "2026-10-06"
+  },
+  {
+   "item_id": "F022",
+   "archive_id": 111454641,
+   "session": "2026-11-03"
+  },
+  {
+   "item_id": "F023",
+   "archive_id": 117288454,
+   "session": "2026-11-09"
+  },
+  {
+   "item_id": "F024",
+   "archive_id": 128197899,
+   "session": "2026-11-23"
+  },
+  {
+   "item_id": "F025",
+   "archive_id": 128197316,
+   "session": "2026-11-23"
+  },
+  {
+   "item_id": "F026",
+   "archive_id": 119489190,
+   "session": "2026-11-11"
+  },
+  {
+   "item_id": "F027",
+   "archive_id": 123488188,
+   "session": "2026-11-16"
+  },
+  {
+   "item_id": "F028",
+   "archive_id": 128847753,
+   "session": "2026-11-23"
+  },
+  {
+   "item_id": "F029",
+   "archive_id": 100000619,
+   "session": "2026-10-19"
+  },
+  {
+   "item_id": "F030",
+   "archive_id": 128197335,
+   "session": "2026-11-23"
+  },
+  {
+   "item_id": "F031",
+   "archive_id": 122425772,
+   "session": "2026-10-08"
+  },
+  {
+   "item_id": "F032",
+   "archive_id": 127950183,
+   "session": "2026-11-23"
+  },
+  {
+   "item_id": "F033",
+   "archive_id": 107177472,
+   "session": "2026-10-29"
+  },
+  {
+   "item_id": "F034",
+   "archive_id": 115026844,
+   "session": "2026-11-06"
+  },
+  {
+   "item_id": "F035",
+   "archive_id": 121239758,
+   "session": "2026-11-13"
+  },
+  {
+   "item_id": "F036",
+   "archive_id": 121585792,
+   "session": "2026-11-13"
+  },
+  {
+   "item_id": "F037",
+   "archive_id": 125429174,
+   "session": "2026-11-18"
+  },
+  {
+   "item_id": "F038",
+   "archive_id": 104808130,
+   "session": "2026-10-27"
+  },
+  {
+   "item_id": "F039",
+   "archive_id": 128848400,
+   "session": "2026-11-23"
+  },
+  {
+   "item_id": "F040",
+   "archive_id": 111452182,
+   "session": "2026-11-03"
+  },
+  {
+   "item_id": "F041",
+   "archive_id": 126085322,
+   "session": "2026-11-19"
+  },
+  {
+   "item_id": "F042",
+   "archive_id": 122431570,
+   "session": "2026-10-13"
+  },
+  {
+   "item_id": "F043",
+   "archive_id": 113481829,
+   "session": "2026-11-05"
+  },
+  {
+   "item_id": "F044",
+   "archive_id": 116494065,
+   "session": "2026-11-09"
+  },
+  {
+   "item_id": "F045",
+   "archive_id": 128178274,
+   "session": "2026-11-23"
+  },
+  {
+   "item_id": "F046",
+   "archive_id": 122423314,
+   "session": "2026-10-06"
+  },
+  {
+   "item_id": "F047",
+   "archive_id": 122419934,
+   "session": "2026-10-02"
+  },
+  {
+   "item_id": "F048",
+   "archive_id": 116606488,
+   "session": "2026-11-09"
+  },
+  {
+   "item_id": "F049",
+   "archive_id": 113921151,
+   "session": "2026-11-05"
+  },
+  {
+   "item_id": "F050",
+   "archive_id": 128777122,
+   "session": "2026-11-23"
+  },
+  {
+   "item_id": "F051",
+   "archive_id": 103937454,
+   "session": "2026-10-26"
+  },
+  {
+   "item_id": "F052",
+   "archive_id": 116471523,
+   "session": "2026-11-09"
+  },
+  {
+   "item_id": "F053",
+   "archive_id": 117289397,
+   "session": "2026-11-09"
+  },
+  {
+   "item_id": "F054",
+   "archive_id": 119488363,
+   "session": "2026-11-11"
+  },
+  {
+   "item_id": "F055",
+   "archive_id": 127988276,
+   "session": "2026-11-23"
+  },
+  {
+   "item_id": "F056",
+   "archive_id": 115486167,
+   "session": "2026-11-06"
+  },
+  {
+   "item_id": "F057",
+   "archive_id": 125428498,
+   "session": "2026-11-18"
+  },
+  {
+   "item_id": "F058",
+   "archive_id": 115026888,
+   "session": "2026-11-06"
+  },
+  {
+   "item_id": "F059",
+   "archive_id": 111074949,
+   "session": "2026-11-03"
+  },
+  {
+   "item_id": "F060",
+   "archive_id": 119489084,
+   "session": "2026-11-11"
+  },
+  {
+   "item_id": "F061",
+   "archive_id": 121587283,
+   "session": "2026-11-13"
+  },
+  {
+   "item_id": "F062",
+   "archive_id": 100000555,
+   "session": "2026-10-19"
+  },
+  {
+   "item_id": "F063",
+   "archive_id": 122417958,
+   "session": "2026-10-01"
+  },
+  {
+   "item_id": "F064",
+   "archive_id": 122423119,
+   "session": "2026-10-06"
+  },
+  {
+   "item_id": "F065",
+   "archive_id": 122416064,
+   "session": "2026-09-30"
+  },
+  {
+   "item_id": "F066",
+   "archive_id": 103157559,
+   "session": "2026-10-26"
+  },
+  {
+   "item_id": "F067",
+   "archive_id": 121588139,
+   "session": "2026-11-13"
+  },
+  {
+   "item_id": "F068",
+   "archive_id": 129578116,
+   "session": "2026-11-24"
+  },
+  {
+   "item_id": "F069",
+   "archive_id": 101404692,
+   "session": "2026-10-22"
+  },
+  {
+   "item_id": "F070",
+   "archive_id": 117288598,
+   "session": "2026-11-09"
+  },
+  {
+   "item_id": "F071",
+   "archive_id": 128619342,
+   "session": "2026-11-23"
+  },
+  {
+   "item_id": "F072",
+   "archive_id": 110377811,
+   "session": "2026-11-02"
+  },
+  {
+   "item_id": "F073",
+   "archive_id": 108458612,
+   "session": "2026-10-30"
+  },
+  {
+   "item_id": "F074",
+   "archive_id": 122414499,
+   "session": "2026-09-29"
+  },
+  {
+   "item_id": "F075",
+   "archive_id": 122414349,
+   "session": "2026-09-29"
+  },
+  {
+   "item_id": "F076",
+   "archive_id": 120574205,
+   "session": "2026-11-12"
+  },
+  {
+   "item_id": "F077",
+   "archive_id": 122426606,
+   "session": "2026-10-08"
+  },
+  {
+   "item_id": "F078",
+   "archive_id": 105908599,
+   "session": "2026-10-28"
+  },
+  {
+   "item_id": "F079",
+   "archive_id": 128848391,
+   "session": "2026-11-23"
+  },
+  {
+   "item_id": "F080",
+   "archive_id": 102559939,
+   "session": "2026-10-23"
+  },
+  {
+   "item_id": "F081",
+   "archive_id": 118308652,
+   "session": "2026-11-10"
+  },
+  {
+   "item_id": "F082",
+   "archive_id": 122423316,
+   "session": "2026-10-06"
+  },
+  {
+   "item_id": "F083",
+   "archive_id": 122434923,
+   "session": "2026-10-15"
+  },
+  {
+   "item_id": "F084",
+   "archive_id": 112692274,
+   "session": "2026-11-04"
+  },
+  {
+   "item_id": "F085",
+   "archive_id": 105906274,
+   "session": "2026-10-28"
+  },
+  {
+   "item_id": "F086",
+   "archive_id": 122413097,
+   "session": "2026-09-28"
+  },
+  {
+   "item_id": "F087",
+   "archive_id": 111452133,
+   "session": "2026-11-03"
+  },
+  {
+   "item_id": "F088",
+   "archive_id": 122420844,
+   "session": "2026-10-05"
+  },
+  {
+   "item_id": "F089",
+   "archive_id": 119490062,
+   "session": "2026-11-11"
+  },
+  {
+   "item_id": "F090",
+   "archive_id": 118307443,
+   "session": "2026-11-10"
+  },
+  {
+   "item_id": "F091",
+   "archive_id": 122415905,
+   "session": "2026-09-30"
+  },
+  {
+   "item_id": "F092",
+   "archive_id": 124357579,
+   "session": "2026-11-17"
+  },
+  {
+   "item_id": "F093",
+   "archive_id": 100000553,
+   "session": "2026-10-19"
+  },
+  {
+   "item_id": "F094",
+   "archive_id": 122430259,
+   "session": "2026-10-12"
+  },
+  {
+   "item_id": "F095",
+   "archive_id": 100000590,
+   "session": "2026-10-19"
+  },
+  {
+   "item_id": "F096",
+   "archive_id": 122424311,
+   "session": "2026-10-07"
+  },
+  {
+   "item_id": "F097",
+   "archive_id": 122416114,
+   "session": "2026-09-30"
+  },
+  {
+   "item_id": "F098",
+   "archive_id": 122414457,
+   "session": "2026-09-29"
+  },
+  {
+   "item_id": "F099",
+   "archive_id": 103423487,
+   "session": "2026-10-26"
+  },
+  {
+   "item_id": "F100",
+   "archive_id": 122436851,
+   "session": "2026-10-16"
+  }
+ ],
+ "owner_blind_ids": [
+  "F001",
+  "F002",
+  "F012",
+  "F014",
+  "F020",
+  "F022",
+  "F023",
+  "F024",
+  "F029",
+  "F035",
+  "F038",
+  "F040",
+  "F045",
+  "F049",
+  "F052",
+  "F060",
+  "F061",
+  "F066",
+  "F070",
+  "F072",
+  "F077",
+  "F078",
+  "F081",
+  "F082",
+  "F086",
+  "F093",
+  "F094",
+  "F095",
+  "F097",
+  "F099"
+ ],
+ "private_folder": "Algorythmos-AI/trading-news-archive/experiments/EXP-0058",
+ "private_sha256": {
+  "sample_blind.csv": "11134966cb50ac6553ef15c94117fed221f478de138795a3e20a306c3eac7d74",
+  "sample_key.csv": "b9f55691ce0bb08a6fba8b2ceb2675298a36932cdabdae45decdd877942d3116",
+  "owner_blind.csv": "5ddd6d2318ce53ee1a645c93268f4d29f41134f480d66edb520b806040e5e867",
+  "agent_labels.csv": "acc947f65f2bcc05c2c25b6934b1cf7f691d2e599ddd3d485988737656896a83"
+ }
+}
