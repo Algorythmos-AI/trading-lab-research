@@ -47,3 +47,5 @@
   - **Files:** `sample_manifest.json` is committed unedited. The private files went to `trading-news-archive`
     (`experiments/EXP-0058/`, commit 76c5382).
   - **Not yet read:** the manifest's category counts and the key, which wait until the labels are locked.
+- **Owner slots (2026-11-27):** the owner handed the 30 blind labels and the rulings to an independent expert
+  agent (DEC-0082 dated note). The result is reported as agent-referenced, and the report names who filled the slots.
