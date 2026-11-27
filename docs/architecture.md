@@ -89,7 +89,7 @@ security model are in [dashboard/README.md](../dashboard/README.md).
 | `lab` | The options lab's tape recorder, archive and reads (DEC-0060) | core, data, options |
 | `analytics` | The numbers the dashboard renders (G2, performance, risk and operations views) | core, ops, scanner, signals |
 | `ops` | Schedule, units, jobs, the deploy and its gate, publish, alerts, R2, lease, backup, status | core, analytics |
-| `research` | Trial registry, run manifests, method presets, the Reference Registry builder, experiment readers | core, backtest, specs |
+| `research` | Trial registry, run manifests, method presets, the Reference Registry builder, experiment readers | core, backtest, specs, scanner |
 | `specs` | Loader for `research/specs/*/spec.yaml` | core |
 | `webull` | The owner's Webull account, read only (ADR 0011) | — |
 | `owner` | The owner's own trades grouped into positions | — |

@@ -22,5 +22,22 @@
 - **Where the text lives:** headlines are RESTRICTED and this repository is public. The blind file, the key and every
   label file stay in the private `trading-news-archive` repository. This folder gets only item ids, sha256 sums,
   counts and the report.
-- **Code:** not written yet. A sampler and a scorer come in a later PR, after DEC-0082 is accepted and before any
-  headline is drawn.
+- **Code (DEC-0082 point 9):** `src/wt/research/exp0058.py`, with `scripts/exp0058_sample.py` (the draw) and
+  `scripts/exp0058_score.py` (the review queue and the verdict), tested in `tests/unit/test_exp0058.py`.
+  - **The sampler** refuses unless DEC-0082 is ACCEPTED and the classifier file is v3 by its sha256, and it draws
+    once. It needs all 43 pools and a complete archive for every day of the window.
+    - **Private:** it writes the blind file, the key, the owner-blind file and an empty agent-label file to the
+      archive clone's `experiments/EXP-0058/`.
+    - **Public:** it writes `sample_manifest.json` to this folder (ids, counts and sha256 sums only).
+  - **The scorer** checks the sample against the manifest and that v3 still gives the key's categories.
+    1. It scores nothing until all 100 agent labels and all 30 owner-blind labels are in and valid. Every item
+       gets a label, with `none` as the fallback, so the 80-item floor does not bind in practice.
+    2. It then locks both label sets (a digest of the sorted item-label pairs) and writes the owner review queue.
+    3. `--final` writes `report.json` and `report.md` here, once, and only when every ruling is in.
+- **Blindness:** the agent labeller reads `sample_blind.csv` only. The key and the manifest's category counts are
+  not read before the labels are locked; the sampler prints no category tally. The archive keeps only an item's
+  latest edit, so an item updated after its session's cut is left out of the frame (config `frame.time`: later
+  edits are ignored) and counted in the manifest (`frame_left_out_edited_after_cut`).
+- **Disclosure (2026-11-27):** while reading the archive's file format for this code, the agent saw one archived
+  item's headline (a 2026-10-01 file, created before that session's cut). It may fall in the frame. No other
+  headline text, and no v3 category tally for the frame, was seen before the draw.
