@@ -117,8 +117,9 @@ compared with v3.
       calibration.
   - **Owner review:** the rulings on disagreements are made by an expert agent, which sees each item's v3 category
     and best label, as the owner would.
-  - **The report:** the scorer writes `owner_slots.json` into the private folder, and the report names who filled the
-    slots.
+  - **The report:** `owner_slots.json` in the private folder says who filled the slots, and the scorer refuses to
+    score without it. The report names the filler, and its JSON fields name the slots by role (`v3_vs_owner_slot`,
+    `owner_slot_blind`, `owner_slot_review`), not as the owner's.
 - **What this costs:**
   - **The labeller check no longer bounds shared error as point 5 intended.** It now compares two AI labellers. An
     error both make, such as one from the same model family or from the category guide, which the agent labeller
