@@ -1,0 +1,2 @@
+# A sha256 sum, not a secret: EXP-0058's manifest records the checksum of its private sample_key.csv file.
+research/experiments/EXP-0058-v3-on-fiscal/sample_manifest.json:generic-api-key:579

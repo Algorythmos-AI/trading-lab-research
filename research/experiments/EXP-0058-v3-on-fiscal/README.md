@@ -41,3 +41,9 @@
 - **Disclosure (2026-11-27):** while reading the archive's file format for this code, the agent saw one archived
   item's headline (a 2026-10-01 file, created before that session's cut). It may fall in the frame. No other
   headline text, and no v3 category tally for the frame, was seen before the draw.
+- **The draw (2026-11-27, Sydney; 2026-11-26 evening in New York):** `scripts/exp0058_sample.py --publish` ran
+  once, after the archive catch-up had marked 2026-11-25 done.
+  - **Frame:** 880 items over 43 sessions; 100 drawn, and 30 owner-blind ids.
+  - **Files:** `sample_manifest.json` is committed unedited. The private files went to `trading-news-archive`
+    (`experiments/EXP-0058/`, commit 76c5382).
+  - **Not yet read:** the manifest's category counts and the key, which wait until the labels are locked.
