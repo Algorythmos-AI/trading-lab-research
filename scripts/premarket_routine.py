@@ -10,12 +10,12 @@ For each session:
                          patterns 09:50-11:00, micro pullback 09:31-11:30); same causal code as the backtest
 Stage files go to var/routine/<date>/ (runtime state, ADR 0002).
 
-Live data is "hybrid" (SPEC-0001 routine.data_live, K-31): the SIP tape up to the free plan's 15-minute delay plus IEX for
-the latest minutes. IEX alone has no bars before 08:00 ET and few for small caps. The nightly forward test re-evaluates
-the day on full SIP, and the scorecard reports the agreement (D23). Each stage logs `sip_through_et`.
+Live data is the SIP tape only (DEC-0064 point 9, on the owner's Algo Trader Plus plan, which serves SIP up to now).
+Until 2026-11 it was "hybrid" (SIP to the free plan's 15-minute delay, then IEX); the scorecard reports those sessions
+apart from the SIP ones and never pools them (D23). Each stage names its feed.
 Exits quietly on non-sessions (RTN-07). --replay YYYY-MM-DD runs every stage at once on historical data.
 
-Usage: PYTHONPATH=src .venv/bin/python scripts/premarket_routine.py [--replay 2018-12-20] [--feed hybrid|sip|iex]
+Usage: PYTHONPATH=src .venv/bin/python scripts/premarket_routine.py [--replay 2018-12-20] [--feed sip] (a replay may name another feed)
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from wt.core.clock import ET, et, to_utc_iso  # noqa: E402
 from wt.core.config import DATA_DIR, ROUTINE_DIR  # noqa: E402
-from wt.data.alpaca import AlpacaREST, HybridFeed  # noqa: E402
+from wt.data.alpaca import AlpacaREST  # noqa: E402
 from wt.data.edgar import SharesOutstanding  # noqa: E402
 from wt.data.universe import ASSETS, load_daily_tail, tail_rows_for  # noqa: E402
 from wt.risk.virtual_account import VirtualAccount  # noqa: E402
@@ -145,7 +145,7 @@ def write(folder: Path, name: str, body) -> None:
 
 def run(d: dt.date, feed: str, replay: bool) -> Path | None:
     spec = load_spec("SPEC-0001")
-    a = HybridFeed(AlpacaREST(per_minute=30, shared=True))         # small budget next to the paper runner (D6)
+    a = AlpacaREST(per_minute=30, shared=True)                     # small budget next to the paper runner (D6)
     cal = a.calendar((d - dt.timedelta(days=60)).isoformat(), d.isoformat())
     sessions = sorted(cal.date)
     if d not in sessions:
@@ -274,7 +274,9 @@ if __name__ == "__main__":
     if args.replay:
         day, feed, replay = dt.date.fromisoformat(args.replay), args.feed or "sip", True
     else:
-        day, feed, replay = dt.datetime.now(ET).date(), args.feed or "hybrid", False
+        day, feed, replay = dt.datetime.now(ET).date(), args.feed or "sip", False
+        if feed != "sip":                     # DEC-0064 point 9: the live routine reads SIP only, no IEX tail
+            sys.exit(f"the live routine reads SIP only (DEC-0064 point 9); --feed {feed} is refused")
         if not is_session(day):
             print(f"{day}: not a session; nothing to do")       # RTN-07, before the wait (see is_session)
             sys.exit(0)

@@ -137,3 +137,13 @@ def test_a_market_holiday_is_known_before_the_morning_wait():
             raise OSError("no network")
 
     assert pr.is_session(dt.date(2026, 11, 27), Broken())      # a calendar fault never skips a real session
+
+
+def test_the_live_routine_reads_sip_only():
+    """DEC-0064 point 9: no hybrid IEX tail; any other feed is refused on a live run."""
+    import subprocess
+    src = Path(pr.__file__).read_text()
+    assert 'args.feed or "sip"' in src and "HybridFeed" not in src
+    r = subprocess.run([sys.executable, pr.__file__, "--feed", "hybrid"], capture_output=True, text=True,
+                       env={"PYTHONPATH": "src", "PATH": ""}, cwd=Path(pr.__file__).parents[1], timeout=120)
+    assert r.returncode != 0 and "SIP only" in r.stderr

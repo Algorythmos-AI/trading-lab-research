@@ -68,7 +68,7 @@ without fixing it. Read the records themselves for what they decide.
 | Paper positions (host, `options-live`) | stock snapshots (last close) | sip | literal in `options/live.py` | DEC-0064 | none |
 | Paper positions, rules and hourly blocks (host) | daily and 30-minute bars | sip | literal | none | EXP-0023 |
 | Pipeline check (host) | daily bars; snapshots | sip; sip | literals in `pipeline_check.py` | DEC-0064 | none |
-| Pre-market routine (host, `routine`) | 1-minute bars, news | hybrid: sip to 16 minutes ago, iex after | `HybridFeed` names both; `--feed` overrides | DEC-0023 | none |
+| Pre-market routine (host, `routine`) | 1-minute bars, news | sip (DEC-0064 point 9; hybrid until 2026-11) | named per request; a live run refuses any `--feed` but `sip` | DEC-0023, DEC-0064 | none |
 | Forward test (host, `forward`) | daily and 1-minute bars | sip | `AlpacaREST.bars` default argument `feed="sip"` | DEC-0009 | none |
 | Selection bundles (`python -m wt.options.select_fetch`; no job runs it yet) | Stage 1: split-adjusted daily bars. Stage 2: raw daily bars, 1-minute bars, split-adjusted 5-minute bars, snapshots; corporate actions and news (counts only) take no feed | sip | literal in `select_fetch.py` | DEC-0046 | none |
 | Radar → Options shadow (host, `options-select`) | Stage 1 split-adjusted daily bars of the desk's 12, then of the Radar's candidates; option snapshots of each candidate (its nearest expiry, strikes within `chain_ntm_pct` of the close). The candidates' bars and snapshots are read on every run, the gate set or not: their facts are recorded (DEC-0070 section 3) | sip; indicative | literals in `select_fetch.py`; `chain_feed` in `radar_select.py` | DEC-0064 | DEC-0070 |
@@ -86,9 +86,9 @@ quotes to OPRA). The clone's `feeds.option` in `config/options_clone.yaml` must 
 case: anything else is refused before it is sent and the clone runs with no chains
 (`tests/unit/test_feed_call_shapes.py` fails on a committed value outside `wt.data.feeds.OPTION_FEEDS`).
 
-Per Alpaca's documentation, not verified by a call here: on Algo Trader Plus, SIP is not refused for the last 15
-minutes. The routine's `HybridFeed` still cuts at 16 minutes by the clock. Its fallback to IEX on a SIP 403 would not
-fire while such a plan lasts, and would again after a lapse.
+On Algo Trader Plus, SIP is not refused for the last 15 minutes: DEC-0064 checked every host pair for SIP bars ending
+now on 2026-11-18. The routine reads SIP up to the moment of each stage and no longer uses `HybridFeed`, so it has no
+IEX tail and no fallback: after a lapse its scans fail and page, as point 11 of that record says.
 
 ## Keys, by name and location
 

@@ -129,11 +129,27 @@ def record_rows(day: str) -> list[dict] | None:
             for r in explain(from_pool(pool), load_spec("SPEC-0001"), pool_musts(pool)).rows]
 
 
-def signal_days() -> list[dict]:
+def routine_days() -> list[Path]:
+    return sorted(p for p in ROUTINE_DIR.glob("*") if p.is_dir())
+
+
+def day_feed(day_dir: Path) -> str:
+    """The stock feed a dry run read: "sip" when any stage file names it, else "hybrid" (the stages before
+    DEC-0064 point 9 named hybrid, and the oldest named none)."""
+    for path in sorted(day_dir.glob("*.json")):
+        try:
+            if json.loads(path.read_text()).get("feed") == "sip":
+                return "sip"
+        except (OSError, ValueError, AttributeError):
+            continue
+    return "hybrid"
+
+
+def signal_days(dirs: list[Path] | None = None) -> list[dict]:
     """Per session with both records: how many Set F signals the dry run and the forward test each saw, and how
     many both did. The dry run's come from its 11:31 stage, the forward test's from var/forward/signals/."""
     days = []
-    for d in sorted(p for p in ROUTINE_DIR.glob("*") if p.is_dir()):
+    for d in routine_days() if dirs is None else dirs:
         try:
             seen = json.loads((d / "1131_signals.json").read_text())
             record = json.loads((FWD.parent / "signals" / f"{d.name}.json").read_text())
@@ -176,18 +192,33 @@ def replay_line() -> str:
 
 def agreement() -> list[str]:
     """Section 4: the dry run's funnel against the forward test's, in counts (DEC-0023, section 2). A description:
-    any failure here costs the scorecard this section and nothing else."""
+    any failure here costs the scorecard this section and nothing else. Sessions the dry run read on SIP alone
+    (DEC-0064 point 9) are reported in their own block and never pooled with the hybrid ones."""
+    try:
+        dirs = routine_days()
+        sip = [d for d in dirs if day_feed(d) == "sip"]
+        hybrid = [d for d in dirs if d not in sip]
+    except Exception as e:  # noqa: BLE001
+        return ["", "## 4. The dry run against the record", "", f"- Not available this week ({e.__class__.__name__})."]
+    L = ["", "## 4. The dry run against the record", ""]
+    L += _agreement_block(hybrid)
+    if sip:
+        L += ["", f"### From {sip[0].name}, the dry run on SIP only (DEC-0064 point 9; never pooled with the above)", ""]
+        L += _agreement_block(sip)
+    return L
+
+
+def _agreement_block(dirs: list[Path]) -> list[str]:
     try:
         days = []
-        for d in sorted(p for p in ROUTINE_DIR.glob("*") if p.is_dir()):
+        for d in dirs:
             a, b = seen_rows(d), record_rows(d.name)
             if a is not None and b is not None:
                 days.append(funnel_agreement.compare(a, b))
         t = funnel_agreement.total(days)
     except Exception as e:  # noqa: BLE001
-        return ["", "## 4. The dry run against the record", "", f"- Not available this week ({e.__class__.__name__})."]
-    L = ["", "## 4. The dry run against the record", "",
-         f"Sessions with both a dry run and a forward pool: **{t['sessions']}**. Counts only; the two records are "
+        return [f"- Not available this week ({e.__class__.__name__})."]
+    L = [f"Sessions with both a dry run and a forward pool: **{t['sessions']}**. Counts only; the two records are "
          "never merged (DEC-0023)."]
     if t["sessions"]:
         fp = t["first_pick"]
@@ -197,7 +228,7 @@ def agreement() -> list[str]:
               f"- First pick: same {fp['same']} · different {fp['different']} · on one side only {fp['one_side']} · "
               f"none on either {fp['neither']}"]
     try:
-        g = funnel_agreement.total_signals(signal_days())
+        g = funnel_agreement.total_signals(signal_days(dirs))
     except Exception as e:  # noqa: BLE001
         return [*L, f"- Signals: not available this week ({e.__class__.__name__})."]
     L += [f"- Signals (a rule firing on a name, the four Set F trials; sessions with both records: {g['sessions']}): "
