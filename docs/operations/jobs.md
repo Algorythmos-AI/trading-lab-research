@@ -39,6 +39,7 @@ The table between the markers is generated from `JOBS`. If you change the schedu
 | `wt-lab-tape` | Mon..Fri 09:15 New York | `python -m wt.lab.recorder` | backtest | no | options | Options lab tape: the focus names' option and stock quotes to the close, then prints and the upload |
 | `wt-lab-archive-check` | Sat 11:00 New York | `python -m wt.lab.archive check` | backtest | no | options | Options lab: re-download random archived tape parts and compare their sha256 |
 | `wt-econ-calendar` | Fri 21:30 New York | `python -m wt.ops.econ_calendar` | backtest | no | stocks | Read the economic release calendar (FRED, Fed, BLS, BEA) for the Calendar page and publish it |
+| `wt-news-archive` | Mon..Fri 20:45 New York | `python scripts/news_archive.py --catch-up 30 --publish` | backtest | no | stocks | Archive the finished days of Alpaca's news items and push them to the private archive repository |
 <!-- jobs:end -->
 
 - **`MODE`.** Only `paper-s` and `paper-o` run with `MODE=paper`, and only they place (paper) orders. Every other job

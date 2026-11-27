@@ -204,5 +204,13 @@ JOBS: dict[str, Job] = {j.name: j for j in (
         weekday=6, deadline_min=10, trading=False, et="Fri 21:30", preflight=False,
         what="Read the economic release calendar (FRED, Fed, BLS, BEA) for the Calendar page and publish it",
         runtime_max_h=0.5),
+    # The news archive (DEC-0003 amendment of 2026-11-26, DEC-0081): every weekday evening, the finished New York days
+    # of Alpaca's fiscal.ai news that have no done marker (up to 30 back, so a weekend or a missed night is filled),
+    # committed and pushed to the PRIVATE archive repository. 20:45 New York: well after the close, clear of the
+    # evening jobs. Market data only; no order, no account. Without NEWS_ARCHIVE_TOKEN and a clone it does nothing.
+    Job("news-archive", "com.wt.news-archive", 12, 45, ("scripts/news_archive.py", "--catch-up", "30", "--publish"),
+        "backtest", "news_archive", deadline_min=60, trading=False, et="Mon..Fri 20:45", preflight=False,
+        what="Archive the finished days of Alpaca's news items and push them to the private archive repository",
+        runtime_max_h=1.5),
 )}
 TRADING_JOBS = [j.name for j in JOBS.values() if j.trading]

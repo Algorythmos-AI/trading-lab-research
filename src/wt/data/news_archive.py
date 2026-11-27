@@ -22,6 +22,7 @@ its own day. Files are merged by item id, keeping the copy with the latest `upda
 """
 from __future__ import annotations
 
+import base64
 import datetime as dt
 import hashlib
 import json
@@ -227,6 +228,44 @@ def _git(args: list[str], cwd: Path) -> str:
     return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout
 
 
+TOKEN_ENV = "NEWS_ARCHIVE_TOKEN"          # host secret: a fine-grained token, contents read/write on ARCHIVE_REPO only
+REMOTE = f"https://github.com/{ARCHIVE_REPO}.git"
+
+
+def git_env(token: str | None, base: Mapping[str, str] | None = None) -> dict[str, str]:
+    """The environment for git: with a token, an Authorization header for github.com, passed in GIT_CONFIG_* variables
+    so it never appears on a command line (ps) or in the clone's config file; no prompt either way."""
+    env = dict(os.environ if base is None else base)
+    env.update({"GIT_TERMINAL_PROMPT": "0"})       # a set, not a read: git never waits on a prompt
+    if token:
+        basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+        env.update({"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "http.https://github.com/.extraheader",
+                    "GIT_CONFIG_VALUE_0": f"AUTHORIZATION: basic {basic}"})
+    return env
+
+
+def git_runner(token: str | None) -> Runner:
+    """A Runner that authenticates with `token` when one is given (the host), and as the user's own git otherwise."""
+    env = git_env(token)
+
+    def run(args: list[str], cwd: Path) -> str:
+        return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True, env=env).stdout
+
+    return run
+
+
+def ensure_clone(clone: Path, run: Runner) -> bool:
+    """Clone the private archive repository at `clone` if no clone is there. Returns True when it cloned. Refuses a
+    non-empty folder that is not a clone (its files would be lost or pushed by mistake)."""
+    if (clone / ".git").exists():
+        return False
+    if clone.exists() and any(clone.iterdir()):
+        raise ArchiveError("a folder that is not a clone of the archive is in the way; nothing cloned")
+    clone.parent.mkdir(parents=True, exist_ok=True)
+    run(["clone", "-q", REMOTE, str(clone)], clone.parent)
+    return True
+
+
 _SCP = re.compile(r"git@github\.com:(?P<path>[^/]+/[^/]+)")
 
 
@@ -266,8 +305,9 @@ def publish(clone: Path, message: str, run: Runner = _git, folder: str = ROOT_IN
     run(["add", "--", folder], clone)
     if not run(["status", "--porcelain", "--", folder], clone).strip():
         return False
-    run(["-c", "user.name=skalaliya", "-c", "user.email=skalaliya@gmail.com", "commit", "-q", "-m", message,
-         "--", folder], clone)
-    run(["pull", "-q", "--rebase", "origin", "main"], clone)     # another writer (the host) may have pushed first
+    who = ["-c", "user.name=skalaliya", "-c", "user.email=skalaliya@gmail.com"]   # the host's git has no identity
+    run([*who, "commit", "-q", "-m", message, "--", folder], clone)
+    run([*who, "pull", "-q", "--rebase", "origin", "main"], clone)   # another writer may have pushed first; a
+    # rebase replays this commit, so it needs a committer identity too
     run(["push", "-q", "origin", "HEAD:main"], clone)
     return True

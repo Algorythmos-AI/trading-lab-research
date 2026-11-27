@@ -66,11 +66,36 @@ PYTHONPATH=src .venv/bin/python scripts/news_archive.py --catch-up 30 --publish
 
 ## Today and next
 
-- **Runs from the Mac, by hand.** The backfill from 2026-04-28 was run on 2026-11-26.
-- **Next (owner):** run the same `--catch-up 30 --publish` daily after the close on the host. This needs a unit,
-  which means a release and `sudo wt-install-units`. It also needs a write credential limited to this one
-  repository (a fine-grained token or a deploy key) in the host's secrets. Until then, run the catch-up on the Mac.
-  It fills any gap of up to 30 days.
+- **Runs from the Mac, by hand, until the host job is on.** The backfill from 2026-04-28 was run on 2026-11-26.
+- **The host job:** `wt-news-archive` (`wt.ops.schedule`), Mon..Fri at 20:45 New York, runs
+  `scripts/news_archive.py --catch-up 30 --publish`.
+  - **What it fills:** the finished days with no done marker, up to 30 back, so Monday's run also fills the weekend.
+  - **Its own failure domain:** its own log (`logs/news_archive_<date>.log`). A failure never stops another job.
+  - **Not a trading job:** the deploy gate ignores it.
+  - **Dormant until set up:** without a clone and without `NEWS_ARCHIVE_TOKEN` it prints one line and exits 0.
+- **Turning it on (owner, once), in this order:**
+  1. Create a fine-grained GitHub token. Give it the repository `Algorythmos-AI/trading-news-archive` only, with
+     **Contents: read and write** and nothing else.
+  2. **Release, then `sudo wt-install-units`.** This installs the unit and its timer, and the new `wt-set-secrets`
+     and `wt-fetch-secrets`, which know the new name. The unit is new, so the unattended deploy waits for you.
+  3. **Then `sudo wt-set-secrets`,** and paste the token as `NEWS_ARCHIVE_TOKEN`.
+     - It writes `/etc/wt/secrets` and restarts `wt-secrets.service`.
+     - That copies the value into `/run/wt-secrets/env`, which the unit reads as its `EnvironmentFile`.
+  4. **First run:** with the token set and no clone, the job clones the private repository to
+     `data/archive/trading-news-archive`, then fills and pushes the missing days.
+     - **The token:** git sends it as a header from environment variables, never on a command line or in the
+       clone's config.
+     - **The remote:** `publish` still refuses any remote but the private repository.
+     - **Git identity:** the commit and the rebase carry the maintainer identity, since the host's git has none.
+  5. **Check, the next morning:**
+     - `logs/news_archive_<date>.log` on the host ends with `pushed` or `nothing new to push`.
+     - The private repository has a new `alpaca-news:` commit.
+     - **If the log says `not set up here`:** the token is not reaching the job. Run step 3 again, or check that
+       `wt-fetch-secrets` was reinstalled in step 2.
+- **The Mac and the host both push** to the same repository. `publish` rebases before it pushes, and a day file is
+  the same on both (sorted, merged by id), so a run on either fills what the other missed.
+- **Renewing the token:** run `sudo wt-set-secrets` again before it expires. A refused token makes the job fail with
+  `publish FAILED CalledProcessError`; the day files stay in the clone until the next run.
 
 ## If something goes wrong
 
