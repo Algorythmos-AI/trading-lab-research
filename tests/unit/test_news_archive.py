@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 
+from wt.core.config import ROOT
 from wt.data import news_archive as na
 
 NOW = dt.datetime(2026, 11, 26, 12, 0, tzinfo=dt.timezone.utc)
@@ -248,3 +249,87 @@ def test_an_item_filed_on_a_marked_neighbour_day_refreshes_that_days_marker(tmp_
     assert marker["items_on_day"] == 2
     assert marker["sha256"] == hashlib.sha256(na.day_path(tmp_path, prev).read_bytes()).hexdigest()
     assert marker["items_fetched"] == 1                      # the rest of the marker is kept
+
+
+# ---- the host job (wt-news-archive): authentication, first-run clone, and a dormant host --------------------------
+
+def test_the_token_goes_in_git_config_env_never_on_a_command_line() -> None:
+    import base64
+
+    env = na.git_env("tok123", base={"PATH": "/usr/bin"})
+    assert env["GIT_TERMINAL_PROMPT"] == "0" and env["PATH"] == "/usr/bin"
+    assert env["GIT_CONFIG_COUNT"] == "1" and env["GIT_CONFIG_KEY_0"] == "http.https://github.com/.extraheader"
+    header = env["GIT_CONFIG_VALUE_0"]
+    assert header.startswith("AUTHORIZATION: basic ")
+    assert base64.b64decode(header.split()[-1]).decode() == "x-access-token:tok123"
+    assert "GIT_CONFIG_COUNT" not in na.git_env(None, base={})
+
+
+def test_ensure_clone_clones_only_when_no_clone_is_there(tmp_path: Path) -> None:
+    calls: list[list[str]] = []
+
+    def git(args: list[str], cwd: Path) -> str:
+        calls.append(args)
+        (Path(args[-1]) / ".git").mkdir(parents=True)
+        return ""
+
+    clone = tmp_path / "archive" / "trading-news-archive"
+    assert na.ensure_clone(clone, git) is True
+    assert calls == [["clone", "-q", na.REMOTE, str(clone)]]
+    assert na.ensure_clone(clone, git) is False and len(calls) == 1
+
+
+def test_ensure_clone_refuses_a_folder_that_is_not_a_clone(tmp_path: Path) -> None:
+    clone = tmp_path / "trading-news-archive"
+    (clone / "alpaca-news").mkdir(parents=True)
+    with pytest.raises(na.ArchiveError):
+        na.ensure_clone(clone, lambda a, c: "")
+
+
+def _script() -> Any:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("news_archive_script", ROOT / "scripts" / "news_archive.py")
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_a_host_without_a_clone_or_a_token_does_nothing_and_exits_0(tmp_path: Path,
+                                                                    monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("NEWS_ARCHIVE_TOKEN", raising=False)
+    monkeypatch.setattr(na, "missing", lambda *a: pytest.fail("fetched on a host that is not set up"))
+    root = tmp_path / "trading-news-archive" / "alpaca-news"
+    assert _script().main(["--catch-up", "30", "--publish", "--root", str(root)]) == 0
+    assert not root.exists()
+
+
+def test_with_a_token_a_missing_clone_is_cloned_then_used_to_push(tmp_path: Path,
+                                                                  monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    def git(args: list[str], cwd: Path) -> str:
+        calls.append(args)
+        if args[0] == "clone":
+            (Path(args[-1]) / ".git").mkdir(parents=True)
+        if args[:2] == ["remote", "get-url"]:
+            return na.REMOTE + "\n"
+        return ""                                   # status: nothing to commit
+
+    tokens: list[str | None] = []
+    monkeypatch.setenv("NEWS_ARCHIVE_TOKEN", "tok")
+    monkeypatch.setattr(na, "git_runner", lambda token: tokens.append(token) or git)
+    monkeypatch.setattr(na, "missing", lambda *a: [])
+    root = tmp_path / "trading-news-archive" / "alpaca-news"
+    assert _script().main(["--catch-up", "30", "--publish", "--root", str(root)]) == 0
+    assert tokens == ["tok"] and calls[0][0] == "clone"
+    assert ["add", "--", "alpaca-news"] in calls
+
+
+def test_the_job_is_in_the_schedule_as_a_non_trading_evening_job() -> None:
+    from wt.ops.schedule import JOBS
+
+    j = JOBS["news-archive"]
+    assert j.command == ("scripts/news_archive.py", "--catch-up", "30", "--publish")
+    assert not j.trading and j.et == "Mon..Fri 20:45" and j.deadline_min and j.runtime_max_h > j.deadline_min / 60

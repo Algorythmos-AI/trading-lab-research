@@ -5,7 +5,10 @@
   --catch-up 30                       the last 30 finished New York days that have no done marker
   --force                             with --backfill or --catch-up, fetch marked days again too
   --publish                           then commit the archive folder and push it to the PRIVATE archive repository
-                                      (refuses any other remote; docs/runbooks/news-archive.md)
+                                      (refuses any other remote; docs/runbooks/news-archive.md). With
+                                      NEWS_ARCHIVE_TOKEN set (the host), git authenticates with it and a missing clone
+                                      is cloned first; with neither a clone nor the token, the run does nothing and
+                                      exits 0 (a host not yet set up).
 
 Prints counts only, never a headline (RESTRICTED). Exits 1 if any day failed; the other days still run, and a failed
 day stays unmarked, so the next run tries it again. Join the shared rate limiter so a backfill cannot starve a job.
@@ -16,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import os
 import sys
 from pathlib import Path
 
@@ -42,6 +46,18 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--per-minute", type=int, default=120)
     a = ap.parse_args(argv)
 
+    token = os.environ.get("NEWS_ARCHIVE_TOKEN") or None    # na.TOKEN_ENV; a literal so the env-var docs check sees it
+    a.git = na.git_runner(token)
+    if a.publish and not (a.root.parent / ".git").exists():
+        if not token:
+            print(f"news archive: no clone at {a.root.parent} and no {na.TOKEN_ENV}; not set up here, nothing done")
+            return 0
+        try:
+            na.ensure_clone(a.root.parent, a.git)
+        except Exception as e:  # noqa: BLE001 - report and exit nonzero; nothing was fetched
+            print(f"news archive: clone FAILED {type(e).__name__}: {e if isinstance(e, na.ArchiveError) else ''}")
+            return 1
+        print("news archive: cloned the private archive repository")
     now = dt.datetime.now(dt.timezone.utc)
     if a.day:
         todo = [a.day]
@@ -74,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
 def _publish(a: argparse.Namespace, todo: list[dt.date]) -> int:
     span = f"{todo[0]}..{todo[-1]}" if todo else "no new day"
     try:
-        pushed = na.publish(a.root.parent, f"alpaca-news: {span}")
+        pushed = na.publish(a.root.parent, f"alpaca-news: {span}", a.git)
     except Exception as e:  # noqa: BLE001 - report and exit nonzero; the files stay in the clone for the next run
         print(f"news archive: publish FAILED {type(e).__name__}: {e if isinstance(e, na.ArchiveError) else ''}")
         return 1
