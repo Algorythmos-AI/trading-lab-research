@@ -202,3 +202,15 @@ otherwise.
 EXP-0057 phase 1 measured the EDGAR proxy against the forward headlines. Earnings agreement was 74.5%, below the 0.80
 bar, and buyouts matched 3 of 14. DEC-0081's note of 2026-11-26 closes the proxy. "This rule cannot be checked on
 2019 to 2025" therefore still holds in full. Nothing in this rule changes.
+
+### 2026-11-27: classifier v3 measured on fiscal.ai headlines (DEC-0082, EXP-0058)
+
+DEC-0082 measured classifier v3 on the fiscal.ai headlines this rule's catalyst step now reads.
+
+- **The result:** 88% decision-level agreement on a blind stratified sample of 100 (Wilson 95% interval 80.2% to
+  93.0%). The verdict under DEC-0082 point 6 is pass.
+- **The reference is agent-only:** the owner handed his labelling slots to an independent expert agent (DEC-0082 note
+  of 2026-11-27). So the figure does not carry the owner's reading.
+- **The misses:** 9 of the 12 decision-level misses were headlines with no catalyst that v3 read as one. One
+  buyout was read as breaking news, an excluded name passed as qualifying.
+- **What changes:** nothing in this rule. DEC-0010's acceptance of v3's accuracy as a known limitation stands.
