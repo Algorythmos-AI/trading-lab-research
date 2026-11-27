@@ -137,7 +137,7 @@ of 2026-11-12, assuming each answer fits on one page.
 | Consumer (key pair) | Rhythm | Data calls per rhythm | Calls per minute | Worst case |
 |---|---|---|---|---|
 | Runner B (`APCA_API_`; retired, no job since DEC-0069: this row is zero now) | one poll every 20 s (`poll_s=20.0`), 09:30 to the close | bars 1 + trade quote 1 + signal quote 1 when a signal is on the newest bar | 3 polls x 3 = **9** | at arm (about 08:30 New York), 14 sigma reads once (one of its two branches, never both); its own limiter caps it at 150/min |
-| Routine (`APCA_API_`) | 4 stages before the open (08:00, 08:30, 09:00, 09:15 ET), then `1131_signals` at 11:31 | per stage: the universe's 1-minute snapshot in batches of 200 names (in hybrid mode twice, SIP then the IEX tail), pre-market bars of the kept names, news; at 11:31: the Tier-2 names' bars 09:30 to 11:31, SIP plus the IEX tail | before the open, capped at **30** (`AlpacaREST(per_minute=30, shared=True)`); at 11:31, about **2** | 30, while a stage runs; the shared file limiter also holds every shared process to 180 together |
+| Routine (`APCA_API_`) | 4 stages before the open (08:00, 08:30, 09:00, 09:15 ET), then `1131_signals` at 11:31 | per stage: the universe's 1-minute snapshot in batches of 200 names on SIP, pre-market bars of the kept names, news; at 11:31: the Tier-2 names' bars 09:30 to 11:31 on SIP (one request each: the hybrid IEX tail ended with DEC-0064 point 9) | before the open, capped at **30** (`AlpacaREST(per_minute=30, shared=True)`); at 11:31, about **2** | 30, while a stage runs; the shared file limiter also holds every shared process to 180 together |
 | Forward test (`APCA_API_`) | once, after the close | bars for every candidate | capped at **150** (`per_minute=150`) | 150 (own limiter only; it does not join the shared one) |
 | EXP-0037 replay (`APCA_API_`) | once at 17:15 ET, Monday to Friday, while DEC-0054's list is open | 2 bar calls + one options-bar call per contract on the session's strike grid (the day's range ± $2, calls and puts: about 25 to 60) | capped at **150** (`AlpacaREST(per_minute=150, shared=True)`) | 150 while it fetches, a minute or two a session (a catch-up after missed evenings takes longer); it joins the shared limiter |
 | Pipeline check (`APCA_API_`) | 08:55 and 18:30 ET | bars (1 or more pages) + 1 snapshot; contracts go to the trading host | about 2 to 3 a run | bars pages up to 30, inside a 540 s budget |
@@ -196,7 +196,8 @@ That pair is shared with whatever else uses it.
    Trader Plus, 200 the free plan (per Alpaca's documentation).
 2. On a lapse, SIP for the last 15 minutes is refused again (403, per Alpaca's documentation):
    - The site shows live prices as off while `ALPACA_FEED=sip`; the owner sets it back to `iex` or unsets it.
-   - The routine falls back to IEX for a whole window on a SIP 403 by itself.
+   - The routine has no IEX fallback (DEC-0064 point 9): its scans fail, each stage is marked as failed and pages,
+     and Gap Hunter takes no entry that session. Nothing returns to IEX by itself.
    - The feed agreement stops with `sip not entitled` or `sip plan`.
 3. Confirm `ALPACA_FEED` on the site (unset or `iex`).
 4. Confirm that the clone's opra switch file `var/options/switches/opra` is absent on the host (OPRA needs the options
