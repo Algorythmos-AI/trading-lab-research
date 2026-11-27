@@ -1,0 +1,187 @@
+{
+ "experiment": "EXP-0058",
+ "decision": "DEC-0082",
+ "classifier_sha256": "96411f7a9016c3b8aee4ef2a6981a8c8bef9f6dd7943c6710fc6b2cf015d157f",
+ "complete": true,
+ "missing": {
+  "agent_labels": 0,
+  "owner_blind_labels": 0,
+  "owner_rulings": 0
+ },
+ "sample_n": 100,
+ "labelled_n": 100,
+ "reference_sources": {
+  "owner_slot_blind": 25,
+  "agent_blind": 60,
+  "owner_slot_review": 15
+ },
+ "decision_level": {
+  "hits": 88,
+  "n": 100,
+  "share": 0.88,
+  "wilson95": [
+   0.8018790057328857,
+   0.9300059356298052
+  ]
+ },
+ "labeller_check": {
+  "hits": 29,
+  "n": 30,
+  "share": 0.9666666666666667,
+  "wilson95": [
+   0.8332960900859082,
+   0.9940914096183874
+  ]
+ },
+ "exact_category": {
+  "hits": 79,
+  "n": 100,
+  "share": 0.79,
+  "wilson95": [
+   0.7002003116591013,
+   0.858343459380847
+  ]
+ },
+ "population_weighted_decision_level": 0.9220414370982553,
+ "confusion": [
+  {
+   "reference": "breaking_news",
+   "v3": "breaking_news",
+   "n": 11
+  },
+  {
+   "reference": "breaking_news",
+   "v3": "fda_approval",
+   "n": 2
+  },
+  {
+   "reference": "breaking_news",
+   "v3": "hype_only",
+   "n": 1
+  },
+  {
+   "reference": "buyout_offer",
+   "v3": "breaking_news",
+   "n": 1
+  },
+  {
+   "reference": "buyout_offer",
+   "v3": "buyout_offer",
+   "n": 6
+  },
+  {
+   "reference": "clinical_study_results",
+   "v3": "clinical_study_results",
+   "n": 9
+  },
+  {
+   "reference": "clinical_study_results",
+   "v3": "none",
+   "n": 1
+  },
+  {
+   "reference": "earnings_release",
+   "v3": "earnings_release",
+   "n": 11
+  },
+  {
+   "reference": "earnings_release",
+   "v3": "fda_approval",
+   "n": 1
+  },
+  {
+   "reference": "fda_approval",
+   "v3": "fda_approval",
+   "n": 3
+  },
+  {
+   "reference": "hype_only",
+   "v3": "hype_only",
+   "n": 2
+  },
+  {
+   "reference": "none",
+   "v3": "breaking_news",
+   "n": 4
+  },
+  {
+   "reference": "none",
+   "v3": "buyout_offer",
+   "n": 1
+  },
+  {
+   "reference": "none",
+   "v3": "hype_only",
+   "n": 6
+  },
+  {
+   "reference": "none",
+   "v3": "none",
+   "n": 15
+  },
+  {
+   "reference": "none",
+   "v3": "price_target_upgrade",
+   "n": 1
+  },
+  {
+   "reference": "none",
+   "v3": "unconfirmed_rumor",
+   "n": 3
+  },
+  {
+   "reference": "offering_dilution",
+   "v3": "offering_dilution",
+   "n": 9
+  },
+  {
+   "reference": "price_target_upgrade",
+   "v3": "price_target_upgrade",
+   "n": 10
+  },
+  {
+   "reference": "reverse_split",
+   "v3": "reverse_split",
+   "n": 2
+  },
+  {
+   "reference": "unconfirmed_rumor",
+   "v3": "unconfirmed_rumor",
+   "n": 1
+  }
+ ],
+ "verdict": "pass",
+ "owner_slots_filled_by": "an independent expert agent (DEC-0082 owner note 2026-11-27)",
+ "v3_vs_owner_slot": {
+  "hits": 25,
+  "n": 30,
+  "share": 0.8333333333333334,
+  "wilson95": [
+   0.6643564949358398,
+   0.9266345762815145
+  ]
+ },
+ "labeller_check_compares": "agent_blind vs owner slot (an independent expert agent (DEC-0082 owner note 2026-11-27))",
+ "private_files": [
+  {
+   "file": "sample_blind.csv",
+   "sha256": "11134966cb50ac6553ef15c94117fed221f478de138795a3e20a306c3eac7d74"
+  },
+  {
+   "file": "sample_key.csv",
+   "sha256": "b9f55691ce0bb08a6fba8b2ceb2675298a36932cdabdae45decdd877942d3116"
+  },
+  {
+   "file": "agent_labels.csv",
+   "sha256": "cc83389d595a01a347930ec2ef94426bdf8addb2846faff0108eafa064cb5d34"
+  },
+  {
+   "file": "owner_blind.csv",
+   "sha256": "aaa11fcdcbb529ae648a417529aef5ee9166666a66c80044922e0b64e04667e6"
+  },
+  {
+   "file": "owner_review.csv",
+   "sha256": "6c72d418536fe206ec46777bf5c1d4d5a508af110e775e6c6cee7efbd0792e87"
+  }
+ ]
+}

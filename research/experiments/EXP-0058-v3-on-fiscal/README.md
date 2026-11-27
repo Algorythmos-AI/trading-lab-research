@@ -49,3 +49,35 @@
   - **Not yet read:** the manifest's category counts and the key, which wait until the labels are locked.
 - **Owner slots (2026-11-27):** the owner handed the 30 blind labels and the rulings to an independent expert
   agent (DEC-0082 dated note). The result is reported as agent-referenced, and the report names who filled the slots.
+
+## Result (2026-11-27)
+
+`scripts/exp0058_score.py --final` ran once. `report.json` and `report.md` are committed unedited.
+
+- **Verdict: pass, agent-referenced** (DEC-0082 dated note of 2026-11-27).
+  - **The figure:** decision-level agreement was 88.0% (88 of 100), with a Wilson 95% interval of 80.2% to 93.0%.
+  - **The rule:** the verdict reads the point figure. The lower end of the interval is below 0.85, so the sample
+    does not exclude v3 being at or below the target.
+- **The labeller check:** the agent labeller matched the expert on 29 of the 30 (96.7%).
+- **v3 against the expert alone** (the same 30): 83.3% (25 of 30), Wilson 66.4% to 92.7%.
+- **Where the references came from:**
+  - agent blind: 60 items;
+  - the expert's blind labels: 25;
+  - the expert's rulings: 15.
+  - The 60 agent-only references had no second reading. The labeller check bounds that risk; it does not remove
+    it.
+- **Reported only:**
+  - exact-category agreement: 79.0%;
+  - population-weighted decision-level agreement: 92.2%.
+- **The pattern of the 12 decision-level misses** (from the confusion counts):
+  - **9 false catalysts:** items the reference calls `none` that v3 reads as a catalyst.
+    - Read as qualifying: `breaking_news` 4 and `price_target_upgrade` 1.
+    - Read as excluded: `unconfirmed_rumor` 3 and `buyout_offer` 1.
+  - **3 the other way:**
+    - a `breaking_news` item read as `hype_only`;
+    - a `clinical_study_results` item read as `none`;
+    - a `buyout_offer` item read as `breaking_news`. That is an excluded name passed as qualifying, the costliest
+      kind of miss for the funnel.
+  - **Not misses:** the 6 `none` items v3 calls `hype_only`. Both are non-qualifying.
+- **Comparison:** v3 scored 84% on Benzinga (EXP-0015a). The two figures come from different feeds and different
+  references, and the intervals overlap.
