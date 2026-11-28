@@ -12,8 +12,16 @@ import pytest
 from wt.core.config import ROOT
 from wt.data import news_archive as na
 
+_REAL_IS_PUBLIC = na.repo_is_public   # kept before the autouse fixture replaces it
+
 NOW = dt.datetime(2026, 11, 26, 12, 0, tzinfo=dt.timezone.utc)
 DAY = dt.date(2026, 11, 20)
+
+@pytest.fixture(autouse=True)
+def _archive_is_private(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test asks GitHub: the archive repository reads as private unless a test says otherwise."""
+    monkeypatch.setattr(na, "repo_is_public", lambda *a, **k: False)
+
 
 
 def item(i: int, created: str, updated: str | None = None, headline: str = "h", syms: Any = None) -> dict[str, Any]:
@@ -333,3 +341,34 @@ def test_the_job_is_in_the_schedule_as_a_non_trading_evening_job() -> None:
     j = JOBS["news-archive"]
     assert j.command == ("scripts/news_archive.py", "--catch-up", "30", "--publish")
     assert not j.trading and j.et == "Mon..Fri 20:45" and j.deadline_min and j.runtime_max_h > j.deadline_min / 60
+
+
+def test_publish_refuses_a_public_archive_before_it_commits(tmp_path: Path) -> None:
+    (tmp_path / ".git").mkdir()
+    calls: list[list[str]] = []
+
+    def git(args: list[str], cwd: Path) -> str:
+        calls.append(args)
+        return na.REMOTE + "\n" if args[:2] == ["remote", "get-url"] else " M x\n"
+
+    with pytest.raises(na.ArchiveError, match="public"):
+        na.publish(tmp_path, "m", git, is_public=lambda: True)
+    assert all(a[0] == "remote" for a in calls)
+
+
+@pytest.mark.parametrize(("code", "public"), [(404, False), (200, True)])
+def test_repo_is_public_reads_the_unauthenticated_answer(code: int, public: bool) -> None:
+    seen: list[str] = []
+    assert _REAL_IS_PUBLIC(lambda url: seen.append(url) or code) is public
+    assert seen == [f"https://api.github.com/repos/{na.ARCHIVE_REPO}"]
+
+
+@pytest.mark.parametrize("answer", [403, 429, 500, OSError("down")])
+def test_repo_is_public_fails_closed_without_a_clear_answer(answer: Any) -> None:
+    def status(url: str) -> int:
+        if isinstance(answer, Exception):
+            raise answer
+        return int(answer)
+
+    with pytest.raises(na.ArchiveError, match="could not confirm"):
+        _REAL_IS_PUBLIC(status)

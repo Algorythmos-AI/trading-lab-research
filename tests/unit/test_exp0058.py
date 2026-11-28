@@ -19,6 +19,12 @@ from wt.research.exp0057 import Share
 
 SPEC = ROOT / "config" / "catalysts_spec.yaml"
 
+@pytest.fixture(autouse=True)
+def _archive_is_private(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test asks GitHub: the archive repository reads as private unless a test says otherwise."""
+    monkeypatch.setattr(na, "repo_is_public", lambda *a, **k: False)
+
+
 
 def items(rows: list[tuple[int, str, list[str], str]]) -> pd.DataFrame:
     return pd.DataFrame([{"id": i, "created_at": c, "updated_at": c, "symbols": s, "headline": h, "source": "fiscal.ai",

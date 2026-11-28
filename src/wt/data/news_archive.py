@@ -287,9 +287,37 @@ def check_remote(url: str) -> None:
         raise ArchiveError("the archive's remote is not the private archive repository; nothing pushed")
 
 
-def publish(clone: Path, message: str, run: Runner = _git, folder: str = ROOT_IN_REPO) -> bool:
+def _status_unauthenticated(url: str) -> int:
+    import urllib.error
+    import urllib.request
+
+    req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "wt-news-archive"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:  # noqa: S310 - fixed https URL
+            return int(r.status)
+    except urllib.error.HTTPError as e:
+        return int(e.code)
+
+
+def repo_is_public(status: Callable[[str], int] = _status_unauthenticated) -> bool:
+    """Whether anyone can read the archive repository. Asked without credentials: GitHub answers 404 for a private
+    repository and 200 for a public one. Anything else (rate limit, outage) raises, so a push waits for a clear answer.
+    Alpaca's data may not be redistributed (DEC-0081, owner note 2026-11-28): a public archive would redistribute it."""
+    try:
+        code = status(f"https://api.github.com/repos/{ARCHIVE_REPO}")
+    except OSError as e:
+        raise ArchiveError(f"could not confirm the archive repository is private ({type(e).__name__})") from e
+    if code == 404:
+        return False
+    if code == 200:
+        return True
+    raise ArchiveError(f"could not confirm the archive repository is private (HTTP {code})")
+
+
+def publish(clone: Path, message: str, run: Runner = _git, folder: str = ROOT_IN_REPO,
+            is_public: Callable[[], bool] | None = None) -> bool:
     """Commit one folder of the clone (the news archive by default) and push it. Returns False when there was nothing
-    to commit."""
+    to commit. Refuses, before it commits anything, unless the archive repository is private (`repo_is_public` by default)."""
     if folder.startswith("/") or ".." in Path(folder).parts:
         raise ArchiveError("the folder must be a path inside the clone")
     if not (clone / ".git").exists():
@@ -302,6 +330,8 @@ def publish(clone: Path, message: str, run: Runner = _git, folder: str = ROOT_IN
     for u in urls:
         if u.strip():
             check_remote(u)
+    if (is_public or repo_is_public)():
+        raise ArchiveError(f"{ARCHIVE_REPO} is public; nothing pushed (Alpaca data may not be redistributed)")
     run(["add", "--", folder], clone)
     if not run(["status", "--porcelain", "--", folder], clone).strip():
         return False
