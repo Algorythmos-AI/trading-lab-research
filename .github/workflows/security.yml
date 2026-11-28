@@ -24,7 +24,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       # Every dependency is pinned, so audit the pins directly instead of resolving a temporary environment.
-      - run: uvx pip-audit --strict --disable-pip --no-deps -r requirements.lock.txt -r requirements-dev.lock.txt
+      # The auditor is pinned too, like every other tool CI runs (actionlint in ci.yml).
+      - run: uvx pip-audit@2.9.0 --strict --disable-pip --no-deps -r requirements.lock.txt -r requirements-dev.lock.txt
       # The dashboard's production dependencies, from the lockfile (no install needed).
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
