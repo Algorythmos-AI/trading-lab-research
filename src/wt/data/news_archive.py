@@ -317,7 +317,7 @@ def repo_is_public(status: Callable[[str], int] = _status_unauthenticated) -> bo
 def publish(clone: Path, message: str, run: Runner = _git, folder: str = ROOT_IN_REPO,
             is_public: Callable[[], bool] | None = None) -> bool:
     """Commit one folder of the clone (the news archive by default) and push it. Returns False when there was nothing
-    to commit. Refuses, before it commits anything, unless the archive repository is private (`repo_is_public` by default)."""
+    to commit (without asking GitHub). Refuses, before it commits anything, unless the archive repository is private (`repo_is_public` by default)."""
     if folder.startswith("/") or ".." in Path(folder).parts:
         raise ArchiveError("the folder must be a path inside the clone")
     if not (clone / ".git").exists():
@@ -330,11 +330,11 @@ def publish(clone: Path, message: str, run: Runner = _git, folder: str = ROOT_IN
     for u in urls:
         if u.strip():
             check_remote(u)
-    if (is_public or repo_is_public)():
-        raise ArchiveError(f"{ARCHIVE_REPO} is public; nothing pushed (Alpaca data may not be redistributed)")
     run(["add", "--", folder], clone)
     if not run(["status", "--porcelain", "--", folder], clone).strip():
-        return False
+        return False                                  # nothing to send, so no need to ask GitHub
+    if (is_public or repo_is_public)():
+        raise ArchiveError(f"{ARCHIVE_REPO} is public; nothing pushed (Alpaca data may not be redistributed)")
     who = ["-c", "user.name=skalaliya", "-c", "user.email=skalaliya@gmail.com"]   # the host's git has no identity
     run([*who, "commit", "-q", "-m", message, "--", folder], clone)
     run([*who, "pull", "-q", "--rebase", "origin", "main"], clone)   # another writer may have pushed first; a

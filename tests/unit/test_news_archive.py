@@ -353,7 +353,16 @@ def test_publish_refuses_a_public_archive_before_it_commits(tmp_path: Path) -> N
 
     with pytest.raises(na.ArchiveError, match="public"):
         na.publish(tmp_path, "m", git, is_public=lambda: True)
-    assert all(a[0] == "remote" for a in calls)
+    assert not [a for a in calls if a[0] in ("commit", "push") or "commit" in a or "push" in a]
+
+
+def test_publish_with_nothing_new_does_not_ask_github(tmp_path: Path) -> None:
+    (tmp_path / ".git").mkdir()
+
+    def git(args: list[str], cwd: Path) -> str:
+        return na.REMOTE + "\n" if args[:2] == ["remote", "get-url"] else ""
+
+    assert na.publish(tmp_path, "m", git, is_public=lambda: pytest.fail("asked GitHub with nothing to push")) is False
 
 
 @pytest.mark.parametrize(("code", "public"), [(404, False), (200, True)])
