@@ -87,7 +87,7 @@ case: anything else is refused before it is sent and the clone runs with no chai
 (`tests/unit/test_feed_call_shapes.py` fails on a committed value outside `wt.data.feeds.OPTION_FEEDS`).
 
 On Algo Trader Plus, SIP is not refused for the last 15 minutes: DEC-0064 checked every host pair for SIP bars ending
-now on 2026-11-18. The routine reads SIP up to the moment of each stage and no longer uses `HybridFeed`, so it has no
+now on 2026-11-18. The routine reads SIP up to the moment of each stage; `HybridFeed` (SIP plus an IEX tail, with a whole-window IEX fallback on a 403) has been removed, so it has no
 IEX tail and no fallback: after a lapse its scans fail and page, as point 11 of that record says.
 
 ## Keys, by name and location

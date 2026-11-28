@@ -30,7 +30,8 @@ def bar_counts(bars: Any) -> dict[str, int]:
 
 def sip_fallback(bars: Any, feed: str) -> int:
     """1 when a hybrid scan read bars and none of them came from the consolidated tape: the whole window fell
-    back to IEX (wt.data.alpaca.HybridFeed), so its volumes are one venue's."""
+    back to IEX, so its volumes are one venue's. Always 0 since DEC-0064 (SIP only) removed the hybrid feed; kept
+    so a stage's stats keep the key that older stage files carry."""
     if feed != "hybrid" or not len(bars) or "src" not in set(bars.columns):
         return 0
     return int(not bool((bars["src"] == "sip").any()))
