@@ -13,14 +13,6 @@
       "schedule": "* 13-21 * * 1-5"
     },
     {
-      "path": "/api/cron/feeds",
-      "schedule": "* 13-21 * * 1-5"
-    },
-    {
-      "path": "/api/cron/feeds-report",
-      "schedule": "*/10 20-23 * * 1-5"
-    },
-    {
       "path": "/api/cron/flow-baseline",
       "schedule": "*/10 11-13 * * 1-5"
     }

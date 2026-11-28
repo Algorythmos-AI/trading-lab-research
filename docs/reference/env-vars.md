@@ -83,7 +83,7 @@ reads through a variable (for example a key pair chosen per desk) are listed her
 |---|---|---|
 | `ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY` | The dashboard's quotes and feed checks (`lib/quote.ts`, …); `ops/keys_check.py` | Vercel |
 | `ALPACA_DATA_URL` | The dashboard's data reads | Vercel |
-| `ALPACA_FEED`, `ALPACA_OPTION_FEED` | The dashboard's board (`lib/alpaca-feed.ts`): stock feed `iex` or `sip`, option feed. Only the owner changes them ([board-feed.md](../runbooks/board-feed.md)) | Vercel |
+| `ALPACA_FEED`, `ALPACA_OPTION_FEED` | The dashboard's board (`lib/alpaca-feed.ts`): stock feed `sip` (the default; `iex` is paused by DEC-0064), option feed. Only the owner changes them ([board-feed.md](../runbooks/board-feed.md)) | Vercel |
 | `FRED_API_KEY`, `WT_CONTACT_EMAIL` | `ops/econ_calendar.py`; the dashboard's calendar | Host secrets; Vercel |
 | `NEWS_ARCHIVE_TOKEN` | `scripts/news_archive.py` (`data/news_archive.py`): clones and pushes the private news archive | Host secrets |
 | `FEED_WATCH_ALERTS` | The dashboard's feed watch (`lib/feed-watch-run.ts`) | Vercel |

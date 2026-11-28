@@ -140,13 +140,11 @@ feed-watch-drill: ## Offline: the feed watch's real tick on in-memory state, lat
 # is checked against YYYY-MM-DD first. The env file is read by Node's --env-file parser, never sourced as shell.
 export ENV_FILE ?= .env
 FA_DAY_OK = [[ "$$DAY" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$$ ]] || { echo "usage: DAY=YYYY-MM-DD"; exit 2; }
-feed-agreement: ## After a session: replay the board on IEX and on SIP bars and compare: make feed-agreement DAY=YYYY-MM-DD EDITION=<file> [BUDGET_S=120] [ENV_FILE=.env]
-	@$(FA_DAY_OK); [ -n "$$EDITION" ] || { echo "usage: make feed-agreement DAY=YYYY-MM-DD EDITION=<edition file>"; exit 2; }; \
-	node --env-file-if-exists="$$ENV_FILE" dashboard/scripts/feed-agreement.mjs --day "$$DAY" --edition "$$EDITION" --env-file "$$ENV_FILE" $${BUDGET_S:+--budget-s "$$BUDGET_S"}
+feed-agreement: ## (Paused, DEC-0064) After a session: replay the board on IEX and on SIP bars and compare: make feed-agreement DAY=YYYY-MM-DD EDITION=<file> [BUDGET_S=120] [ENV_FILE=.env]
+	@echo "paused: IEX is paused (DEC-0064 point 10), so the feed agreement asks nothing. See docs/runbooks/feed-agreement.md." >&2; exit 3
 
-feed-agreement-recheck: ## Once, the day after the first session: fetch a reported day again and count the units whose word changed: make feed-agreement-recheck DAY=YYYY-MM-DD EDITION=<file>
-	@$(FA_DAY_OK); [ -n "$$EDITION" ] || { echo "usage: make feed-agreement-recheck DAY=YYYY-MM-DD EDITION=<edition file>"; exit 2; }; \
-	node --env-file-if-exists="$$ENV_FILE" dashboard/scripts/feed-agreement.mjs --recheck --day "$$DAY" --edition "$$EDITION" --env-file "$$ENV_FILE" $${BUDGET_S:+--budget-s "$$BUDGET_S"}
+feed-agreement-recheck: ## (Paused, DEC-0064) Once, the day after the first session: fetch a reported day again and count the units whose word changed: make feed-agreement-recheck DAY=YYYY-MM-DD EDITION=<file>
+	@echo "paused: IEX is paused (DEC-0064 point 10), so the feed agreement asks nothing. See docs/runbooks/feed-agreement.md." >&2; exit 3
 
 feed-agreement-summary: ## The feed agreement's reading over the sessions run so far (5 of one engine label needed)
 	node dashboard/scripts/feed-agreement.mjs --summary

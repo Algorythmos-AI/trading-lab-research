@@ -699,15 +699,18 @@ describe("stampBoardFeed", () => {
     expect(half.store.has("desk/feeds/board/2026-11-27/manifest.json")).toBe(true);
   });
 
-  it("an iex board stamps iex; a refused setting stamps refused, answered error, with no read made", async () => {
-    const iex = stampDeps({ env: { VERCEL_ENV: "production", ALPACA_FEED: "" }, commitSha: null });
-    await stampBoardFeed(iex.deps);
-    expect(JSON.parse(iex.store.get("desk/feeds/board/2026-11-12/0931.json")!)).toMatchObject({ feed: "iex", answered: "ok", deployment: null, commit: null });
-    let probed = 0;
-    const bad = stampDeps({ env: { VERCEL_ENV: "production", ALPACA_FEED: "delayed_sip" }, probe: async () => (probed++, "ok") });
-    expect(await stampBoardFeed(bad.deps)).toBe("written");
-    expect(JSON.parse(bad.store.get("desk/feeds/board/2026-11-12/0931.json")!)).toMatchObject({ feed: "refused", answered: "error" });
-    expect(probed).toBe(0);
+  // DEC-0064: unset ALPACA_FEED is sip now, and iex is paused, so ALPACA_FEED=iex is a refused setting like any other.
+  it("an unset feed stamps sip (DEC-0064); a refused setting, iex included, stamps refused, answered error, with no read made", async () => {
+    const unset = stampDeps({ env: { VERCEL_ENV: "production", ALPACA_FEED: "" }, commitSha: null });
+    await stampBoardFeed(unset.deps);
+    expect(JSON.parse(unset.store.get("desk/feeds/board/2026-11-12/0931.json")!)).toMatchObject({ feed: "sip", answered: "ok", deployment: null, commit: null });
+    for (const v of ["delayed_sip", "iex"]) {
+      let probed = 0;
+      const bad = stampDeps({ env: { VERCEL_ENV: "production", ALPACA_FEED: v }, probe: async () => (probed++, "ok") });
+      expect(await stampBoardFeed(bad.deps)).toBe("written");
+      expect(JSON.parse(bad.store.get("desk/feeds/board/2026-11-12/0931.json")!)).toMatchObject({ feed: "refused", answered: "error" });
+      expect(probed).toBe(0);
+    }
   });
 
   it("the probe is handed the stamp's `at`; plan, stale, a throw or a rejection never throw out", async () => {

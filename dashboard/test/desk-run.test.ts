@@ -384,7 +384,9 @@ describe("the record's feed", () => {
     expect(f).not.toHaveBeenCalled();
   });
 
-  it("the deployed reads take sip refused by the plan (403) as not configured; a 403 on iex or a 401 stays a failure", async () => {
+  // DEC-0064: a 403 on iex can no longer be read (ALPACA_FEED=iex is refused before any read), so that case now checks
+  // iex is refused as not configured with nothing asked upstream; a 401 on sip still stays a failure.
+  it("the deployed reads take sip refused by the plan (403) as not configured; iex (paused) is refused unread; a 401 stays a failure", async () => {
     vi.stubEnv("VERCEL_ENV", "production");
     vi.stubEnv("DASHBOARD_FIXTURE", "");
     vi.stubEnv("ALPACA_API_KEY_ID", "k");
@@ -403,8 +405,10 @@ describe("the record's feed", () => {
       return errs.map((e) => (e instanceof BarsOff ? "off" : "failed"));
     };
     expect(await read("sip", 403)).toEqual(["off", "off"]);
-    expect(await read("iex", 403)).toEqual(["failed", "failed"]);
+    expect(await read("iex", 403)).toEqual(["off", "off"]);
+    expect(fetch).not.toHaveBeenCalled();
     expect(await read("sip", 401)).toEqual(["failed", "failed"]);
+    expect(await read("sip", 500)).toEqual(["failed", "failed"]);
   });
 
   it("the shadow numbers read records with and without the field alike", async () => {
@@ -588,7 +592,8 @@ describe("the snapshot probe", () => {
     vi.stubEnv("DASHBOARD_FIXTURE", "");
     vi.stubEnv("ALPACA_API_KEY_ID", "k");
     vi.stubEnv("ALPACA_API_SECRET_KEY", "s");
-    vi.stubEnv("ALPACA_FEED", "iex");
+    // DEC-0064: run on sip, the only feed that can be configured now (this case read iex before).
+    vi.stubEnv("ALPACA_FEED", "sip");
     const raw = rawFor(ny("10:31:01"));
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(raw), { status: 200 })));
     const got: unknown[] = [];

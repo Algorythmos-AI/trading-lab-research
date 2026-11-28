@@ -273,13 +273,13 @@ def test_feeds_for_paths() -> None:
 
 def test_require_feed() -> None:
     d = alpaca_data.DATA
-    require_feed(f"{d}/v2/stocks/bars", {"feed": "iex"})
+    require_feed(f"{d}/v2/stocks/bars", {"feed": "sip"})                  # iex is paused (test_iex_is_paused)
     require_feed(f"{d}/v1beta1/options/snapshots/SPY", {"feed": "indicative"})
     require_feed(f"{d}/v1beta1/news", None)
     require_feed(f"{d}/v2/stocks/meta/exchanges", None)                   # metadata takes no feed
     require_feed(f"{d}/v2/stocks/bars?symbols=SPY&feed=sip", {"symbols": "SPY"})     # a feed in the query
     require_feed(f"{d}/v1beta1/options/snapshots/SPY?feed=opra", None)
-    require_feed(f"{d}/v2/stocks/bars?feed=iex", {"feed": "iex"})         # the same feed twice is not ambiguous
+    require_feed(f"{d}/v2/stocks/bars?feed=sip", {"feed": "sip"})         # the same feed twice is not ambiguous
     require_feed(f"{d}/v2/stocks/auctions", {"feed": "sip"})
     for url, params in ((f"{d}/v2/stocks/bars", None), (f"{d}/v2/stocks/bars", {"symbols": "SPY"}),
                         (f"{d}/v2/stocks/bars", {"feed": ""}), (f"{d}/v2/stocks/bars", {"feed": "opra"}),
@@ -292,10 +292,12 @@ def test_require_feed() -> None:
             require_feed(url, params)
 
 
-def test_no_feed_is_paused_until_every_consumer_has_moved() -> None:
-    """DEC-0064's order of work: the list is empty until the last pull request switches the pause on."""
-    assert feeds_mod.PAUSED_STOCK_FEEDS == ()
-    require_feed(f"{alpaca_data.DATA}/v2/stocks/bars", {"feed": "iex"})
+def test_iex_is_paused() -> None:
+    """DEC-0064 step 6: the pause is on. A request that names iex is refused before it is sent; sip passes."""
+    assert feeds_mod.PAUSED_STOCK_FEEDS == ("iex",)
+    with pytest.raises(FeedPaused):
+        require_feed(f"{alpaca_data.DATA}/v2/stocks/bars", {"feed": "iex"})
+    require_feed(f"{alpaca_data.DATA}/v2/stocks/bars", {"feed": "sip"})
 
 
 @pytest.mark.parametrize("params", [{"feed": "iex"}, [("symbols", "SPY"), ("feed", "iex")], "symbols=SPY&feed=iex",
@@ -321,9 +323,9 @@ def test_a_paused_stock_feed_is_refused_before_sending(monkeypatch: pytest.Monke
         require_feed(f"{d}/v2/stocks/bars", {"symbols": "SPY"})
 
 
-@pytest.mark.parametrize("params", [[("symbols", "SPY"), ("feed", "iex")], (("feed", "sip"),),
-                                    "symbols=SPY&feed=iex", b"feed=sip", {"feed": ["iex"]}, {b"feed": b"iex"},
-                                    {"feed": DataFeed.IEX}])
+@pytest.mark.parametrize("params", [[("symbols", "SPY"), ("feed", "sip")], (("feed", "sip"),),
+                                    "symbols=SPY&feed=sip", b"feed=sip", {"feed": ["sip"]}, {b"feed": b"sip"},
+                                    {"feed": DataFeed.SIP}])
 def test_every_params_shape_requests_accepts(params: object) -> None:
     require_feed(f"{alpaca_data.DATA}/v2/stocks/bars", params)
 
@@ -346,7 +348,7 @@ def test_unreadable_or_featureless_params_give_feed_not_named_only(params: objec
 def test_the_url_is_normalised_before_matching(url: object) -> None:
     with pytest.raises(FeedNotNamed):
         require_feed(url, {"symbols": "SPY"})
-    require_feed(url, {"feed": "iex"})
+    require_feed(url, {"feed": "sip"})
 
 
 def test_a_malformed_url_raises_only_feed_not_named() -> None:

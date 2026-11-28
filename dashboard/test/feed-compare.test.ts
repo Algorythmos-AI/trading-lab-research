@@ -575,9 +575,13 @@ describe("the sampler", () => {
     const rf = sampleDeps(ny(S, "10:15:00"), { env: { ...KEYS, ALPACA_FEED: "delayed_sip" } });
     await runFeedSample(rf.deps);
     expect(parseSample(rf.files.get(samplePath(S, "1015"))!)!.board_feed).toBe("refused");
+    // DEC-0064: the board's feed is sip when ALPACA_FEED is unset, and iex (paused) is a refused setting.
     const unset = sampleDeps(ny(S, "10:15:00"), { env: KEYS });
     await runFeedSample(unset.deps);
-    expect(parseSample(unset.files.get(samplePath(S, "1015"))!)!.board_feed).toBe("iex");
+    expect(parseSample(unset.files.get(samplePath(S, "1015"))!)!.board_feed).toBe("sip");
+    const ix = sampleDeps(ny(S, "10:15:00"), { env: { ...KEYS, ALPACA_FEED: "iex" } });
+    await runFeedSample(ix.deps);
+    expect(parseSample(ix.files.get(samplePath(S, "1015"))!)!.board_feed).toBe("refused");
   });
 
   it("a failing feed is recorded with its status and no rows; a thrown fetch, with no status; the sampler never throws", async () => {
@@ -663,20 +667,33 @@ describe("the routes", () => {
     ["/api/cron/feeds", () => import("@/app/api/cron/feeds/route")],
     ["/api/cron/feeds-report", () => import("@/app/api/cron/feeds-report/route")],
   ] as const)
-    it(`${name} refuses without the bearer CRON_SECRET, and runs nothing outside production`, async () => {
+    // DEC-0064 point 10: the comparison is paused. After the bearer check the route answers "paused" and runs nothing,
+    // in production as outside it (it used to answer "not-production" outside production and run inside it).
+    it(`${name} refuses without the bearer CRON_SECRET, and after it answers paused (DEC-0064) and runs nothing`, async () => {
       vi.stubEnv("CRON_SECRET", "s3cret");
       vi.stubEnv("VERCEL_ENV", "preview");
+      const f = vi.fn<typeof fetch>();
+      vi.stubGlobal("fetch", f);
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
       const { GET } = await load();
       for (const auth of [null, "Bearer wrong", "s3cret", "bearer s3cret"]) {
         const res = await GET(new Request(`https://desk.example${name}`, { headers: auth ? { authorization: auth } : {} }));
         expect(res.status).toBe(401);
         expect(res.headers.get("cache-control")).toBe("no-store");
       }
-      const ok = await GET(new Request(`https://desk.example${name}`, { headers: { authorization: "Bearer s3cret" } }));
-      expect(ok.status).toBe(200);
-      expect(await ok.json()).toEqual({ ok: true, outcome: "not-production" });
-      // idempotent: a second call is the same no-op
-      expect(await (await GET(new Request(`https://desk.example${name}`, { headers: { authorization: "Bearer s3cret" } }))).json()).toEqual({ ok: true, outcome: "not-production" });
+      const paused = { ok: true, outcome: "paused", why: "DEC-0064" };
+      for (const env of ["preview", "production"]) {
+        vi.stubEnv("VERCEL_ENV", env);
+        const ok = await GET(new Request(`https://desk.example${name}`, { headers: { authorization: "Bearer s3cret" } }));
+        expect(ok.status).toBe(200);
+        expect(ok.headers.get("cache-control")).toBe("no-store");
+        expect(await ok.json()).toEqual(paused);
+        // idempotent: a second call is the same no-op
+        expect(await (await GET(new Request(`https://desk.example${name}`, { headers: { authorization: "Bearer s3cret" } }))).json()).toEqual(paused);
+      }
+      expect(f).not.toHaveBeenCalled();
+      expect(log.mock.calls.map((c) => JSON.parse(String(c[0])).outcome).filter((o) => o === "paused")).toHaveLength(4);
+      vi.unstubAllGlobals();
       vi.stubEnv("CRON_SECRET", "");
       expect((await GET(new Request(`https://desk.example${name}`, { headers: { authorization: "Bearer " } }))).status).toBe(401);
     });

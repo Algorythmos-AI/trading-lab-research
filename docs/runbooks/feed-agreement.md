@@ -1,5 +1,8 @@
 # Feed agreement: IEX against SIP for the Options board
 
+> **Paused (DEC-0064 point 10).** IEX is paused: the comparison sampler and report answer `paused` and their crons
+> are off. This page is kept for the record and for the way back.
+
 The Options page's "Trade now" board reads Alpaca's IEX feed (one exchange). The owner's Alpaca plan now includes
 SIP (the consolidated tape). The owner has decided that the board stays on IEX while the two feeds are compared side
 by side for about five sessions, and that any switch is made by the owner with a dated decision record. This page
