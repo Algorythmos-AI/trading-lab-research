@@ -265,6 +265,9 @@ site(f"{RS}::_session::'paper-s:not-flat' | 'Sleeve S NOT FLAT at the close'",
      {"pos": NS(symbol=NAMES[0], qty=N, avg_price=N)})
 site(f"{RS}::_session::'paper-s:not-flat' | 'Sleeve S could not verify flat after the close'", {})
 site(f"{RS}::_session::'paper-s:not-flat' | 'Sleeve S: no long position after the close'", {})
+site(f"{RS}::after_close_check::'paper-s:not-flat' | 'Sleeve S NOT FLAT at the close'",
+     {"longs": [NS(symbol=NAMES[0], qty=N, avg_price=N)]})
+site(f"{RS}::after_close_check::'paper-s:not-flat' | 'Sleeve S could not verify flat after the close'", {})
 site(f"{RS}::_session::'paper-s:not-paper' | 'Sleeve S stopped: not a paper account'", {})
 site(f"{RS}::_session::'paper-s:short-at-close' | 'Sleeve S is SHORT at the close'",
      {"pos": NS(symbol=NAMES[0], qty=-N, avg_price=N)})
