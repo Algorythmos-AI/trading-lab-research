@@ -127,6 +127,64 @@ def test_a_manual_holdout_date_is_refused_before_any_request():
         ft.main("2026-09-25")
 
 
+@pytest.mark.parametrize("fail, code", [(False, 0), ("daily", 1), ("strategy", 1)])
+def test_the_run_exits_non_zero_while_a_session_stays_incomplete(monkeypatch, fail, code):
+    """A failed strategy or daily update is journaled and retried next run; the exit status must say so, so the
+    job's page fires instead of a silent success."""
+    d = dt.date(2026, 11, 26)
+
+    class Rest:
+        def __init__(self, **kw):
+            pass
+
+        def calendar(self, start, end):
+            return pd.DataFrame({"date": [d], "close": ["16:00"]})
+
+    class Ctx:
+        def __init__(self, *a):
+            pass
+
+        def close(self):
+            pass
+    monkeypatch.setattr(ft, "AlpacaREST", Rest)
+    monkeypatch.setattr(ft, "Context", Ctx)
+    monkeypatch.setattr(ft, "read_log", lambda: [])
+    monkeypatch.setattr(ft, "pending_sessions", lambda *a, **k: [d])
+    monkeypatch.setattr(ft, "update_daily", lambda a, days, now: [] if fail == "daily" else list(days))
+    monkeypatch.setattr(ft, "units_for", lambda ctx, day: [])
+    monkeypatch.setattr(ft, "run_session",
+                        lambda day, units, done: set() if fail == "strategy" else ft.required(day))
+    assert ft.main() == code
+
+
+def test_an_older_session_beyond_the_catch_up_batch_still_fails_the_run(monkeypatch):
+    """The run works the newest MAX_CATCHUP sessions; one older still owed must keep the exit status non-zero."""
+    old, new = dt.date(2026, 11, 2), dt.date(2026, 11, 26)
+
+    class Rest:
+        def __init__(self, **kw):
+            pass
+
+        def calendar(self, start, end):
+            return pd.DataFrame({"date": [old, new], "close": ["16:00", "16:00"]})
+
+    class Ctx:
+        def __init__(self, *a):
+            pass
+
+        def close(self):
+            pass
+    monkeypatch.setattr(ft, "AlpacaREST", Rest)
+    monkeypatch.setattr(ft, "Context", Ctx)
+    monkeypatch.setattr(ft, "read_log", lambda: [])
+    # this run's batch (no max_n: the cap) holds only the newest; the whole backlog (max_n given) holds both
+    monkeypatch.setattr(ft, "pending_sessions", lambda s, c, n, d, **k: [old, new] if "max_n" in k else [new])
+    monkeypatch.setattr(ft, "update_daily", lambda a, days, now: list(days))
+    monkeypatch.setattr(ft, "units_for", lambda ctx, day: [])
+    monkeypatch.setattr(ft, "run_session", lambda day, units, done: ft.required(day))
+    assert ft.main() == 1
+
+
 def test_sip_safe_end_is_16_minutes_before_now():
     now = pd.Timestamp("2026-09-29T20:20:00Z")
     assert sip_safe_end(now) == (now - pd.Timedelta(minutes=SIP_DELAY_MIN)).strftime("%Y-%m-%dT%H:%M:%SZ")

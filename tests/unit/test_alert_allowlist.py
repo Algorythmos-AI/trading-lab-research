@@ -265,6 +265,11 @@ site(f"{RS}::_session::'paper-s:not-flat' | 'Sleeve S NOT FLAT at the close'",
      {"pos": NS(symbol=NAMES[0], qty=N, avg_price=N)})
 site(f"{RS}::_session::'paper-s:not-flat' | 'Sleeve S could not verify flat after the close'", {})
 site(f"{RS}::_session::'paper-s:not-flat' | 'Sleeve S: no long position after the close'", {})
+site(f"{RS}::after_close_check::'paper-s:not-flat' | 'Sleeve S NOT FLAT at the close'",
+     {"longs": [NS(symbol=NAMES[0], qty=N, avg_price=N)]})
+site(f"{RS}::after_close_check::'paper-s:not-flat' | 'Sleeve S could not verify flat after the close'", {})
+site(f"{RS}::after_close_check::'paper-s:short-at-close' | 'Sleeve S is SHORT at the close'",
+     {"shorts": [NS(symbol=NAMES[0], qty=-N, avg_price=N)]})
 site(f"{RS}::_session::'paper-s:not-paper' | 'Sleeve S stopped: not a paper account'", {})
 site(f"{RS}::_session::'paper-s:short-at-close' | 'Sleeve S is SHORT at the close'",
      {"pos": NS(symbol=NAMES[0], qty=-N, avg_price=N)})
@@ -301,6 +306,8 @@ site(f"{RO}.step::f'options-clone:latched-{{latched}}' | 'Options clone latched'
 site(f"{RO}.step::f'{{pg.count(len(held))}} position still open at {{pg", {"held": [T], "self": NS(ck=NS(critical=T))})
 site(f"{RO}.step::p | now", {"p": p_obj()})
 site(f"{RO}.verify::'not-flat' | 'Options clone NOT FLAT'", {"own": {T}, "now": T})
+site(f"{RO}.verify::'not-flat-unplanned' | 'Options clone NOT FLAT: positions no plan holds'",
+     {"unplanned": [T], "now": T})
 site("src/wt/live/runner_o.py::run::'options-clone:broker' | 'Options clone could not connect'", {})
 site("src/wt/ops/backup.py::flag_chain::key | title", drive_flag_chain)
 site("src/wt/ops/backup.py::nightly::'anchor' | 'Daily evidence anchor failed'", {"why": T})

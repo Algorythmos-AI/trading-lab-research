@@ -32,7 +32,7 @@ def mk(guard: bool = False, kill: bool = False, store: PlanStore | None = None, 
                        session_open=ET_NOW.replace(hour=9, minute=30), session_close=ET_NOW.replace(hour=16, minute=0),
                        entries_today=0, orders_today=0, environ={"MODE": "paper"})
     oms = OMS(b, sell_timeout_s=1.0, sleep=lambda s: None, guard=PreTradeGuard(LIMITS) if guard else None,
-              context=ctx if guard else None, persist=store.save if store else None,
+              unguarded=not guard, context=ctx if guard else None, persist=store.save if store else None,
               on_entry=lambda p: entries.append(p.trade_id), strategy="B")
     return b, oms, entries
 
@@ -223,7 +223,7 @@ def test_c4_plan_and_sequence_survive_a_restart(tmp_path):
     p = filled_plan(b, oms)
     again = store.load()
     assert again is not None and again.state == "in_position" and again.seq == p.seq == 2
-    oms2 = OMS(b, sell_timeout_s=1.0, sleep=lambda s: None, persist=store.save, strategy="B")
+    oms2 = OMS(b, sell_timeout_s=1.0, sleep=lambda s: None, persist=store.save, strategy="B", unguarded=True)
     assert oms2.reconcile({"QQQM"}, {}, plan=again) == []            # already protected: nothing to do
     b.orders[again.stop_id].status = OrderStatus.CANCELED            # stop lost while we were down
     acts = oms2.reconcile({"QQQM"}, {}, plan=again)
@@ -336,7 +336,7 @@ def test_after_a_restart_a_stop_already_cancelled_does_not_block_the_exit():
     b, oms, _ = mk(guard=True, broker=LaggingList())
     p = filled_plan(b, oms)
     b.cancel(p.stop_id)                                           # cancelled before the restart; still listed
-    oms2 = OMS(b, sell_timeout_s=1.0, sleep=lambda s: None, guard=oms.guard, context=oms.context, strategy="B")
+    oms2 = OMS(b, sell_timeout_s=1.0, sleep=lambda s: None, guard=oms.guard, context=oms.context, strategy="B", unguarded=oms.unguarded)
     orig = b.place
 
     def place_and_fill(o):

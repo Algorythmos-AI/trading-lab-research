@@ -384,7 +384,7 @@ wt.ops.publish                            POST /api/ingest            (productio
   | Trade journal | :24 hourly 09:24–15:24 before the close; 21:38 | New York; UTC (runbook) | 45 min; 60 min (only the evening run's own read counts: at most 10 min before 21:38 UTC; the last live run reads until about 16:20:30 New York). The evening rule is **assumed** (how the routine stamps and how early it may fire cannot be checked here): a missed evening sync is shown, not paged | `as_of` at or after the run | after two missed runs |
   | Card ledger, morning | 09:11 | New York, **assumed** | 60 min | `session` = the last session | no (display only) |
   | Card ledger, after close | 16:21 | New York, **assumed** | 60 min | `session` = today | no (display only) |
-  | Radar edition | 11:12 Mon–Fri | UTC (runbook) | 60 min (stamp may be 60 min early) | `as_of` at or after the run | yes |
+  | Radar edition | 11:12 Mon–Fri | UTC (runbook) | 60 min (stamp may be 120 min early: the 05:30 New York build is 102 min before the send on daylight time) | `as_of` at or after the run | yes |
   | Server check | every settled slot in the session, switch `desk/eval.json` exactly `log` | the exchange calendar | 10 min without a record | a record under `desk/log/<day>/` | yes |
   | Refusals | a refusal at `/api/ingest` with nothing newer stored (`readIngestRejectStatus`) | — | — | — | options, journal, radar; the rest display only |
 

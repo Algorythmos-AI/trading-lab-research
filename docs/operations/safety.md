@@ -10,7 +10,7 @@ Three layers keep orders away from a live account.
 | Layer | What it does | Where |
 |---|---|---|
 | Hard-coded paper client | Every Alpaca trading client is built with `paper=True` | `src/wt/brokers/alpaca_paper.py`, `alpaca_options_paper.py`, `alpaca_read.py` |
-| The paper-only lock | Refuses unless `MODE` is `paper`, `LIVE_TRADING_ENABLED` is not true, the trading URL (and `APCA_API_BASE_URL` if set) is exactly `https://paper-api.alpaca.markets`, and the account number starts with `PA`. All four are checked when an adapter is built; before every order, `place()` checks the environment part again (`MODE`, `LIVE_TRADING_ENABLED`, `APCA_API_BASE_URL`) | `src/wt/core/safety.py` |
+| The paper-only lock | Refuses unless `MODE` is `paper`, `LIVE_TRADING_ENABLED` is unset, empty or plainly false (`0`, `false`, `no`, `off`, any case; any other value counts as on), the trading URL (and `APCA_API_BASE_URL` if set) is exactly `https://paper-api.alpaca.markets`, and the account number starts with `PA`. All four are checked when an adapter is built; before every order, `place()` checks the environment part again (`MODE`, `LIVE_TRADING_ENABLED`, `APCA_API_BASE_URL`) | `src/wt/core/safety.py` |
 | `MODE` is set per job | `wt.ops.jobs` starts each job's process with that job's `MODE`. The runners also refuse to start unless `MODE=paper` | `src/wt/ops/jobs.py` (`run_child`), `src/wt/live/runner_s.py`, `src/wt/live/runner_o.py` |
 
 On a host with `WT_ROLE=shadow`, Gap Hunter, the options clone (and the retired QQQ runner) wrap their broker in
@@ -21,27 +21,28 @@ The host runs `WT_ROLE=primary` (checked 2026-11-25), where none of this applies
 
 `MODE`, `LIVE_TRADING_ENABLED` and any live key belong to the owner alone ([AGENTS.md](../../AGENTS.md), rule 1).
 
-## 2. Kill switches: one file per desk
+## 2. Kill switches: the root file and one file per desk
 
 Paths below assume `WT_STATE` is unset, as it is on the host (`STATE_DIR` defaults to `var/`, `src/wt/core/config.py`).
-A kill file stops **new entries**. While it exists, the desk keeps managing exits and protective stops. Each desk reads its
-own file, and **no single file stops every desk**.
+A kill file stops **new entries**. While it exists, the desk keeps managing exits and protective stops. **The root
+`KILL` is the master switch: every desk reads it.** Each desk also reads its own file, which stops that desk alone.
 
 | Desk | Job | File it reads (on the host, under `/home/wt/trading`) | Read by | Turn on | Turn off |
 |---|---|---|---|---|---|
-| Gap Hunter (stock desk, "sleeve S") | `paper-s` | `var/smallcap/KILL` **only** | `src/wt/live/runner_s.py` (`KILL = DIR / "KILL"`) | `make kill DESK=s REASON="…"` | `make unkill DESK=s` |
+| Gap Hunter (stock desk, "sleeve S") | `paper-s` | the root `KILL` **or** `var/smallcap/KILL` | `src/wt/live/runner_s.py` (`killed()`) | `make kill REASON="…"` (root, every desk) or `make kill DESK=s REASON="…"` | `make unkill` (root) or `make unkill DESK=s` |
 | Options clone | `paper-o` | the root `KILL` **or** `var/options/KILL` | `src/wt/live/runner_o.py` (`KILLS`) | `make kill REASON="…"` (root) or `make kill DESK=options REASON="…"` | `make unkill` (root) or `make unkill DESK=options` |
 | Retired QQQ rule (DEC-0069) | none | the root `KILL` | `src/wt/live/runner_b.py` | — | — |
 
-**The root `KILL` does not stop Gap Hunter.** `make kill` with no `DESK` (or `DESK=stocks`) writes the root file
-(`Makefile`, target `kill`). `DESK=s` writes Gap Hunter's file and `DESK=options` the clone's own file; any other value
-is refused and writes nothing. To stop Gap Hunter's entries on the host:
+`make kill` with no `DESK` (or `DESK=stocks`) writes the root file (`Makefile`, target `kill`), which stops every
+desk. `DESK=s` writes Gap Hunter's own file and `DESK=options` the clone's own file; any other value is refused and
+writes nothing. To stop every desk's entries on the host:
 
 ```bash
-sudo -u wt make -C /home/wt/trading kill DESK=s REASON="why"
+sudo -u wt make -C /home/wt/trading kill REASON="why"
 ```
 
-To stop every desk, write both files. Gap Hunter re-reads its file on every loop of its session (`runner_s.py`).
+A desk stays stopped while either file it reads exists: removing Gap Hunter's own file does not undo the root file.
+Gap Hunter re-reads both files on every loop of its session (`runner_s.py`, `killed()`).
 The clone checks its files each time it builds the pre-trade context for an entry (`runner_o.py`, `killed()`).
 Either way, a change takes effect without a restart.
 
@@ -51,7 +52,7 @@ Either way, a change takes effect without a restart.
   file, with the desk (`root`, `s` or `options`) as the entry's detail; the detail stays on the host. The file is
   written first: a failed audit write prints `audit log not written` and does not undo the kill (`Makefile`, target
   `kill`). `make unkill [DESK=…]` removes the file through `wt.ops.control unkill` and writes `kill_off`. For the root
-  file it takes the retired QQQ rule's runner lock first; `DESK=s` and `DESK=options` remove the file without a lock
+  file it takes the retired QQQ rule's and Gap Hunter's runner locks and the options clone's first (refused while Gap Hunter's or the clone's session runs); `DESK=s` and `DESK=options` remove the file without a lock
   check, and each runner logs the change.
 - **Not audited.** A file written or removed by hand (`echo … > var/smallcap/KILL`, `rm`) writes no audit entry. Gap
   Hunter logs `kill_state` in its own journal either way.

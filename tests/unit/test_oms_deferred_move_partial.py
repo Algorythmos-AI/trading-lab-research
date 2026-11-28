@@ -63,6 +63,7 @@ class Clock:
 def setup(store: MultiPlanStore | None = None) -> tuple[SlowCancel, MultiOMS, MultiPlan, Clock]:
     b, clock = SlowCancel(), Clock()
     oms = MultiOMS(b, sell_timeout_s=1.0, sleep=lambda s: None, strategy="S", clock=clock, confirm_polls=3,
+                   unguarded=True,
                    persist=store.save if store else None)
     p = MultiPlan(date="2026-12-01", strategy="S", symbol="ABC", qty=10, trigger=20.0, limit=20.05, stop=19.5,
                   target=21.0)
@@ -166,6 +167,7 @@ def test_the_deferred_price_survives_a_restart(tmp_path):
     assert q.stop_deferred == 20.0 and q.stop == 19.5
     b.settle()
     oms2 = MultiOMS(b, sell_timeout_s=1.0, sleep=lambda s: None, strategy="S", clock=clock, confirm_polls=3,
+                   unguarded=True,
                     persist=store.save)
     assert loop(oms2, q) == ["protected ABC: stop for 10 @ 20.0"] and stops(b)[-1] == (10, 20.0)
 

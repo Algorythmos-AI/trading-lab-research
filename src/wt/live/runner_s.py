@@ -9,9 +9,9 @@ of config/risk.yaml (`session_trial`). With none or more than one listed, no ent
 
 What it shares with the retired QQQ rule's runner (wt.live.runner_b; DEC-0069): four pure helpers it imports, and
 nothing at run time. Its own paper account and key pair (APCA_S_KEY_ID, APCA_S_SECRET_KEY), journal
-(data/live/smallcap_journal.jsonl), plans and state (var/smallcap/), kill file (var/smallcap/KILL), strategy tag (S)
-and process lock. It never reads or writes data/live/plan_*.json, data/live/journal.jsonl or the QQQ rule's virtual
-account: those are an archive.
+(data/live/smallcap_journal.jsonl), plans and state (var/smallcap/), kill file (var/smallcap/KILL; the root KILL,
+which stops every desk, is read too), strategy tag (S) and process lock. It never reads or writes
+data/live/plan_*.json, data/live/journal.jsonl or the QQQ rule's virtual account: those are an archive.
 
 It refuses to start without its own key pair, and never falls back to APCA_API_*. It reads no other pair, so it does
 not matter what APCA_API_* holds: since DEC-0069 no job trades on that pair, and it may come to hold this desk's own
@@ -116,6 +116,7 @@ STRATEGY = "S"
 DIR = STATE_DIR / "smallcap"
 PLANS = DIR / "plans"
 KILL = DIR / "KILL"
+ROOT_KILL = ROOT / "KILL"          # the master switch: `make kill` with no DESK stops every desk, this one too
 VA_PATH = DIR / "virtual_account.json"
 JOURNAL = DATA_DIR / "live" / "smallcap_journal.jsonl"
 RECORD = ROOT / "research" / "decisions" / "DEC-0066-robot-b-sleeve-s-paper-desk.md"
@@ -153,6 +154,12 @@ X_EVENTS = frozenset({"short_position", "END_OF_DAY_NOT_FLAT", "unprotected", "g
 
 # ---- journal ------------------------------------------------------------------------------------------------------
 _WATCH: list[Callable[[dict[str, Any]], None]] = []    # the session's readers of its own rows (DEC-0073); run() clears it
+
+
+def killed() -> bool:
+    """Are new entries stopped by a kill file: Gap Hunter's own (var/smallcap/KILL) or the root KILL, which stops
+    every desk. A check that fails raises: the poll is a loop error (paged after three in a row) and enters nothing."""
+    return KILL.exists() or ROOT_KILL.exists()
 
 
 def log(event: str, **kw: Any) -> bool:
@@ -676,6 +683,39 @@ def _start(day: dt.date | None, poll_s: float, broker: Any, rest: Any, now_fn: C
         _session(day, poll_s, broker, rest, clock, sleep, pager)
 
 
+def after_close_check(broker: Any, pager: Any) -> None:
+    """A session that starts after the close (a restart once the host is back) arms nothing, so its after-close block
+    never runs. The account is still read: a long position is journaled as END_OF_DAY_NOT_FLAT with whether a GTC
+    stop of this desk's covers it, and paged, so a position the restart found is never silent overnight. Nothing is
+    sent: a stop needs its plan's price, which is the next session's (or the owner's) to set."""
+    try:
+        cover = OMS(broker, strategy=STRATEGY)
+        held = broker.positions()
+        longs = [pos for pos in held if pos.qty > 0]
+        shorts = [pos for pos in held if pos.qty < 0]
+        for pos in longs:
+            try:
+                protected: bool | None = cover.stop_cover(pos.symbol, gtc_only=True) >= pos.qty
+            except Exception:  # noqa: BLE001 — unread is unknown, never "unprotected"
+                protected = None
+            log("END_OF_DAY_NOT_FLAT", symbol=pos.symbol, qty=pos.qty, protected=protected, late_start=True)
+        for pos in shorts:                            # as the close does: nothing is bought back automatically
+            log("END_OF_DAY_NOT_FLAT", symbol=pos.symbol, qty=pos.qty, short=True, late_start=True)
+        if longs:
+            pager.fire("paper-s:not-flat", "Sleeve S NOT FLAT at the close",
+                       f"The session started after the close and found {page.count(len(longs))} long position(s); "
+                       "the journal (END_OF_DAY_NOT_FLAT) says whether a GTC stop covers each. Check the broker.", 5)
+        if shorts:
+            pager.fire("paper-s:short-at-close", "Sleeve S is SHORT at the close",
+                       f"The session started after the close and found {page.count(len(shorts))} short position(s). "
+                       "Nothing is bought back automatically; the journal (END_OF_DAY_NOT_FLAT) names every one. "
+                       "Follow the not-flat runbook.", 5)
+    except Exception as e:  # noqa: BLE001 — a restart after the close must still say it could not look
+        log("END_OF_DAY_NOT_FLAT", error=f"could not read the account after the close: {e!r}"[:300], late_start=True)
+        pager.fire("paper-s:not-flat", "Sleeve S could not verify flat after the close",
+                   "The session started after the close and could not read the account. Check it.", 5)
+
+
 def _connect(factory: Callable[[], Any], sleep: Callable[[float], None]) -> Any:
     from wt.core.safety import PaperOnlyError
     for attempt in range(CONNECT_TRIES):
@@ -774,6 +814,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
     now = clock()
     if now >= close_dt:
         log("no_session", day=day, reason="started after the close")
+        after_close_check(broker, pager)
         return
     if now < open_dt - ARM_LEAD:
         log("too_early", day=day)
@@ -881,7 +922,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
 
     def context(symbol: str) -> Context:
         return Context(now=clock(), position_qty=sum(p.qty for p in broker.positions() if p.symbol == symbol),
-                       open_orders=broker.open_orders(), kill=KILL.exists(), latched=va.latched,
+                       open_orders=broker.open_orders(), kill=killed(), latched=va.latched,
                        session_open=open_dt, session_close=close_dt,
                        entries_today=va.trades_by_day.get(day.isoformat(), 0),
                        orders_today=orders_before + sum(orders_sent(p) for p in made))
@@ -1200,7 +1241,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
             gap_rested[0] = (f"{plan.symbol}|" if rotate else "") + \
                 f"{plan.code}|{plan.signal_t}|{plan.trigger:.2f}|{plan.initial_stop:.2f}"
 
-    kill_on = KILL.exists()
+    kill_on = killed()
     log("armed", day=day, trial=trial, entries_off=off, kill=kill_on, flatten=flatten_dt, symbols=len(symbols),
         resumed_plan=plan.trade_id if plan else None, held=[p.trade_id for p in held],
         day_stop=day_stopped(losers, realised), skew_s=measure_skew(broker, clock),
@@ -1910,7 +1951,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
         if now >= close_dt:
             break
         try:
-            if KILL.exists() != kill_on:
+            if killed() != kill_on:
                 kill_on = not kill_on
                 log("kill_state", on=kill_on)
             # ---- DEC-0073 X3: a position the desk owns with no resting stop, as the last poll left it. First and in

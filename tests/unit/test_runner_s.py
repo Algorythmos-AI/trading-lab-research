@@ -91,7 +91,7 @@ def env(tmp_path, monkeypatch):
     record = tmp_path / "DEC-0066.md"
     record.write_text("# DEC-0066\n\n- **Status: ACCEPTED on 2026-12-01.**\n")
     state = tmp_path / "var" / "smallcap"
-    for name, value in (("DIR", state), ("PLANS", state / "plans"), ("KILL", state / "KILL"),
+    for name, value in (("DIR", state), ("PLANS", state / "plans"), ("KILL", state / "KILL"), ("ROOT_KILL", tmp_path / "KILL"),
                         ("VA_PATH", state / "virtual_account.json"),
                         ("JOURNAL", tmp_path / "live" / "smallcap_journal.jsonl"), ("RECORD", record),
                         ("MIN_FREE_GB", 0.0)):
@@ -192,6 +192,42 @@ def test_a_session_with_no_valid_setup_places_nothing_and_says_so(env):
     assert not (env / "var" / "smallcap" / "plans").exists()
 
 
+@pytest.mark.parametrize("stop_left", [True, False])
+def test_a_restart_after_the_close_journals_and_pages_a_position_it_finds(env, stop_left):
+    """A session that starts after the close arms nothing; it still reads the account, so a position is never silent
+    overnight. It sends nothing."""
+    tape = tape_of({"ABC": day_rows(TO_TARGET)})
+    clock = ReplayClock(at(9, 25), crash_at=at(10, 52))
+    b = BarFillBroker(clock, tape, SESSIONS)
+    with pytest.raises(ReplayCrash):
+        runner_s.run(DAY, poll_s=10.0, broker=b, rest=ReplayREST(clock, tape, SESSIONS), now_fn=clock.now,
+                     sleep_fn=clock.sleep, environ=KEYS)
+    if not stop_left:
+        for o in b.own_sells("ABC"):
+            b.cancel(o.client_order_id)
+    placed = len(b.placed)
+    rec = Rec()
+    session(tape, start=(16, 1), broker=b, alerts=rec)
+    j = journal(env)
+    assert one(j, "no_session")["reason"] == "started after the close"
+    row = one(j, "END_OF_DAY_NOT_FLAT")
+    assert row["late_start"] is True and row["qty"] == 14 and row["protected"] is stop_left
+    assert "paper-s:not-flat" in rec.keys("fire") and len(b.placed) == placed
+
+
+def test_a_restart_after_the_close_pages_a_short_it_finds(env):
+    tape = tape_of({"ABC": day_rows(TO_TARGET)})
+    clock = ReplayClock(at(16, 1))
+    b = BarFillBroker(clock, tape, SESSIONS)
+    from wt.core.types import Position
+    b.positions = lambda: [Position("ABC", -5, 40.0)]                 # type: ignore[method-assign]
+    rec = Rec()
+    session(tape, start=(16, 1), broker=b, alerts=rec)
+    row = one(journal(env), "END_OF_DAY_NOT_FLAT")
+    assert row["short"] is True and row["qty"] == -5 and row["late_start"] is True
+    assert "paper-s:short-at-close" in rec.keys("fire") and not b.placed
+
+
 def test_a_crash_while_holding_resumes_the_plan_and_books_the_trade_once(env):
     tape = tape_of({"ABC": day_rows(TO_TARGET)})
     clock = ReplayClock(at(9, 25), crash_at=at(10, 52))
@@ -246,6 +282,29 @@ def test_the_kill_file_cancels_a_resting_entry(env):
     b = session(tape_of({"ABC": day_rows(quiet)}), hook=raise_kill)
     j = journal(env)
     assert one(j, "entry_cancelled")["why"] == "kill_file" and not events(j, "entry_filled")
+    flat_and_clean(b)
+
+
+def test_the_root_kill_file_cancels_a_resting_entry(env):
+    """The root KILL is the master switch (`make kill` with no DESK): it stops Gap Hunter's entries too."""
+    def raise_kill(now, b):
+        if now >= at(10, 50, 15):
+            (env / "KILL").touch()
+
+    quiet = [(40.75, 40.90, 40.70, 40.80, 30_000)] * 4
+    b = session(tape_of({"ABC": day_rows(quiet)}), hook=raise_kill)
+    j = journal(env)
+    assert one(j, "kill_state")["on"] is True
+    assert one(j, "entry_cancelled")["why"] == "kill_file" and not events(j, "entry_filled")
+    flat_and_clean(b)
+
+
+def test_the_root_kill_file_at_arm_enters_nothing(env):
+    (env / "KILL").write_text("paused")
+    b = session(tape_of({"ABC": day_rows(TO_TARGET)}))
+    j = journal(env)
+    assert one(j, "armed")["kill"] is True
+    assert not events(j, "entry_placed") and not events(j, "entry_filled")
     flat_and_clean(b)
 
 

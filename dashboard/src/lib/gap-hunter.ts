@@ -197,6 +197,8 @@ export function standing(s: Snapshot | null): Standing {
   const status = String(j?.status ?? "").toLowerCase();
   if (b?.latched === true) return { word: "Latched", tone: "bad", detail: "Its own limits have stopped new entries." };
   if (b?.kill === true) return { word: "Paused: its kill switch is on", tone: "warn", detail: "No new entries until the switch is removed on the host." };
+  // The root file is the master switch: it stops Gap Hunter too, even with its own file off.
+  if (s.kill?.on === true) return { word: "Paused: the root kill switch is on", tone: "warn", detail: "The root file stops every desk. No new entries until it is removed on the host." };
   if (status === "failed" || status === "timeout") return { word: "Last session did not finish", tone: "warn", detail: `${runWords(j)}.` };
   if (status === "refused") return { word: "Did not start", tone: "warn", detail: "The host refused to start the last session." };
   if (alerts.length > 0) return { word: "Needs a look", tone: "warn", detail: `${alerts.length} alert${alerts.length === 1 ? "" : "s"} firing.` };

@@ -174,6 +174,14 @@ describe("POST /api/ingest", () => {
     expect(await res.json()).toEqual({ status: "duplicate", run_id: "r1" });
   });
 
+  it("422 ahead-of-clock for a desk snapshot dated beyond the allowance, and nothing is stored", async () => {
+    const ahead = new Date(NOW.getTime() + 60 * 60_000).toISOString();
+    const res = await handleIngest(signed(snapshotBody("r9", ahead)), NOW);
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ error: "invalid", errors: ["/as_of: is ahead of the server's clock"] });
+    expect(blob.store.size).toBe(0);
+  });
+
   it("409 older when as_of is not newer than the stored one", async () => {
     await handleIngest(signed(snapshotBody("r2", "2026-09-29T21:45:00+00:00")), NOW);
     const older = await handleIngest(signed(snapshotBody("r1", "2026-09-29T21:30:00+00:00")), NOW);

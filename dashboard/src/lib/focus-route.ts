@@ -1,6 +1,6 @@
 import "server-only";
 import { verify } from "./hmac";
-import { DEFAULT_KEY_ID, secretFor } from "./ingest";
+import { DEFAULT_KEY_ID, REGISTRY_KEY_ID, secretFor } from "./ingest";
 import { KEY_ID_RE } from "./ingest-scope";
 import { logEvent } from "./log";
 import type { OptionsEdition } from "./options.types";
@@ -45,10 +45,11 @@ export async function handleFocus(req: Request, now: Date = new Date()): Promise
   }
   const keyIdHeader = req.headers.get("x-wt-key-id");
   const keyId = keyIdHeader && KEY_ID_RE.test(keyIdHeader) ? keyIdHeader : DEFAULT_KEY_ID;
-  const secret = secretFor(keyId);
+  // The registry's CI key publishes its index and reads nothing.
+  const secret = keyId === REGISTRY_KEY_ID ? null : secretFor(keyId);
   const auth = secret
     ? verify(secret, req.headers.get("x-wt-timestamp"), req.headers.get("x-wt-signature"), FOCUS_SIGNED, now)
-    : { ok: false as const, reason: "unknown-key-id" };
+    : { ok: false as const, reason: keyId === REGISTRY_KEY_ID ? "registry-key" : "unknown-key-id" };
   // The reason is logged, never returned.
   if (!auth.ok) return done(401, "unauthorized", { error: "unauthorized" }, { reason: auth.reason });
 

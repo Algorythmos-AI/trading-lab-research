@@ -132,6 +132,7 @@ function StandingPanel({ s, block }: { s: Snapshot | null; block: GapHunterBlock
             { label: "Hypothesis", value: record(r.hypothesis) },
             { label: "A rule is switched on", value: yesNo(block?.enabled ?? null) },
             { label: "Its kill switch", value: block?.kill === true ? "On" : block?.kill === false ? "Off" : NOT_SENT },
+            { label: "Root kill switch (every desk)", value: s?.kill?.on === true ? "On" : s?.kill?.on === false ? "Off" : NOT_SENT },
             { label: "Last session", value: job ? `${humanize(job.status)}${job.started ? ` · ${newYork(job.started)} NY` : ""}` : "None reported yet" },
             {
               label: "Sessions run as planned, last two weeks",

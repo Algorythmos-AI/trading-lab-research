@@ -10,7 +10,7 @@ import pytest
 import yaml
 
 from wt.brokers.alpaca_options_paper import keys
-from wt.brokers.base import BrokerRejected
+from wt.brokers.base import BrokerRejected, TransportError
 from wt.brokers.sim import SimBroker
 from wt.core.types import Order, OrderStatus, Position
 from wt.oms.options import OptionPlan, OptionsOMS, PlanStore, book
@@ -166,6 +166,51 @@ def test_a_refused_stop_leaves_the_target_as_the_only_resting_sell(tmp_path):
     assert len(b.live_sells()) == 1
 
 
+def test_a_stop_whose_send_never_arrived_is_rested_again(tmp_path):
+    b, oms, _, p = opened(tmp_path)
+    orig = b.place
+
+    def lost(o: Order) -> Order:
+        if o.type == "stop":
+            b.place = orig                                       # type: ignore[method-assign]
+            raise TransportError("simulated: the stop never reached the broker")
+        return orig(o)
+    b.place = lost                                               # type: ignore[method-assign]
+    oms.protect(p, 25, 50, try_stop=True)
+    assert p.protect_id and not b.live_sells()                   # outcome unknown: the id is kept for now
+    oms.sync_open(p)                                             # the broker has never heard of it
+    assert not p.protect_id and any(n[1] == "protect-gone" for n in p.notes)
+    oms.protect(p, 25, 50, try_stop=True)
+    (s,) = b.live_sells()
+    assert s.type == "stop" and p.protect_id == s.client_order_id
+
+
+def test_a_stop_the_broker_ended_unfilled_is_replaced_by_the_target(tmp_path):
+    b, oms, _, p = opened(tmp_path)
+    oms.protect(p, 25, 50, try_stop=True)
+    b.cancel(p.protect_id)                                       # the broker ends it, nothing sold
+    oms.sync_open(p)
+    assert not p.protect_id and p.broker_stop == "refused"
+    oms.protect(p, 25, 50, try_stop=True)
+    (s,) = b.live_sells()
+    assert (s.type, s.limit_price) == ("limit", 1.5)
+
+
+def test_a_broker_that_keeps_ending_the_resting_sell_is_tried_a_bounded_number_of_times(tmp_path):
+    """Each new resting sell counts toward the day's orders; the exits need that budget, so re-resting stops."""
+    from wt.oms.options import MAX_REREST
+    b, oms, _, p = opened(tmp_path)
+    placed = []
+    for _ in range(MAX_REREST + 3):
+        oms.protect(p, 25, 50, try_stop=False)
+        if p.protect_id:
+            placed.append(p.protect_id)
+            b.cancel(p.protect_id)                               # the broker ends it, nothing sold
+        oms.sync_open(p)
+    assert len(placed) == MAX_REREST and any(n[1] == "protect-given-up" for n in p.notes)
+    assert not p.protect_id and p.state == "open"
+
+
 def test_a_resting_sell_that_fills_on_its_own_closes_the_trade(tmp_path):
     b, oms, _, p = opened(tmp_path)
     oms.protect(p, 25, 50, try_stop=False)
@@ -192,6 +237,36 @@ def test_an_exit_cancels_the_resting_sell_then_sells_the_clones_lot(tmp_path):
     assert p.state == "closed" and p.exit_fill == 0.80 and p.exit_reason == "chart"
     assert sells_seen == [0]                                     # the stop was gone before the market sell left
     assert b.pos[SYM].qty == 0
+
+
+def test_the_daily_order_cap_stops_entries_but_never_an_exit(tmp_path):
+    """Limits never block an exit (risk/options_guard.py): at the order cap the clone still sells what it holds."""
+    b, oms, state, p = opened(tmp_path)
+    state["orders_today"] = LIM.max_orders_per_day
+    orig = b.place
+
+    def place(o: Order) -> Order:
+        got = orig(o)
+        if o.type == "market":
+            b.fill(o.client_order_id, 0.80)
+        return got
+    b.place = place                                              # type: ignore[method-assign]
+    assert oms.exit_now(p, "chart") is True and p.state == "closed"
+    q = plan(n=2)
+    oms.enter(q)
+    assert q.state == "rejected" and "orders today" in q.notes[-1][2]
+
+
+def test_exits_past_the_order_cap_still_stop_at_the_runaway_backstop():
+    from dataclasses import replace
+
+    from wt.risk.options_guard import EXIT_ORDER_FACTOR, Context as Ctx, GuardRejected, check
+    sell = Order("x", SYM, "sell", 1, "market")
+    ctx = Ctx(now=NOW, names_today={"SPY"}, own_qty={SYM: 1}, account_holds=set(),
+              orders_today=EXIT_ORDER_FACTOR * LIM.max_orders_per_day - 1)
+    check(sell, ctx, LIM, entry=False, root="SPY")                                    # just under: sent
+    with pytest.raises(GuardRejected, match="exits stop at"):
+        check(sell, replace(ctx, orders_today=EXIT_ORDER_FACTOR * LIM.max_orders_per_day), LIM, entry=False, root="SPY")
 
 
 def test_the_target_filling_as_the_exit_fires_is_the_exit(tmp_path):
