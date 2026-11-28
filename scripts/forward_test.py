@@ -750,6 +750,10 @@ def main(day: str | None = None) -> int:
                 incomplete.append(d)
     finally:
         ctx.close()
+    if not day:                                   # sessions older than this run's MAX_CATCHUP batch still owed
+        left = done_by_session(read_log())
+        incomplete += [d for d in pending_sessions(sessions, closes, now, left, max_n=len(sessions))
+                       if d not in days and d not in incomplete]
     # Each failure is journaled and retried by the next run; the exit status says one happened, so the job's page
     # (job:forward) fires once and its next complete run clears it, instead of a silent success every day.
     if incomplete:
