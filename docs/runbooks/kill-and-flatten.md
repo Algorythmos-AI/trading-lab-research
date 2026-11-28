@@ -4,7 +4,7 @@
 
 The jobs run on the GCP host, so the commands below run there. Open a shell with
 `gcloud compute ssh trading-lab-host --zone us-east1-b --tunnel-through-iap` (see [gcp-host.md](gcp-host.md)).
-Each desk has its own kill file, and **no single file stops every desk**. The full table is in
+The root `KILL` file is the **master switch: every desk reads it**. Each desk also has its own file. The full table is in
 [docs/operations/safety.md](../operations/safety.md).
 
 ## Stop new entries
@@ -13,14 +13,14 @@ Exits and stops keep being managed.
 
 | Desk | On | Off |
 |---|---|---|
-| Gap Hunter (`paper-s`) | `sudo -u wt make -C /home/wt/trading kill DESK=s REASON="why"` | `sudo -u wt make -C /home/wt/trading unkill DESK=s` |
-| Options clone (`paper-o`) | `sudo -u wt make -C /home/wt/trading kill DESK=options REASON="why"` | `sudo -u wt make -C /home/wt/trading unkill DESK=options` |
-| Options clone, root file | `sudo -u wt make -C /home/wt/trading kill REASON="why"` | `sudo -u wt make -C /home/wt/trading unkill` |
+| Every desk (root file) | `sudo -u wt make -C /home/wt/trading kill REASON="why"` | `sudo -u wt make -C /home/wt/trading unkill` |
+| Gap Hunter only (`paper-s`) | `sudo -u wt make -C /home/wt/trading kill DESK=s REASON="why"` | `sudo -u wt make -C /home/wt/trading unkill DESK=s` |
+| Options clone only (`paper-o`) | `sudo -u wt make -C /home/wt/trading kill DESK=options REASON="why"` | `sudo -u wt make -C /home/wt/trading unkill DESK=options` |
 
-- The root `KILL` file is read by the options clone, not by Gap Hunter (`src/wt/live/runner_o.py`,
-  `src/wt/live/runner_s.py`).
-- `make kill DESK=stocks` also writes the root file; it does not stop Gap Hunter. Any `DESK` other than `s`,
-  `options` or `stocks` is refused and writes nothing.
+- The root `KILL` file is read by every desk (`src/wt/live/runner_o.py` `KILLS`, `src/wt/live/runner_s.py`
+  `killed()`). A desk stays stopped while any file it reads exists.
+- `make kill DESK=stocks` also writes the root file. Any `DESK` other than `s`, `options` or `stocks` is refused and
+  writes nothing.
 - Every `make kill` and `make unkill` above writes a `kill_on` or `kill_off` entry to the audit log.
 - The runners re-read their files while running, so this takes effect at once.
 - `make status` shows each desk's file on its own line. The dashboard's Risk page lists Gap Hunter's file and the

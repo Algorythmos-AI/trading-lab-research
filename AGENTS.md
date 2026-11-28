@@ -125,6 +125,7 @@ make ci            # ruff + mypy (typed modules) + restricted paths + pytest; mo
 make hooks         # pre-commit: gitleaks, restricted-path guard, ruff
 ```
 
-Each desk has its own kill file; no single file stops every desk. On the host (`/home/wt/trading`), the options
-clone reads the root `KILL` and `var/options/KILL`, and Gap Hunter reads only `var/smallcap/KILL`. While a desk's file
-exists, it makes no new entries and keeps managing exits. See `docs/operations/safety.md`.
+The root `KILL` is the master switch: every desk reads it. Each desk also has its own file. On the host
+(`/home/wt/trading`), the options clone reads the root `KILL` and `var/options/KILL`, and Gap Hunter reads the root `KILL`
+and `var/smallcap/KILL`. While a file a desk reads exists, it makes no new entries and keeps managing exits. See
+`docs/operations/safety.md`.

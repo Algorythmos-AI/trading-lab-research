@@ -78,9 +78,8 @@ sudo wt-set-secrets        # hidden prompts; Enter keeps a value; ends with "wt-
 publish.
 
 ## 3. Shadow run (owner enables, Claude checks)
-1. KILL on, for every desk (the root file does not stop Gap Hunter, see [safety.md](../operations/safety.md)):
-   `sudo -u wt make -C /home/wt/trading kill REASON="GCP shadow"` and
-   `sudo -u wt make -C /home/wt/trading kill DESK=s REASON="GCP shadow"`.
+1. KILL on, for every desk (the root file is the master switch, see [safety.md](../operations/safety.md)):
+   `sudo -u wt make -C /home/wt/trading kill REASON="GCP shadow"`.
 2. `sudo wt-install-units` (refuses while the deploy gate is closed).
 3. At least five sessions, then the determinism check and the cutover, as in [oci-host.md](oci-host.md)
    ("Shadow → cutover"). Watch memory on the first sessions: `journalctl -k | grep -i oom` must stay empty.

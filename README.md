@@ -72,7 +72,7 @@ Vercel (trading-lab-dashboard) ◄─────┘  private Blob storage; page
 | `make gate` | Is it safe to change the live checkout? (no job running, outside the trading night) |
 | `make deploy` | Gate, tag, pull `main`, migrate state, sync the venv, smoke test. Rolls back by itself on failure |
 | `make rollback TAG=runtime-YYYYMMDD-N` | Back to an earlier deploy |
-| `make kill REASON="…"` / `make unkill` | Write or remove the root `KILL` file. Of the trading desks, only the options clone reads it (no new entries; exits keep being managed). **It does not stop Gap Hunter**, which reads only `var/smallcap/KILL` and has no `make` target: see [docs/operations/safety.md](docs/operations/safety.md) |
+| `make kill REASON="…"` / `make unkill` | Write or remove the root `KILL` file, the master switch: every desk (the options clone and Gap Hunter) makes no new entries while it exists, and keeps managing exits. `DESK=s` or `DESK=options` acts on one desk's own file only: see [docs/operations/safety.md](docs/operations/safety.md) |
 | `make reset-latch REASON="…"` | Clears the loss latch of the retired QQQ rule's virtual account (DEC-0069). Nothing trades that account now, so it has no everyday use |
 | `make install-trading-agents` | (Re)install the launchd jobs on a Mac. Not used on the VM, whose units the owner installs with `sudo wt-install-units` |
 | `make publish DRY_RUN=1` | Build the dashboard snapshot without sending it |

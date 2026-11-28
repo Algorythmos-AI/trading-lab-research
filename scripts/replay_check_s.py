@@ -113,6 +113,7 @@ def replay_day(d: dt.date, sessions: dict[dt.date, tuple[str, str]]) -> tuple[di
         record_file.write_text("- **Status: ACCEPTED** (a stand-in for the replay; the real record is read by no one here)\n")
         state = root / "smallcap"
         runner_s.DIR, runner_s.PLANS, runner_s.KILL = state, state / "plans", state / "KILL"
+        runner_s.ROOT_KILL = root / "KILL"          # never the real checkout's master switch: a replay enters as it did
         runner_s.VA_PATH, runner_s.JOURNAL = state / "virtual_account.json", root / "journal.jsonl"
         runner_s.RECORD, runner_s.MIN_FREE_GB = record_file, 0.0
         clock = ReplayClock(dt.datetime.combine(d, dt.time(9, 25), tzinfo=ET))

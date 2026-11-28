@@ -1,8 +1,8 @@
 import { gapHunterBlock } from "./gap-hunter";
 import type { Snapshot } from "./types";
 
-/** Each desk's kill file the snapshot carries. No single file stops every desk: Gap Hunter reads only its own
- *  (`gap_hunter.kill`); the options clone reads the root file (`kill.on`) and its own `var/options/KILL`, which this
+/** Each desk's kill file the snapshot carries. The root file (`kill.on`) is the master switch: every desk reads it.
+ *  Gap Hunter also reads its own (`gap_hunter.kill`), and the options clone its own `var/options/KILL`, which this
  *  snapshot does not carry (`make status` on the host shows it). */
 export interface DeskKill {
   key: "s" | "root";
@@ -16,7 +16,7 @@ const bool = (v: unknown): boolean | null => (typeof v === "boolean" ? v : null)
 export function deskKills(s: Snapshot | null | undefined): DeskKill[] {
   return [
     { key: "s", label: "Gap Hunter", on: bool(gapHunterBlock(s ?? null)?.kill) },
-    { key: "root", label: "Options clone (root KILL)", on: bool(s?.kill?.on) },
+    { key: "root", label: "All desks (root KILL)", on: bool(s?.kill?.on) },
   ];
 }
 

@@ -87,9 +87,12 @@ describe("where Gap Hunter stands", () => {
     expect(standing(snap({ ...job("ok"), gap_hunter: { enabled: true } }))).toMatchObject({ word: "Paper trading", tone: "info" });
     expect(standing(snap({ ...job("ok"), gap_hunter: { enabled: false } }))).toMatchObject({ word: "Not switched on", tone: "neutral" });
     expect(standing(snap({ ...job("ok"), gap_hunter: { enabled: true, kill: true } }))).toMatchObject({ word: "Paused: its kill switch is on", tone: "warn" });
+    // the root file is the master switch: it stops Gap Hunter even with its own file off
+    expect(standing(snap({ ...job("ok"), kill: { on: true }, gap_hunter: { enabled: true, kill: false } }))).toMatchObject({ word: "Paused: the root kill switch is on", tone: "warn" });
+    expect(standing(snap({ ...job("ok"), kill: { on: false }, gap_hunter: { enabled: true, kill: false } }))).toMatchObject({ word: "Paper trading" });
     expect(standing(snap({ ...job("ok"), gap_hunter: { enabled: true, latched: true } }))).toMatchObject({ word: "Latched", tone: "bad" });
-    // The lab's kill switch is not Gap Hunter's: it does not pause it here.
-    expect(standing(snap({ ...job("ok"), kill: { on: true } }))).toMatchObject({ word: "Session runs" });
+    // The root kill switch is the master switch: it pauses Gap Hunter here too.
+    expect(standing(snap({ ...job("ok"), kill: { on: true } }))).toMatchObject({ word: "Paused: the root kill switch is on", tone: "warn" });
   });
 
   it("takes the records' statuses from the registry, and says when the registry does not list them", () => {

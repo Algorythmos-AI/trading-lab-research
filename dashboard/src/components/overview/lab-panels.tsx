@@ -50,10 +50,10 @@ export function KillNotice({ s }: { s: Snapshot }) {
     <section aria-label="Kill switch" className="bg-warn-soft border-warn/35 flex items-start gap-3 rounded-lg border px-4 py-3">
       <Power aria-hidden className={cn("mt-0.5 size-4 shrink-0", TONE_TEXT.warn)} />
       <div className="min-w-0 text-sm">
-        <p className="font-medium">Kill switch is on: the options clone will not open new paper trades.</p>
+        <p className="font-medium">Root kill switch is on: no desk will open new paper trades.</p>
         <p className="text-muted-foreground mt-0.5 text-[0.8125rem]">
           {s.kill.reason ? `${s.kill.reason} ` : ""}
-          Since {sydney(s.kill.since)} Sydney. Exits are still managed. Gap Hunter has its own switch. Removing either is done on the host, not here.
+          Since {sydney(s.kill.since)} Sydney. Exits are still managed. Removing it is done on the host, not here.
         </p>
       </div>
     </section>
