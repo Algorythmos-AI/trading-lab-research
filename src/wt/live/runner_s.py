@@ -683,6 +683,39 @@ def _start(day: dt.date | None, poll_s: float, broker: Any, rest: Any, now_fn: C
         _session(day, poll_s, broker, rest, clock, sleep, pager)
 
 
+def after_close_check(broker: Any, pager: Any) -> None:
+    """A session that starts after the close (a restart once the host is back) arms nothing, so its after-close block
+    never runs. The account is still read: a long position is journaled as END_OF_DAY_NOT_FLAT with whether a GTC
+    stop of this desk's covers it, and paged, so a position the restart found is never silent overnight. Nothing is
+    sent: a stop needs its plan's price, which is the next session's (or the owner's) to set."""
+    try:
+        cover = OMS(broker, strategy=STRATEGY)
+        held = broker.positions()
+        longs = [pos for pos in held if pos.qty > 0]
+        shorts = [pos for pos in held if pos.qty < 0]
+        for pos in longs:
+            try:
+                protected: bool | None = cover.stop_cover(pos.symbol, gtc_only=True) >= pos.qty
+            except Exception:  # noqa: BLE001 — unread is unknown, never "unprotected"
+                protected = None
+            log("END_OF_DAY_NOT_FLAT", symbol=pos.symbol, qty=pos.qty, protected=protected, late_start=True)
+        for pos in shorts:                            # as the close does: nothing is bought back automatically
+            log("END_OF_DAY_NOT_FLAT", symbol=pos.symbol, qty=pos.qty, short=True, late_start=True)
+        if longs:
+            pager.fire("paper-s:not-flat", "Sleeve S NOT FLAT at the close",
+                       f"The session started after the close and found {page.count(len(longs))} long position(s); "
+                       "the journal (END_OF_DAY_NOT_FLAT) says whether a GTC stop covers each. Check the broker.", 5)
+        if shorts:
+            pager.fire("paper-s:short-at-close", "Sleeve S is SHORT at the close",
+                       f"The session started after the close and found {page.count(len(shorts))} short position(s). "
+                       "Nothing is bought back automatically; the journal (END_OF_DAY_NOT_FLAT) names every one. "
+                       "Follow the not-flat runbook.", 5)
+    except Exception as e:  # noqa: BLE001 — a restart after the close must still say it could not look
+        log("END_OF_DAY_NOT_FLAT", error=f"could not read the account after the close: {e!r}"[:300], late_start=True)
+        pager.fire("paper-s:not-flat", "Sleeve S could not verify flat after the close",
+                   "The session started after the close and could not read the account. Check it.", 5)
+
+
 def _connect(factory: Callable[[], Any], sleep: Callable[[float], None]) -> Any:
     from wt.core.safety import PaperOnlyError
     for attempt in range(CONNECT_TRIES):
@@ -781,6 +814,7 @@ def _session(day: dt.date, poll_s: float, broker: Any, rest: Any, clock: Callabl
     now = clock()
     if now >= close_dt:
         log("no_session", day=day, reason="started after the close")
+        after_close_check(broker, pager)
         return
     if now < open_dt - ARM_LEAD:
         log("too_early", day=day)

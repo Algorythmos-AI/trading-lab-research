@@ -55,6 +55,10 @@ The table between the markers is generated from `JOBS`. If you change the schedu
   takes a second attempt (`src/wt/live/runner_s.py`). When `S.switched_on` is HYP-0072 (DEC-0076), the tier-2 names
   are journaled once as `gap_names`. A restart that finds the day's `gap_primary` but no `gap_names` chooses the names
   from the same 09:25 pool and journals them then.
+- **`paper-s` started after the close** (a restart once the market has closed) arms nothing and sends nothing. It
+  still reads the account: each long position is journaled as `END_OF_DAY_NOT_FLAT` with `late_start` and whether a
+  GTC stop of the desk's covers it, and pages `paper-s:not-flat`; each short is journaled the same way and pages
+  `paper-s:short-at-close`.
 - **Retired jobs.** `paper-b` (DEC-0069) is in `ARCHIVED_JOBS`. The four crypto jobs (DEC-0036) are in
   `RETIRED_JOBS`. If a leftover unit for one of them fires, it exits 0 (`src/wt/ops/jobs.py`).
 - **Paging.** A failed unit pages through `wt-alert@` (ntfy priority 4, or 5 for `wt-paper-s`;
