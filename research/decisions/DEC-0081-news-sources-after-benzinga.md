@@ -149,3 +149,18 @@ What follows:
 5. **What this run suggests, not tested.** The median earnings filing came 74 minutes before the first qualifying
    headline. Some of the misses may therefore be timing rather than coverage. A new record would have to test that
    before it is relied on.
+
+### 2026-11-28: the licence question (owner reading 3) is answered (owner's note)
+
+- **The answer:** the fiscal.ai copy stays in the private archive repository for the long term. It is kept for the
+  owner's own research under the owner's paid Alpaca market-data subscription.
+- **The limit it rests on:** Alpaca's support page says its API data may not be redistributed. Keeping a private copy
+  for one's own use is not redistribution; making it readable by others would be. So:
+  - `Algorythmos-AI/trading-news-archive` stays private. Changing its visibility is the owner's alone, and doing so
+    ends this answer.
+  - Headlines stay RESTRICTED (AGENTS.md): never in this repository, the dashboard, issues, logs or any page.
+  - Before every push, `wt.data.news_archive.publish` asks GitHub, without credentials, whether the archive
+    repository can be read. It pushes only on the answer "not found" (private), and refuses on "public" or on no
+    clear answer.
+- **Not settled by this note:** Alpaca's current written terms on storing news were not found in public pages. If
+  Alpaca's terms or its news provider change, the owner reads this again.
