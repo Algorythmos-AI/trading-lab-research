@@ -35,8 +35,9 @@ def test_unkill_refuses_while_the_runner_holds_its_lock(tmp_path, runner):
     assert not (tmp_path / "a.jsonl").exists()
 
 
-@pytest.mark.parametrize("held", ["paper-s", locks.RUNNER_LOCK_S])
-def test_root_unkill_refuses_while_gap_hunter_runs(tmp_path, held):
+@pytest.mark.parametrize("held, who", [("paper-s", "Gap Hunter"), (locks.RUNNER_LOCK_S, "Gap Hunter"),
+                                       ("paper-o", "options clone"), (control.RUNNER_LOCK_O, "options clone")])
+def test_root_unkill_refuses_while_gap_hunter_or_the_clone_runs(tmp_path, held, who):
     """The root KILL stops Gap Hunter too: removing it mid-session would re-enable its entries."""
     ctx = mp.get_context("spawn")
     ready, stop = ctx.Event(), ctx.Event()
@@ -46,7 +47,7 @@ def test_root_unkill_refuses_while_gap_hunter_runs(tmp_path, held):
         assert ready.wait(10)
         (tmp_path / "KILL").write_text("paused")
         code, msg = control.unkill(root=tmp_path, lock_root=tmp_path / "locks", audit_log=tmp_path / "a.jsonl")
-        assert code == 3 and "Gap Hunter" in msg and (tmp_path / "KILL").exists()
+        assert code == 3 and who in msg and (tmp_path / "KILL").exists()
         assert not (tmp_path / "a.jsonl").exists()
     finally:
         stop.set()
@@ -360,3 +361,8 @@ def test_make_status_shows_gap_hunter_on_when_only_its_file_is(tmp_path, desk_fi
     assert out[1].split() == ["Gap", "Hunter", "ON", "(no", "new", "entries)"]
     assert out[2].split() == ["Options", "clone", "off"]
     assert out[3].split() == ["All", "desks", "(root", "KILL)", "off"]
+
+
+def test_the_clone_lock_named_here_is_the_runner_s():
+    from wt.live import runner_o
+    assert control.RUNNER_LOCK_O == runner_o.LOCK

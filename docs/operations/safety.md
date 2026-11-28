@@ -52,7 +52,7 @@ Either way, a change takes effect without a restart.
   file, with the desk (`root`, `s` or `options`) as the entry's detail; the detail stays on the host. The file is
   written first: a failed audit write prints `audit log not written` and does not undo the kill (`Makefile`, target
   `kill`). `make unkill [DESK=…]` removes the file through `wt.ops.control unkill` and writes `kill_off`. For the root
-  file it takes the retired QQQ rule's and Gap Hunter's runner locks first (refused while Gap Hunter's session runs); `DESK=s` and `DESK=options` remove the file without a lock
+  file it takes the retired QQQ rule's and Gap Hunter's runner locks and the options clone's first (refused while Gap Hunter's or the clone's session runs); `DESK=s` and `DESK=options` remove the file without a lock
   check, and each runner logs the change.
 - **Not audited.** A file written or removed by hand (`echo … > var/smallcap/KILL`, `rm`) writes no audit entry. Gap
   Hunter logs `kill_state` in its own journal either way.

@@ -40,6 +40,8 @@ from wt.ops import audit, locks
 RUNNER_JOB = "paper-b"
 VA_PATH = DATA_DIR / "live" / "virtual_account.json"
 RUNNER_JOB_S = "paper-s"
+RUNNER_JOB_O = "paper-o"
+RUNNER_LOCK_O = "paper-o-runner"                                 # wt.live.runner_o.LOCK
 VA_PATH_S = STATE_DIR / "smallcap" / "virtual_account.json"     # wt.live.runner_s.VA_PATH
 KILL_S = STATE_DIR / "smallcap" / "KILL"                         # wt.live.runner_s.KILL: Gap Hunter's own kill file
 KILL_OPTIONS = OPTIONS_DIR / "KILL"                              # wt.core.desk.DESKS["options"].kill_file
@@ -80,6 +82,8 @@ BUSY_UNKILL = ("paper B is running (its lock is held): removing KILL now would r
                "Try again after the session ends.")
 BUSY_UNKILL_S = ("paper-s (Gap Hunter) is running (its lock is held): the root KILL stops it too, so removing it now "
                  "would re-enable its entries mid-session. Try again after the session ends.")
+BUSY_UNKILL_O = ("paper-o (the options clone) is running (its lock is held): the root KILL stops it, so removing it now "
+                 "would re-enable its entries mid-session. Try again after the session ends.")
 BUSY_RESET_S = ("paper-s is running (its lock is held): its in-memory account would overwrite a reset at the next "
                 "save. Try again after the session ends.")
 BUSY_RESET = ("paper B is running (its lock is held): its in-memory account would overwrite a reset at the next "
@@ -103,9 +107,9 @@ def unkill(root: Path = ROOT, lock_root: Path | None = None, audit_log: Path | N
            kill_file: Path | None = None) -> tuple[int, str]:
     """Remove one desk's kill file and write `kill_off` (detail: the desk) to the audit log.
 
-    The root file is removed while holding paper-b's and paper-s's locks: it stops every desk, so removing it while
-    Gap Hunter's session runs would re-enable its entries mid-session (refused, like paper-b's), and neither runner can
-    start half-way through it (a start that meets the lock refuses cleanly, through the normal jobs.py path). Gap Hunter's (`s`) and the options clone's
+    The root file is removed while holding paper-b's, paper-s's and paper-o's locks: it stops every desk, so removing it
+    while Gap Hunter's or the clone's session runs would re-enable its entries mid-session (refused, like paper-b's),
+    and no runner can start half-way through it (a start that meets the lock refuses cleanly, through the normal jobs.py path). Gap Hunter's (`s`) and the options clone's
     own file are removed without a lock check, as `rm` would: each runner re-reads its file and logs the change."""
     desk = desk_name(desk)
     if desk not in DESK_KILLS:
@@ -124,8 +128,11 @@ def unkill(root: Path = ROOT, lock_root: Path | None = None, audit_log: Path | N
         with _runner_idle(lock_root, RUNNER_JOB_S, locks.RUNNER_LOCK_S) as got_s:
             if not got_s:
                 return 3, BUSY_UNKILL_S
-            kill.unlink()
-            _audit("kill_off", audit_log, desk)
+            with _runner_idle(lock_root, RUNNER_JOB_O, RUNNER_LOCK_O) as got_o:
+                if not got_o:
+                    return 3, BUSY_UNKILL_O
+                kill.unlink()
+                _audit("kill_off", audit_log, desk)
     return 0, f"{label} off"
 
 
