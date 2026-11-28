@@ -719,7 +719,7 @@ def run_hod_flag(a, d, daily: DailyIndex, splits: SplitStore) -> list[dict]:
     return out
 
 
-def main(day: str | None = None) -> None:
+def main(day: str | None = None) -> int:
     if day and dt.date.fromisoformat(day) < FORWARD_FROM:
         raise SystemExit(f"{day} is before FORWARD_FROM ({FORWARD_FROM}); earlier sessions are the holdout (DEC-0005)")
     a = AlpacaREST(per_minute=150)
@@ -737,17 +737,26 @@ def main(day: str | None = None) -> None:
         days = pending_sessions(sessions, closes, now, done)
     if not days:
         print("nothing to do: every completed session since", FORWARD_FROM, "has all its strategies")
-        return
+        return 0
     ready = update_daily(a, days, now)    # daily bars first, so the store is loaded once with every pending day in it
+    incomplete = [d for d in days if d not in ready]          # no daily bars: nothing could run
     ctx = Context(a, sessions, closes, min(ready) if ready else None)
     try:
         for d in ready:
             complete = run_session(d, units_for(ctx, d), done.get(str(d), set()))
             missing = sorted(required(d) - complete)
             print(d, "complete" if not missing else f"incomplete, will retry: {missing}", flush=True)
+            if missing:
+                incomplete.append(d)
     finally:
         ctx.close()
+    # Each failure is journaled and retried by the next run; the exit status says one happened, so the job's page
+    # (job:forward) fires once and its next complete run clears it, instead of a silent success every day.
+    if incomplete:
+        print("incomplete sessions:", ", ".join(str(d) for d in sorted(incomplete)), flush=True)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else None)
+    sys.exit(main(sys.argv[1] if len(sys.argv) > 1 else None))
