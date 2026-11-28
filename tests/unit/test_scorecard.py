@@ -194,3 +194,20 @@ def test_signals_both_records_saw_are_counted_by_name_and_trial(tmp_path, monkey
     line = sc.agreement()[-1]
     assert "sessions with both records: 2" in line and "dry run 2 · of record 2 · in both 1" in line
     assert not any(s in "\n".join(sc.agreement()) for s in ("AAAA", "BBBB", "CCCC", "DDDD", "EEEE"))
+
+
+def test_dry_runs_on_sip_are_reported_apart_from_the_hybrid_ones(tmp_path, monkeypatch):
+    """DEC-0064 point 9: the routine's agreement figures are split at its cutover to SIP and never pooled."""
+    routine = tmp_path / "routine"
+    _stage(routine / "2026-11-25", "tier2", {"AAAA": "primary"})                     # before: no feed named
+    _stage(routine / "2026-11-30", "tier2", {"BBBB": "primary"})
+    f = routine / "2026-11-30" / f"{STAGE_FILES['tier2']}.json"
+    f.write_text(json.dumps({**json.loads(f.read_text()), "feed": "sip"}))
+    record = {"2026-11-25": [{"symbol": "AAAA", "reached": "primary"}], "2026-11-30": []}
+    monkeypatch.setattr(sc, "ROUTINE_DIR", routine)
+    monkeypatch.setattr(sc, "record_rows", record.get)
+    md = "\n".join(sc.agreement())
+    head, sip = md.split("### From 2026-11-30, the dry run on SIP only")
+    assert "pool: **1**" in head and "| Tier 2 names | 1 | 1 | 1 |" in head
+    assert "pool: **1**" in sip and "| Tier 2 names | 1 | 0 | 0 |" in sip
+    assert sc.day_feed(routine / "2026-11-25") == "hybrid" and sc.day_feed(routine / "2026-11-30") == "sip"

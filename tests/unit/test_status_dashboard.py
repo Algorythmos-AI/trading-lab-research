@@ -505,3 +505,18 @@ def test_end_to_end_offline_run_writes_valid_documents_and_no_secrets(tmp_path, 
 def test_bad_config_path_exits_2_without_writing(tmp_path):
     assert sd.main(["--config", str(tmp_path / "missing.yaml"), "--out", str(tmp_path / "out")]) == 2
     assert not (tmp_path / "out").exists()
+
+
+def test_the_fiscal_ai_measure_is_read_from_its_report_and_shown_beside_cat01(tmp_path):
+    """EXP-0058 (DEC-0082) measured v3 on fiscal.ai; the page shows it beside CAT-01's Benzinga figure, from the
+    committed report, never a typed number. A missing or incomplete report shows nothing."""
+    f = assemble.fiscal_check()
+    assert f is not None and f["exp"] == "EXP-0058" and f["n"] == 100 and f["agent"] is True
+    assert "v3 measured" in assemble._fiscal_words(f) and "agent-checked" in assemble._fiscal_words(f)
+    assert assemble.fiscal_check(tmp_path) is None
+    rep = tmp_path / assemble.FISCAL_REPORT
+    rep.parent.mkdir(parents=True)
+    rep.write_text(json.dumps({"complete": False, "decision_level": {"share": 0.9, "n": 100}, "verdict": "pass"}))
+    assert assemble.fiscal_check(tmp_path) is None
+    rep.write_text(json.dumps({"complete": True, "decision_level": {"share": 0.9, "n": 100}, "verdict": "pass"}))
+    assert assemble.fiscal_check(tmp_path) == {"pct": 90.0, "n": 100, "verdict": "pass", "agent": False, "exp": "EXP-0058"}
