@@ -212,6 +212,18 @@ def test_the_daily_order_cap_stops_entries_but_never_an_exit(tmp_path):
     assert q.state == "rejected" and "orders today" in q.notes[-1][2]
 
 
+def test_exits_past_the_order_cap_still_stop_at_the_runaway_backstop():
+    from dataclasses import replace
+
+    from wt.risk.options_guard import EXIT_ORDER_FACTOR, Context as Ctx, GuardRejected, check
+    sell = Order("x", SYM, "sell", 1, "market")
+    ctx = Ctx(now=NOW, names_today={"SPY"}, own_qty={SYM: 1}, account_holds=set(),
+              orders_today=EXIT_ORDER_FACTOR * LIM.max_orders_per_day - 1)
+    check(sell, ctx, LIM, entry=False, root="SPY")                                    # just under: sent
+    with pytest.raises(GuardRejected, match="exits stop at"):
+        check(sell, replace(ctx, orders_today=EXIT_ORDER_FACTOR * LIM.max_orders_per_day), LIM, entry=False, root="SPY")
+
+
 def test_the_target_filling_as_the_exit_fires_is_the_exit(tmp_path):
     b, oms, _, p = opened(tmp_path)
     oms.protect(p, 25, 50, try_stop=False)

@@ -33,6 +33,9 @@ class GuardRejected(Exception):
         self.detail = dict(detail or {})
 
 
+EXIT_ORDER_FACTOR = 2      # exits may send up to this many times the day's order cap (a runaway backstop)
+
+
 @dataclass(frozen=True)
 class Limits:
     max_contracts: int
@@ -89,6 +92,12 @@ def check(order: Order, ctx: Context, lim: Limits, entry: bool, root: str = "") 
             raise GuardRejected(f"no lot of the clone's in {order.symbol}")
         if order.qty > held:
             raise GuardRejected(f"sell {order.qty} but the clone holds {held}")
+        # An exit goes past the day's order cap, which bounds entries, but not without end: a broker that keeps
+        # rejecting the sell would otherwise be asked again every poll all session. Twice the cap is the backstop.
+        if ctx.orders_today >= EXIT_ORDER_FACTOR * lim.max_orders_per_day:
+            raise GuardRejected(f"{ctx.orders_today} orders today: exits stop at {EXIT_ORDER_FACTOR}x the cap",
+                                "max-orders-exit", {"orders": ctx.orders_today,
+                                                    "max": EXIT_ORDER_FACTOR * lim.max_orders_per_day})
         return
     if ctx.orders_today >= lim.max_orders_per_day:                 # an entry's cap: it never strands an exit
         raise GuardRejected(f"{ctx.orders_today} orders today: the cap is {lim.max_orders_per_day}", "max-orders",
