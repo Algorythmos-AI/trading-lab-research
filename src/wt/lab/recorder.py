@@ -883,6 +883,11 @@ def after_close(rec: Recorder, get: Get, headers: Mapping[str, str], start: dt.d
         except Exception:  # noqa: BLE001
             pass
         return out                                   # the manifest records the error; the pull is not redone
+    why = rec.should_stop()
+    if why is not None:                              # a stop (SIGTERM, the off switch, disk) cut the pull short: the
+        out["interrupted"] = why                     # paced sender answered nothing once it was set, so the pull is
+        rec._gap(-1, "after_close", f"interrupted ({why}): redone whole at the next start")  # not marked done
+        return out
     manifest.atomic(done, json.dumps(out, sort_keys=True))
     return out
 

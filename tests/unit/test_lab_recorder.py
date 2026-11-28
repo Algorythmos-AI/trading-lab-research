@@ -507,6 +507,23 @@ def test_the_after_close_pull_runs_once_and_an_interrupted_one_is_redone_whole(t
     assert len(rows(rec.folder, "print")) == n and again["redone_parts_removed"] >= 1
 
 
+def test_a_pull_a_stop_cut_short_is_not_marked_done_and_is_redone_whole(tmp_path: Path) -> None:
+    """A stop during the after-close pull (here the off switch) makes the paced sender answer nothing: the pull must
+    not be marked done, so the next start removes its parts and pulls again."""
+    clock = Clock(START - dt.timedelta(seconds=30))
+    api = Trades(clock)
+    rec = make(tmp_path, clock, api)
+    close = START + dt.timedelta(minutes=2)
+    rec.run(START, close)
+    rec.off_file.parent.mkdir(parents=True, exist_ok=True)
+    rec.off_file.touch()
+    cut = recorder.after_close(rec, api, {}, START, close, clock)
+    assert cut["interrupted"] == "off switch" and not (rec.folder / recorder.AFTER_CLOSE).exists()
+    rec.off_file.unlink()
+    again = recorder.after_close(rec, api, {}, START, close, clock)
+    assert "interrupted" not in again and (rec.folder / recorder.AFTER_CLOSE).exists()
+
+
 def test_prints_are_pulled_after_the_last_fifteen_minutes_trade(tmp_path: Path) -> None:
     clock = Clock(START - dt.timedelta(seconds=30))
     api = Trades(clock)
