@@ -61,17 +61,31 @@ test("a sparse edition with the live feed on takes live prices without NaN or a 
   expect(errors).toEqual([]);
 });
 
-test("a corrupt trade journal fails the Overview panes drawn from it and nothing else", async ({ page, context, baseURL }) => {
+test("a trade journal with a row that cannot be read leaves it out, says so, and draws every pane", async ({ page, context, baseURL }) => {
   await variant(context, baseURL, "journal-poison");
   await page.goto("/");
-  const account = page.locator('[data-pane-error="Your account"]');
-  await expect(account).toBeVisible();
-  await expect(account).toContainText("The rest of the page is unaffected");
-  // Only panes drawn from the trades fail; the next session and the robots are still drawn.
-  const failed = await page.locator("[data-pane-error]").evaluateAll((els) => els.map((e) => e.getAttribute("data-pane-error")));
-  expect(failed.every((n) => ["Your account", "Profit and loss", "Patterns"].includes(n ?? ""))).toBe(true);
+  // The row is left out when the journal is read (loadJournal), so no pane drawn from the trades throws on it.
+  await expect(page.locator("[data-journal-skipped]")).toHaveAttribute("data-journal-skipped", "1");
+  await expect(page.locator("[data-journal-skipped]")).toContainText("1 row could not be read and is left out.");
+  await expect(page.locator("[data-pane-error]")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: /^Top names for |^The next session$/ })).toBeVisible();
   await expect(page.getByText("This page could not be drawn")).toHaveCount(0);
+});
+
+for (const path of ["/today", "/risk", "/radar", "/trades", "/review", "/calendar"]) {
+  test(`a trade journal with a row that cannot be read breaks nothing on ${path}`, async ({ page, context, baseURL }) => {
+    await variant(context, baseURL, "frozen.journal-poison");
+    await page.goto(path);
+    await expect(page.locator("main")).toBeVisible();
+    await expect(page.locator("[data-pane-error]")).toHaveCount(0);
+    await expect(page.getByText("This page could not be drawn")).toHaveCount(0);
+  });
+}
+
+test("the Trades page counts a row the journal's reading left out", async ({ page, context, baseURL }) => {
+  await variant(context, baseURL, "frozen.journal-poison");
+  await page.goto("/trades");
+  await expect(page.locator("[data-journal-skipped]").first()).toHaveAttribute("data-journal-skipped", "1");
 });
 
 test("a corrupt edition fails one pane and leaves every other pane working", async ({ page, context, baseURL }) => {

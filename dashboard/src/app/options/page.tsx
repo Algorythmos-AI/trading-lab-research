@@ -152,7 +152,7 @@ export default async function OptionsPage({ searchParams }: { searchParams: Prom
   const doc = read?.doc ?? null;
   // Rows left out can hide a trade or a loss from today's count: the day is then not judged (no room, no trades left),
   // and the rail says why.
-  const skipped = read?.skipped ?? 0;
+  const skipped = (read?.skipped ?? 0) + (journal.status === "ok" ? (journal.skipped ?? 0) : 0);
   // The board's day: rules 7 and 8 from the journal, and whether a trade has closed green today.
   const day = boardDay(doc, now);
   // The rail's short day line, from the same check as the rules (the day bar it replaces).

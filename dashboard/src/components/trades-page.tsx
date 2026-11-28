@@ -55,7 +55,7 @@ export function TradesBody({ result, clone, q, now }: { result: JournalResult; c
           <NoJournal status={result.status} />
         </>
       ) : (
-        <JournalBody doc={result.doc} q={q} now={now} />
+        <JournalBody doc={result.doc} q={q} now={now} carried={result.skipped ?? 0} />
       )}
       <TradesGroup
         group="clone"
@@ -109,9 +109,12 @@ function barLinks(doc: JournalDoc, filter: Filter, now: Date) {
  * inside it, so a fault in one leaves the others and the clone standing. The journal is read row by row first: a row
  * that cannot be read is left out and counted (readableJournal), and the record and the money panel say how many.
  */
-export function JournalBody({ doc: raw, q, now }: { doc: JournalDoc; q: Query; now: Date }) {
+export function JournalBody({ doc: raw, q, now, carried = 0 }: { doc: JournalDoc; q: Query; now: Date; carried?: number }) {
   const filter = parseFilter(q);
-  const { doc, skipped } = readableJournal(raw);
+  // `carried`: rows the loader already left out (loadJournal), counted with any left out here.
+  const read = readableJournal(raw);
+  const doc = read.doc;
+  const skipped = read.skipped + carried;
   const money = (() => {
     try {
       return moneyOf(doc) !== null;

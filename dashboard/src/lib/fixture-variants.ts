@@ -43,8 +43,8 @@ export const VARIANT_COOKIE = "fx";
  *   live state moved to FROZEN_NOW's session: watching with an order ready, an entry order resting, flat after a
  *   trade closed, latched by its safety stops, no pick, and a live document 20 minutes old.
  * - `clone-off`: the options clone has published nothing. `clone-latched`: its document on a bad day.
- * - `journal-poison`: a stored trade journal with a null trade, as after corruption. The panes drawn from the trades
- *   must fail alone; the rest of each page keeps working.
+ * - `journal-poison`: a stored trade journal with a null trade, as after corruption. It is left out and counted when
+ *   the journal is read (loadJournal), so every pane drawn from the trades still draws.
  * - `calendar-off`: no economic calendar has been published. `calendar-stale`: the last one is three weeks old and
  *   FRED could not be read for it. `calendar-poison`: the stored one no longer matches its schema.
  * - `focus`: the options edition with a Today's focus block on SPY and QQQ, so the chart lines can be scanned.

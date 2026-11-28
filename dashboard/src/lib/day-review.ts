@@ -160,8 +160,11 @@ export function heldBy(p: Pick<OwnerPosition, "symbol" | "kind" | "strike" | "ex
 }
 
 /** The whole page's figures for one journal, address and clock. */
-export function reviewView(raw: JournalDoc, rawDay: string | string[] | undefined | null, now: Date): ReviewView {
-  const { doc, skipped } = readableJournal(raw);
+export function reviewView(raw: JournalDoc, rawDay: string | string[] | undefined | null, now: Date, carried = 0): ReviewView {
+  // `carried`: rows the loader already left out (loadJournal), counted with any left out here.
+  const read = readableJournal(raw);
+  const doc = read.doc;
+  const skipped = read.skipped + carried;
   const view = tradesView(doc, ALL, now);
   const today = nyTime(now.toISOString()).day;
   const days = [...new Set(view.positions.map((p) => p.day))].filter((d) => d <= today).sort();
