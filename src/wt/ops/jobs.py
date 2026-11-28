@@ -375,7 +375,7 @@ def cadence(now: dt.datetime | None = None, heartbeats: Path | None = None) -> l
 
 def status(root: Path = ROOT) -> int:
     """What's going on, in the terminal: last runs, firing alerts, each desk's kill switch, preflight."""
-    print("KILL switches (each desk reads its own file; none stops every desk):")
+    print("KILL switches (the root file stops every desk; each desk also reads its own):")
     for line in control.kill_lines(root):
         print(line)
     print("Last runs:")
