@@ -271,6 +271,17 @@ class OptionsOMS:
         if p.state not in ("open", "exiting") or not p.protect_id:
             return
         o = self.b.get_order(p.protect_id)
+        if p.state == "open" and (o is None or (o.status.terminal and not o.filled_qty)):
+            # The resting sell is gone with nothing sold: the broker never heard of it (its send's outcome was
+            # unknown and it never arrived, as sync_entry reads an entry), or it ended unfilled (cancelled, expired,
+            # rejected after acceptance). Forget it, so the next protect() rests one; otherwise the lot would stay
+            # with no resting sell until an exit fired.
+            self.note(p, "protect-gone", p.protect_kind, o.status.value if o is not None else "never-placed")
+            if o is not None and p.protect_kind == "stop":
+                p.broker_stop = "refused"            # a stop the broker ended: the target rests instead, not a loop
+            p.protect_id, p.protect_kind = "", ""
+            self._save(p)
+            return
         if o is not None and o.filled_qty:
             self._closed(p, o, "target" if p.protect_kind == "target" else "broker-stop")
 

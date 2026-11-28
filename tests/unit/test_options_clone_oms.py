@@ -10,7 +10,7 @@ import pytest
 import yaml
 
 from wt.brokers.alpaca_options_paper import keys
-from wt.brokers.base import BrokerRejected
+from wt.brokers.base import BrokerRejected, TransportError
 from wt.brokers.sim import SimBroker
 from wt.core.types import Order, OrderStatus, Position
 from wt.oms.options import OptionPlan, OptionsOMS, PlanStore, book
@@ -164,6 +164,36 @@ def test_a_refused_stop_leaves_the_target_as_the_only_resting_sell(tmp_path):
     assert (s.type, s.limit_price) == ("limit", 1.5)
     oms.protect(p, 25, 50, try_stop=True)                       # never a second resting sell
     assert len(b.live_sells()) == 1
+
+
+def test_a_stop_whose_send_never_arrived_is_rested_again(tmp_path):
+    b, oms, _, p = opened(tmp_path)
+    orig = b.place
+
+    def lost(o: Order) -> Order:
+        if o.type == "stop":
+            b.place = orig                                       # type: ignore[method-assign]
+            raise TransportError("simulated: the stop never reached the broker")
+        return orig(o)
+    b.place = lost                                               # type: ignore[method-assign]
+    oms.protect(p, 25, 50, try_stop=True)
+    assert p.protect_id and not b.live_sells()                   # outcome unknown: the id is kept for now
+    oms.sync_open(p)                                             # the broker has never heard of it
+    assert not p.protect_id and any(n[1] == "protect-gone" for n in p.notes)
+    oms.protect(p, 25, 50, try_stop=True)
+    (s,) = b.live_sells()
+    assert s.type == "stop" and p.protect_id == s.client_order_id
+
+
+def test_a_stop_the_broker_ended_unfilled_is_replaced_by_the_target(tmp_path):
+    b, oms, _, p = opened(tmp_path)
+    oms.protect(p, 25, 50, try_stop=True)
+    b.cancel(p.protect_id)                                       # the broker ends it, nothing sold
+    oms.sync_open(p)
+    assert not p.protect_id and p.broker_stop == "refused"
+    oms.protect(p, 25, 50, try_stop=True)
+    (s,) = b.live_sells()
+    assert (s.type, s.limit_price) == ("limit", 1.5)
 
 
 def test_a_resting_sell_that_fills_on_its_own_closes_the_trade(tmp_path):
