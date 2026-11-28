@@ -4,6 +4,7 @@ import { StatusBadge, TONE_ICON, TONE_TEXT } from "@/components/status";
 import { describeAge } from "@/lib/freshness";
 import { sydney } from "@/lib/format";
 import type { OptionsClone } from "@/lib/options-clone.types";
+import type { GapHunterLiveResult } from "@/lib/snapshot";
 import { safetyView, type SafetyTile, type SourceStamp } from "@/lib/safety-tiles";
 import type { Snapshot } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -44,8 +45,8 @@ function Stamp({ s }: { s: SourceStamp }) {
 }
 
 /** Every kill file and loss latch this site is sent, one tile each: green when it lets entries through. */
-export function SafetyTiles({ s, clone, nowMs }: { s: Snapshot | null; clone: OptionsClone | null; nowMs: number }) {
-  const v = safetyView(s, clone, nowMs);
+export function SafetyTiles({ s, clone, gapLive, nowMs }: { s: Snapshot | null; clone: OptionsClone | null; gapLive: GapHunterLiveResult | null; nowMs: number }) {
+  const v = safetyView(s, clone, nowMs, gapLive);
   const badge =
     v.overall === "on" ? (
       <StatusBadge tone="bad">{v.onCount === 1 ? "1 switch on" : `${v.onCount} switches on`}</StatusBadge>

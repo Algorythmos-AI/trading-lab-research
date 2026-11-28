@@ -3,8 +3,8 @@ import { scan, useTheme } from "./axe";
 
 // CI-only. The Today page leads with its safety switches: one tile per kill file and loss latch, each green or red
 // with words and an icon, the sources' "as of" stamps under them, at every width without sideways scroll.
-// Fixture mode serves test/fixtures/snapshot.v3.json: the root kill file on, Gap Hunter's file off and not latched;
-// the options clone's fixture document has no latch unless `clone-latched` is set. `frozen` stands the clock still.
+// Fixture mode serves test/fixtures/snapshot.v3.json: the root kill file on, Gap Hunter's file off and not latched
+// (`gap-latched` latches its live document); the options clone's document has no latch unless `clone-latched` is set. `frozen` stands the clock still.
 
 test("Today shows the safety switches, red where a file is on", async ({ page, context, baseURL }) => {
   await context.addCookies([{ name: "fx", value: "frozen", url: baseURL! }]);
@@ -20,7 +20,7 @@ test("Today shows the safety switches, red where a file is on", async ({ page, c
   await expect(panel.locator('[data-switch="kill-s"]')).toContainText("Off");
   await expect(panel.locator('[data-switch="latch-clone"]')).toHaveAttribute("data-on", "false");
   await expect(panel).toContainText("1 switch on");
-  await expect(panel.getByRole("list", { name: "Where these states came from" }).locator("[data-source]")).toHaveCount(2);
+  await expect(panel.getByRole("list", { name: "Where these states came from" }).locator("[data-source]")).toHaveCount(3);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 });
@@ -34,11 +34,22 @@ test("a clone loss latch turns its tile red", async ({ page, context, baseURL })
   await expect(tile).toContainText("Day loss limit");
 });
 
-test("with nothing sent, no tile says Off and the panel does not say clear", async ({ page, context, baseURL }) => {
+test("a Gap Hunter safety stop turns its tile red, read from its live document as on its own page", async ({ page, context, baseURL }) => {
+  await context.addCookies([{ name: "fx", value: "frozen.gap-latched", url: baseURL! }]);
+  await page.goto("/today");
+  const tile = page.locator('#safety [data-switch="latch-s"]');
+  await expect(tile).toHaveAttribute("data-on", "true");
+  await expect(tile).toContainText("Safety stops: X3");
+  await expect(page.locator('#safety [data-source="gap"]')).toContainText("live document");
+});
+
+test("a clone that has sent nothing reads Not sent, never Clear", async ({ page, context, baseURL }) => {
   await context.addCookies([{ name: "fx", value: "frozen.clone-off", url: baseURL! }]);
   await page.goto("/today");
-  await expect(page.locator('#safety [data-switch="latch-clone"]')).toHaveAttribute("data-on", "unknown");
-  await expect(page.locator("#safety")).not.toContainText("All clear");
+  const tile = page.locator('#safety [data-switch="latch-clone"]');
+  await expect(tile).toHaveAttribute("data-on", "unknown");
+  await expect(tile).toContainText("Not sent");
+  await expect(tile).not.toContainText("Clear");
 });
 
 for (const width of [375, 768] as const) {

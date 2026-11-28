@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { duration, newYork, num, rMult, shortDate, sydney } from "@/lib/format";
 import { humanize, jobTone } from "@/lib/labels";
 import { jobName } from "@/lib/robots";
-import { loadJournal, loadLedger, loadOptions, loadOptionsClone, loadRadar, loadSnapshot, pageTime } from "@/lib/snapshot";
+import { loadGapHunterLive, loadJournal, loadLedger, loadOptions, loadOptionsClone, loadRadar, loadSnapshot, pageTime } from "@/lib/snapshot";
 import { robotLines } from "@/lib/programme";
 import { LedgerLine } from "@/components/ledger";
 import { NoJournal } from "@/components/journal";
@@ -28,7 +28,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Today" };
 
 export default async function TodayPage() {
-  const [result, journal, options, radar, now, ledger, clone] = await Promise.all([loadSnapshot(), loadJournal(), loadOptions(), loadRadar(), pageTime(), loadLedger(), loadOptionsClone()]);
+  const [result, journal, options, radar, now, ledger, clone, gapLive] = await Promise.all([loadSnapshot(), loadJournal(), loadOptions(), loadRadar(), pageTime(), loadLedger(), loadOptionsClone(), loadGapHunterLive()]);
   return (
     <>
       <PageHeading
@@ -36,7 +36,7 @@ export default async function TodayPage() {
         intro="Your trading day as it happens: first the safety switches, then every trade on the New York clock, the day's running result and how much room the day rules leave, then the names to watch. Below, the three paper robots in a line each, the session's jobs and the morning's pre-market scan. Nothing on this page can place an order."
       />
       <PaneBoundary name="Safety switches">
-        <SafetyTiles s={result.status === "ok" ? result.snapshot : null} clone={clone.status === "ok" ? clone.doc : null} nowMs={now.getTime()} />
+        <SafetyTiles s={result.status === "ok" ? result.snapshot : null} clone={clone.status === "ok" ? clone.doc : null} gapLive={gapLive} nowMs={now.getTime()} />
       </PaneBoundary>
       {journal.status === "ok" ? (
         <PaneBoundary name="Your day">
