@@ -194,6 +194,24 @@ def test_an_exit_cancels_the_resting_sell_then_sells_the_clones_lot(tmp_path):
     assert b.pos[SYM].qty == 0
 
 
+def test_the_daily_order_cap_stops_entries_but_never_an_exit(tmp_path):
+    """Limits never block an exit (risk/options_guard.py): at the order cap the clone still sells what it holds."""
+    b, oms, state, p = opened(tmp_path)
+    state["orders_today"] = LIM.max_orders_per_day
+    orig = b.place
+
+    def place(o: Order) -> Order:
+        got = orig(o)
+        if o.type == "market":
+            b.fill(o.client_order_id, 0.80)
+        return got
+    b.place = place                                              # type: ignore[method-assign]
+    assert oms.exit_now(p, "chart") is True and p.state == "closed"
+    q = plan(n=2)
+    oms.enter(q)
+    assert q.state == "rejected" and "orders today" in q.notes[-1][2]
+
+
 def test_the_target_filling_as_the_exit_fires_is_the_exit(tmp_path):
     b, oms, _, p = opened(tmp_path)
     oms.protect(p, 25, 50, try_stop=False)

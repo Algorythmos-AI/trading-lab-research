@@ -81,9 +81,6 @@ def check(order: Order, ctx: Context, lim: Limits, entry: bool, root: str = "") 
     if order.qty < 1 or order.qty > lim.max_contracts:
         raise GuardRejected(f"quantity {order.qty}: the clone trades {lim.max_contracts} contract", "quantity",
                             {"qty": order.qty, "max": lim.max_contracts})
-    if ctx.orders_today >= lim.max_orders_per_day:
-        raise GuardRejected(f"{ctx.orders_today} orders today: the cap is {lim.max_orders_per_day}", "max-orders",
-                            {"orders": ctx.orders_today, "max": lim.max_orders_per_day})
     if not entry:
         if order.side != "sell":
             raise GuardRejected("an exit is a sell")
@@ -93,6 +90,9 @@ def check(order: Order, ctx: Context, lim: Limits, entry: bool, root: str = "") 
         if order.qty > held:
             raise GuardRejected(f"sell {order.qty} but the clone holds {held}")
         return
+    if ctx.orders_today >= lim.max_orders_per_day:                 # an entry's cap: it never strands an exit
+        raise GuardRejected(f"{ctx.orders_today} orders today: the cap is {lim.max_orders_per_day}", "max-orders",
+                            {"orders": ctx.orders_today, "max": lim.max_orders_per_day})
     if order.side != "buy" or order.type != "limit" or order.limit_price is None:
         raise GuardRejected("an entry is a limit buy", "not-a-limit-buy")
     if order.limit_price > lim.max_limit_price or order.limit_price * 100 * order.qty > lim.max_premium:
