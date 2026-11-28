@@ -310,6 +310,11 @@ export async function handleIngest(req: Request, now: Date = new Date()): Promis
   if (!runId || asOf === null) {
     return done(422, "invalid", { error: "invalid", errors: ["/run_id and /as_of must be set; as_of must be a timestamp"] });
   }
+  // As for the editions and host documents: a snapshot dated ahead of this clock would read fresh on every page and
+  // the watchdog, and refuse every true one as older until real time caught up with it.
+  if (isAheadOfClock(result.snapshot.as_of ?? null, now.getTime())) {
+    return done(422, "ahead-of-clock", { error: "invalid", errors: [AHEAD_ERROR] }, { desk });
+  }
 
   try {
     for (let attempt = 0; attempt < 2; attempt++) {
