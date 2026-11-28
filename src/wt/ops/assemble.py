@@ -31,6 +31,32 @@ def trial_counts(cfg: dict) -> dict:
     return {"in_force": acc[-1]["total"] if acc else None, "in_force_by": acc[-1]["decision"] if acc else None,
             "proposed": prop[-1]["total"] if prop else None, "proposed_by": prop[-1]["decision"] if prop else None,
             "g1_failed_at": (cfg.get("trials") or {}).get("used")}
+FISCAL_REPORT = "research/experiments/EXP-0058-v3-on-fiscal/report.json"
+
+
+def fiscal_check(root: Any = None) -> dict | None:
+    """Classifier v3 measured on fiscal.ai headlines (EXP-0058, DEC-0082), read from the committed report, never a
+    hand-typed number. CAT-01 itself stays the Benzinga figure (EXP-0015a); this is shown beside it. None when the
+    report is missing, incomplete or unreadable."""
+    from pathlib import Path
+
+    from wt.core.config import ROOT
+    try:
+        d = json.loads((Path(root or ROOT) / FISCAL_REPORT).read_text())
+        dl = d["decision_level"]
+        if not d.get("complete"):
+            return None
+        return {"pct": 100 * float(dl["share"]), "n": int(dl["n"]), "verdict": str(d["verdict"]),
+                "agent": bool(d.get("owner_slots_filled_by")), "exp": str(d.get("experiment") or "EXP-0058")}
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def _fiscal_words(f: dict) -> str:
+    return (f"on fiscal.ai, v3 measured {f['pct']:.0f}% ({f['exp']}, {f['verdict']}"
+            + (", agent-checked)" if f["agent"] else ")"))
+
+
 AUTO_ACTION_ORDER = ("cat01", "swap", "disk", "deployed", "wake", "registration", "old_root")
 
 
@@ -157,8 +183,10 @@ def build_overview(sources: dict, cfg: dict, now: dt.datetime) -> dict:
         headline += " CAT-01 passes, so round 3 can run."
     elif _in_effect((res or {}).get("dec0010_status")):
         acc = (cat or {}).get("accuracy_pct")
+        fis = fiscal_check()
         headline += " Round 3 is cleared to run (DEC-0010 in effect)" + (
-            f"; CAT-01 was recorded below target at {acc:.0f}%." if cat and acc is not None else ".")
+            (f"; CAT-01 was recorded below target at {acc:.0f}% on Benzinga"
+             + (f"; {_fiscal_words(fis)}." if fis else ".")) if cat and acc is not None else ".")
     sub = []
     if best:
         sub.append(f"Best candidate: {best['label']}, {_fmt_r(best['expectancy_r'])} over {best['n']} trades"
@@ -178,7 +206,9 @@ def build_overview(sources: dict, cfg: dict, now: dt.datetime) -> dict:
     if cat:
         kpis.append({"id": "cat01", "label": "Catalyst accuracy", "value": f"{cat['accuracy_pct']:.0f}%" if cat.get("accuracy_pct") is not None else "n/a",
                      "unit": f"target {cat['target_pct']:.0f}%", "state": "good" if cat.get("passed") else "warn",
-                     "detail": f"Your verdicts: {cat['verdicts_done']}/{cat.get('verdicts_total') or '?'}"})
+                     "detail": f"Your verdicts: {cat['verdicts_done']}/{cat.get('verdicts_total') or '?'}"
+                               + (f" · fiscal.ai {f['pct']:.0f}% ({f['exp']}"
+                                  + (", agent-checked)" if f["agent"] else ")") if (f := fiscal_check()) else "")})
     if spec:
         impl = spec["by_status"].get("implemented", 0)
         kpis.append({"id": "spec", "label": "SPEC-0001 coverage", "value": f"{impl}/{spec['total']}", "unit": "requirements",

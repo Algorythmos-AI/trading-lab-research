@@ -126,6 +126,17 @@ on 32.
    - B's verdict (DEC-0062, SUSPEND) stands.
 9. **The pre-market routine reads SIP** for every stage (`--feed sip` is the default; `hybrid` is refused). Its
    stage log names the feed. Agreement figures (DEC-0023) are reported apart from its cutover.
+   - **Dated note, 2026-11-27 (New York), step 3 for the routine.** Steps 2, 4 and 5 and the snapshots of step 3
+     were built; the routine was not. Through 2026-11-27 its four stages still read `hybrid` (SIP to 16 minutes before
+     each stage, IEX after); its 09:25 live pool for Gap Hunter already read SIP. Found in a read-only review of the
+     research jobs; no pool, funnel count, signal or result was read for this note.
+     - Built in #698: a live run reads `sip` only and refuses any other `--feed`; the routine no longer uses
+       `HybridFeed`. The scorecard's section 4 puts a session in the SIP block when any of its stage files names
+       `feed: sip`, and never pools the two blocks.
+     - **The routine's cutover session** is the first session whose stage files name `feed: sip`, which is the first
+       session after the release carrying #698 reaches the host. A further dated note here records its date. The
+       sessions before it stay hybrid in every report.
+     - Steps 1 to 5 are then complete. Step 6 (switching the pause on) is unchanged and still to come.
 10. **The rest.**
     - Paper positions' last-price snapshots and the pipeline check's snapshots read SIP.
     - The 08:55 pipeline check asks each key pair for one SIP bar ending now and pages when an answer is not 200.

@@ -56,7 +56,7 @@ PYTHONPATH=src .venv/bin/python scripts/news_archive.py --catch-up 30 --publish
 | `--catch-up N` | the last N finished New York days that have no done marker |
 | `--backfill FROM..TO` | every day in the range without a marker (`--force` reads marked days again) |
 | `--day D` | one day, read again even if marked |
-| `--publish` | commits `alpaca-news/` in the clone, rebases on `origin/main`, pushes. It refuses any remote other than the private archive repository |
+| `--publish` | commits `alpaca-news/` in the clone, rebases on `origin/main`, pushes. It refuses any remote other than the private archive repository, and refuses to push unless GitHub, asked without credentials, says that repository is not found (private): DEC-0081, owner note 2026-11-28 |
 
 - **Output:** counts only, never a headline.
 - **Rate limit:** the script joins the shared Alpaca rate limiter at 120 requests a minute. A busy day is about 150
@@ -86,6 +86,9 @@ PYTHONPATH=src .venv/bin/python scripts/news_archive.py --catch-up 30 --publish
      - **The token:** git sends it as a header from environment variables, never on a command line or in the
        clone's config.
      - **The remote:** `publish` still refuses any remote but the private repository.
+     - **Visibility:** it pushes only while that repository is private. A log line `is public; nothing pushed` or
+       `could not confirm the archive repository is private` means nothing left the host; the day files wait in the
+       clone for the next run.
      - **Git identity:** the commit and the rebase carry the maintainer identity, since the host's git has none.
   5. **Check, the next morning:**
      - `logs/news_archive_<date>.log` on the host ends with `pushed` or `nothing new to push`.
