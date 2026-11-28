@@ -119,7 +119,7 @@ export function RunList({ runs }: { runs: JobRun[] }) {
   if (runs.length === 0) return null;
   return (
     <DataDetails summary="Show every run">
-      <Table>
+      <Table label="Every job run">
         <TableHeader>
           <TableRow>
             <TableHead>Job</TableHead>

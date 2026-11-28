@@ -42,12 +42,9 @@ export function Meter({
         <span className="font-medium">{valueText}</span>
       </div>
       <div
-        role="meter"
-        // Named by the visible label, whatever it is made of, so a meter is never announced without a name.
-        aria-labelledby={labelId}
-        aria-valuemin={0}
-        aria-valuemax={ok ? max : undefined}
-        aria-valuenow={ok ? value : undefined}
+        // Named by the visible label, whatever it is made of, so a meter is never announced without a name. With no
+        // value it is not a meter (the role needs one): the empty track is hidden and the written "—" speaks for it.
+        {...(ok ? { role: "meter", "aria-labelledby": labelId, "aria-valuemin": 0, "aria-valuemax": max, "aria-valuenow": value } : { "aria-hidden": true })}
         className="bg-track relative h-2 overflow-visible rounded-full"
       >
         <div className={cn("h-full rounded-full", TONE_FILL[tone])} style={{ width: `${share * 100}%` }} />
