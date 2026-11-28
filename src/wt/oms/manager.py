@@ -122,10 +122,13 @@ class OMS:
                  persist: Callable[[TradePlan], None] | None = None,
                  on_entry: Callable[[TradePlan], None] | None = None, confirm_polls: int = 20,
                  poll_s: float = 0.25, strategy: str | None = None,
-                 clock: Callable[[], float] = time.time) -> None:
+                 clock: Callable[[], float] = time.time, unguarded: bool = False) -> None:
         self.b, self.sell_timeout_s, self.sleep, self.clock = broker, sell_timeout_s, sleep, clock
         self.guard, self.context, self.persist_cb, self.on_entry = guard, context, persist, on_entry
         self.confirm_polls, self.poll_s, self.strategy = confirm_polls, poll_s, strategy
+        # An entry is never sent without the pre-trade guard (paper lock, kill switch, caps). Only a caller that says
+        # so (a test, a replay with no account) may send one unchecked; a forgotten guard refuses the entry instead.
+        self.unguarded = unguarded
         self._gone: set[str] = set()        # ids get_order has reported cancelled or rejected: never resting again
 
     # ---- plumbing -------------------------------------------------------------------------------
@@ -145,7 +148,9 @@ class OMS:
 
     def _check(self, order: Order, protective: bool) -> None:
         if self.guard is None or self.context is None:
-            return
+            if protective or self.unguarded:          # risk reduction is never blocked for want of a guard
+                return
+            raise GuardRejected("no pre-trade guard: an entry is never sent unchecked")
         ctx = self.context(order.symbol)
         r = self.guard.evaluate(order, replace(ctx, open_orders=self._live(ctx.open_orders)), protective)
         if not r.ok:
@@ -309,7 +314,15 @@ class OMS:
                     p.state = "in_position" if p.filled_qty > 0 else "aborted"     # audit C2
                 self._persist(p)
         if p.state in ACTIVE_POSITION and self._position_qty(p.symbol) <= 0:
-            self._close(p, "stop")                           # audit C1: a stop-out is a close like any other
+            if p.filled_qty > 0 and not p.stop_id:
+                # Filled shares and no stop ever placed: nothing at the broker could have sold them, so a flat read is
+                # a position read lagging the fill. Closing here would cancel nothing and leave the shares with no
+                # stop; the next loop's ensure_stop protects them once the position shows.
+                if not (p.log and p.log[-1][0] == "flat_read_before_stop"):
+                    self._note(p, "flat_read_before_stop")
+                    self._persist(p)
+            elif self._stable_position(p.symbol) <= 0:       # two reads agree: not a lagging read
+                self._close(p, "stop")                       # audit C1: a stop-out is a close like any other
 
     def held_for_exit(self, p: TradePlan) -> bool:
         """True while the plan's stop is one an exit asked to cancel without a confirmation, for at most EXIT_HOLD_S
