@@ -156,3 +156,52 @@ def test_a_real_stop_out_still_closes_the_plan():
     b.fill(p.stop_id, 249.0)
     oms.sync(p)
     assert p.state == "closed" and p.exit_reason == "stop"
+
+
+def test_the_stop_rests_before_the_runner_books_the_entry():
+    """on_entry (the runner's bookkeeping: a quote read, the account file, a page that says the stop rests) runs
+    only once the protective stop is at the broker."""
+    b = SimBroker()
+    seen = []
+    oms = OMS(b, sell_timeout_s=1.0, sleep=lambda s: None, unguarded=True,
+              on_entry=lambda p: seen.append([o.type for o in b.open_orders() if o.side == "sell"]))
+    p = plan()
+    oms.place_entry(p)
+    b.fill(p.entry_id, 250.05)
+    oms.sync(p)
+    assert seen == [["stop"]]
+
+
+def test_a_stop_out_while_the_entry_still_works_cancels_the_rest_of_the_entry():
+    b, oms = mk()
+    p = plan()
+    oms.place_entry(p)
+    b.fill(p.entry_id, 250.05, qty=2)                                   # partial: 2 of 4
+    oms.sync(p)
+    assert p.state == "entry_working" and b.get_order(p.stop_id).qty == 2
+    b.fill(p.stop_id, 249.0)                                            # the stop sells the 2
+    oms.sync(p)
+    entry = b.get_order(p.entry_id)
+    assert entry.status.terminal and entry.filled_qty == 2              # the rest never buys back below the stop
+    assert p.state == "closed" and p.exit_reason == "stop"
+    assert any(e[0] == "stopped_while_entry_working" for e in p.log)
+
+
+def test_a_stop_id_whose_order_never_reached_the_broker_is_no_evidence_of_a_stop_out():
+    """The stop's submit failed (it never reached the broker), so its id is set but nothing could sell the shares: a
+    lagging flat read must not close the plan."""
+    b, oms = mk()
+    p = plan()
+    oms.place_entry(p)
+    b.fill(p.entry_id, 250.05)
+    b.fail_next_place = True                                            # the stop never reaches the broker
+    try:
+        oms.sync(p)
+    except Exception:                                                   # the runner journals a refused protect
+        pass
+    assert p.stop_id and b.get_order(p.stop_id) is None
+    real = b.positions
+    b.positions = lambda: []                                            # type: ignore[method-assign]
+    oms.sync(p)
+    assert p.state in ("entry_working", "in_position")
+    b.positions = real                                                  # type: ignore[method-assign]

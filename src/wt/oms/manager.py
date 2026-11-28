@@ -281,15 +281,38 @@ class OMS:
         self._note(p, "entry_placed", p.trigger, p.limit, p.qty)
         self._persist(p)
 
-    def _record_fill(self, p: TradePlan, e: Order) -> None:
+    def _record_fill(self, p: TradePlan, e: Order, notify: bool = True) -> bool:
+        """Book a new entry fill. The first fill counts the entry once (on_entry). With notify=False the caller calls
+        on_entry itself (True is returned when it is owed), so the stop is placed before the runner's bookkeeping."""
+        owed = False
         if e.filled_qty > p.filled_qty:
             p.filled_qty, p.avg_entry = e.filled_qty, e.avg_fill_price
             self._note(p, "entry_fill", e.filled_qty, e.avg_fill_price)
             if not p.entry_counted:
                 p.entry_counted = True
-                if self.on_entry is not None:
-                    self.on_entry(p)
+                cb = self.on_entry
+                if cb is not None and notify:
+                    cb(p)
+                else:
+                    owed = cb is not None
             self._persist(p)
+        return owed
+
+    def _a_sell_filled(self, p: TradePlan) -> bool:
+        """Has any sell of the plan's (its stops and exits, read by id) filled? A stop id alone is no evidence: its
+        submit may never have reached the broker."""
+        for cid in p.sell_ids:
+            o = self._read(cid)
+            if o is not None and o.filled_qty > 0:
+                return True
+        return False
+
+    def _stop_filled(self, p: TradePlan) -> bool:
+        """Has the plan's stop already sold? (Read by id: a stop-out while the entry is still working.)"""
+        if not p.stop_id:
+            return False
+        st = self._read(p.stop_id)
+        return st is not None and st.status == OrderStatus.FILLED
 
     def sync(self, p: TradePlan) -> None:
         """Called every loop: resolve submits, react to fills, keep the stop sized, detect flat."""
@@ -305,19 +328,29 @@ class OMS:
         if p.state == "entry_working":
             e = self.b.get_order(p.entry_id)
             if e is not None:
-                self._record_fill(p, e)
-                if p.filled_qty:
-                    self.ensure_stop(p)
-                if e.status == OrderStatus.FILLED:
-                    p.state = "in_position"
-                elif e.status.terminal:                      # cancelled, expired or rejected
-                    p.state = "in_position" if p.filled_qty > 0 else "aborted"     # audit C2
+                owed = self._record_fill(p, e, notify=False)
+                try:
+                    if p.filled_qty and self._stop_filled(p):
+                        # The stop sold the filled part while the rest of the entry still works: the rest would buy
+                        # back below the stop. It is cancelled; the flat check below closes the plan as a stop-out.
+                        self._note(p, "stopped_while_entry_working")
+                        self.cancel_entry_remainder(p)
+                    elif p.filled_qty:
+                        self.ensure_stop(p)                  # the stop first: the runner's bookkeeping can wait
+                finally:
+                    if owed and self.on_entry is not None:
+                        self.on_entry(p)
+                if p.state == "entry_working":
+                    if e.status == OrderStatus.FILLED:
+                        p.state = "in_position"
+                    elif e.status.terminal:                  # cancelled, expired or rejected
+                        p.state = "in_position" if p.filled_qty > 0 else "aborted"     # audit C2
                 self._persist(p)
         if p.state in ACTIVE_POSITION and self._position_qty(p.symbol) <= 0:
-            if p.filled_qty > 0 and not p.stop_id:
-                # Filled shares and no stop ever placed: nothing at the broker could have sold them, so a flat read is
-                # a position read lagging the fill. Closing here would cancel nothing and leave the shares with no
-                # stop; the next loop's ensure_stop protects them once the position shows.
+            if p.filled_qty > 0 and not self._a_sell_filled(p):
+                # Filled shares and no sell of the plan's has filled (no stop placed, or one that never reached the
+                # broker): nothing could have sold them, so a flat read is a position read lagging the fill. Closing
+                # here would leave the shares unmanaged; the runner's reconcile protects them once the position shows.
                 if not (p.log and p.log[-1][0] == "flat_read_before_stop"):
                     self._note(p, "flat_read_before_stop")
                     self._persist(p)
