@@ -25,8 +25,8 @@ One page per incident or task. Each starts with how you'll notice it. Every job 
 | [Options lab tape](lab-tape.md) | The lab's recorder: what it records, the probe, the owner's setup steps, a session's manifest, a stop, an upload that failed, the off switch |
 | [Radar → Options shadow](options-select.md) | The 06:45 shadow selection (DEC-0070): what it writes, the owner's setup steps, a clean session, a replay, the off switch |
 | [Radar skill edits](radar-skill-edits.md) | The owner's edits to the cloud Radar skill for the Options pipeline: options lists only, earnings rows in the hold, what admits a name |
-| [The board's stock feed](board-feed.md) | Switching the owner's board between the IEX and SIP feeds, checking it, switching back (DEC-0050) |
-| [Feed agreement, IEX against SIP](feed-agreement.md) | You want to compare the board on the two stock feeds after a session, or read five sessions together |
+| [The board's stock feed](board-feed.md) | The owner's board on SIP (DEC-0050, DEC-0064: IEX is paused), checking it |
+| [Feed agreement, IEX against SIP](feed-agreement.md) | Paused by DEC-0064 (SIP only); kept for the record and for the way back |
 | [Keys and feeds](keys-and-feeds.md) | The Alpaca plan changed or lapsed, a tool answers 401, or a new market-data request is being added |
 | [News archive](news-archive.md) | You need past news items, an archive run printed FAILED, or Alpaca changed its news provider again (the private `trading-news-archive` repository) |
 | [Engine identity check over logged sessions](engine-identity-sessions.md) | A release changes the engine label: run the last 10 logged sessions through the old and the new engine first |

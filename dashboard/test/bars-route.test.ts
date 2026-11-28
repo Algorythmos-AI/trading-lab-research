@@ -42,7 +42,8 @@ describe("normaliseBar", () => {
 });
 
 describe("fetchBars", () => {
-  it("reads every page, asks from 09:30 New York on the IEX feed, and orders the bars", async () => {
+  // DEC-0064: unset ALPACA_FEED is sip now (iex is paused), so the default read asks sip.
+  it("reads every page, asks from 09:30 New York on the SIP feed (the default), and orders the bars", async () => {
     const urls: string[] = [];
     const pages = [
       { bars: { SPY: [raw(2, 101), raw(0, 100)], QQQ: [raw(0, 200)] }, next_page_token: "p2" },
@@ -57,7 +58,7 @@ describe("fetchBars", () => {
     const first = new URL(urls[0]!);
     expect(first.pathname).toBe("/v2/stocks/bars");
     expect(first.searchParams.get("timeframe")).toBe("2Min");
-    expect(first.searchParams.get("feed")).toBe("iex");
+    expect(first.searchParams.get("feed")).toBe("sip");
     expect(first.searchParams.get("limit")).toBe("10000");
     expect(first.searchParams.get("start")).toBe("2026-10-12T13:30:00.000Z");
     expect(first.searchParams.get("symbols")).toBe("SPY,QQQ,AAPL");
@@ -66,7 +67,7 @@ describe("fetchBars", () => {
     // a page boundary that repeats a slot keeps one bar
     expect(res.bars.QQQ!.map((b) => b.c)).toEqual([200, 201]);
     expect(res.missing).toEqual(["AAPL"]);
-    expect(res.feed).toBe("iex");
+    expect(res.feed).toBe("sip");
   });
 
   it("stops after MAX_PAGES even if Alpaca keeps paging, and reports those names missing, not cached as complete", async () => {

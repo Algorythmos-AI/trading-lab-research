@@ -10,8 +10,7 @@ stock auctions (Alpaca's reference: "Only `sip` is valid for auctions"), and the
 trades and bars. Other paths take no feed and pass unchecked: stock metadata (`/v2/stocks/meta/...`), option bars
 and trades, news, corporate actions.
 
-Which feeds are accepted: this repo sends iex and sip for stocks, indicative (opra when the owner switches it) for
-options. The accepted lists are wider: they are Alpaca's own values (alpaca-py 0.44's DataFeed and OptionsFeed),
+Which feeds are accepted: this repo sends sip for stocks and opra for options (DEC-0064); iex is paused. The accepted lists are wider: they are Alpaca's own values (alpaca-py 0.44's DataFeed and OptionsFeed),
 so a hand-run tool that names another real feed is not refused. A feed may be in `params` (a mapping, a sequence of
 pairs, or a query string, as `requests` accepts) or in the URL's query; if both name one, they must agree.
 
@@ -30,9 +29,9 @@ from collections.abc import Mapping
 from urllib.parse import parse_qsl, unquote, urlsplit
 
 DATA_HOST = "data.alpaca.markets"
-STOCK_FEEDS = ("iex", "sip", "delayed_sip", "boats", "overnight", "otc")     # Alpaca's; this repo sends iex, sip
+STOCK_FEEDS = ("iex", "sip", "delayed_sip", "boats", "overnight", "otc")     # Alpaca's; this repo sends sip
 AUCTION_FEEDS = ("sip",)                                                     # Alpaca's reference: only sip
-OPTION_FEEDS = ("indicative", "opra")                                        # Alpaca's; this repo sends indicative
+OPTION_FEEDS = ("indicative", "opra")                                        # Alpaca's; this repo sends opra
 _STOCK_DATA = re.compile(r"^/v2/stocks/(?:(?:bars|trades|quotes)(?:/latest)?|snapshots"
                          r"|(?!meta/)[^/]+/(?:(?:bars|trades|quotes)(?:/latest)?|snapshot))/?$")
 _AUCTIONS = re.compile(r"^/v2/stocks/(?:[^/]+/)?auctions/?$")
@@ -44,9 +43,9 @@ class FeedNotNamed(ValueError):
 
 
 # DEC-0064: a stock feed listed here is paused. A request that names it is refused before it is sent, like one that
-# names no feed, and nothing asks another feed instead. Empty until every consumer reads SIP (the record's order of
-# work); the way back is to empty it again.
-PAUSED_STOCK_FEEDS: tuple[str, ...] = ()
+# names no feed, and nothing asks another feed instead. Switched on as the record's last step, once every consumer
+# reads SIP; the way back is the owner's: empty it again, with a dated note in DEC-0064.
+PAUSED_STOCK_FEEDS: tuple[str, ...] = ("iex",)
 
 
 class FeedPaused(FeedNotNamed):

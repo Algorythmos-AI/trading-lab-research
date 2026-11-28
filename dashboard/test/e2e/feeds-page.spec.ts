@@ -1,7 +1,7 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { scan, useTheme } from "./axe";
 
-// CI-only. The Feeds page (/options/feeds, DEC-0050) in fixture mode: the board's live feed (IEX here, as ALPACA_FEED
+// CI-only. The Feeds page (/options/feeds, DEC-0050) in fixture mode: the board's live feed (SIP here, as ALPACA_FEED
 // is unset), today's made-up stamps, the live rows for the focus names (SPY and QQQ with `focus`) and, after the close
 // (the page's own `fxfeeds=after-close`, feeds-live.ts), the two synthetic compared sessions. During the session
 // (`frozen`, 11:01 New York) the comparison is not drawn.
@@ -36,8 +36,9 @@ const overflow = (page: Page) => page.evaluate(() => document.documentElement.sc
 
 test("in a session: the board's feed named, the stamps counted, the live rows drawn, no comparison", async ({ page, context, baseURL }) => {
   await open(page, context, baseURL, "frozen.focus.quotes-script");
-  await expect(page.locator("[data-board-feed]")).toHaveAttribute("data-board-feed", "iex");
-  await expect(page.locator("[data-board-feed]")).toContainText("IEX — the board is not on SIP yet (DEC-0050)");
+  // DEC-0064: an unset ALPACA_FEED is sip, so the fixture board reads SIP
+  await expect(page.locator("[data-board-feed]")).toHaveAttribute("data-board-feed", "sip");
+  await expect(page.locator("[data-board-feed]")).toContainText("SIP · authoritative");
   await expect(page.locator("[data-stamp-panel]")).toHaveAttribute("data-stamp-panel", "session");
   await expect(page.locator("[data-stamp-panel]")).toContainText("over 91 minutes since the open");
   // the keys' entitlement, fixed in fixture mode and dated by the page's own clock
@@ -48,8 +49,8 @@ test("in a session: the board's feed named, the stamps counted, the live rows dr
   await expect(page.locator("[data-feeds-row]")).toHaveCount(3);
   for (const row of await page.locator("[data-feeds-row]").all()) {
     await expect(row).toHaveAttribute("data-stale", "false");
-    await expect(row).toContainText("IEX price (the board's)");
-    await expect(row).toContainText("IEX quote age");
+    await expect(row).toContainText("SIP price (the board's)");
+    await expect(row).toContainText("SIP quote age");
     await expect(row.locator("svg[role=img]")).toBeVisible();
   }
   await expect(page.locator("[data-compared]")).toHaveCount(0);

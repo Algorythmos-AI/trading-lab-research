@@ -187,7 +187,7 @@ export function BoardFeedLine() {
         ? feed.why === "plan"
           ? "the data plan refuses SIP"
           : feed.why === "feed"
-            ? "the feed setting is not iex or sip"
+            ? "the feed setting is not sip (iex is paused)"
             : "no market-data keys"
         : feed.status === "error"
           ? "the live prices did not answer"

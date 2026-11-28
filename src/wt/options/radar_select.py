@@ -538,7 +538,7 @@ def _read_published() -> tuple[Mapping[str, Any] | None, str | None]:
 
 def main(argv: list[str] | None = None, *, client: Callable[[], sf.Client] = sf._client,
          read_radar: Callable[[], Any] = _read_radar, clock: Callable[[], dt.datetime] = _now,
-         sleep: Callable[[float], None] | None = None, chain_feed: str = "indicative",
+         sleep: Callable[[float], None] | None = None, chain_feed: str = "opra",      # DEC-0064 point 1
          read_published: Callable[[], tuple[Mapping[str, Any] | None, str | None]] = _read_published,
          sender: Any = None) -> int:
     import time

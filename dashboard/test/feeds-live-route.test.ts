@@ -132,7 +132,7 @@ describe("what the live route reads and answers", () => {
   it("answers numbers or null only, and keeps the session's bars", async () => {
     const { f } = upstream();
     const body = await (await handleFeedsLive(req(), deps({ fetch: f }))).json();
-    expect(body.feed).toBe("iex");
+    expect(body.feed).toBe("sip"); // DEC-0064: unset ALPACA_FEED is sip
     expect(body.served_at).toBe(NOW.toISOString());
     expect(body.rows.SPY.trade).toBeUndefined(); // the price is the board's own, from /api/quote
     expect(body.rows.SPY.quote).toEqual({ bp: 500.11, bs: 2, ap: 500.13, as: 3, t: Date.parse("2026-10-12T14:59:59Z") });
@@ -175,6 +175,9 @@ describe("what the live route reads and answers", () => {
     expect(body.rows.SPY.quote.bp).toBe(500.11);
   });
 
+  // DEC-0064: only sip can be configured now, so a second feed can no longer be put beside it. The case checks that
+  // unset and an explicit sip are the same feed and share the cached answer, and that ALPACA_FEED=iex (paused) is
+  // refused without being served the cached sip answer or reading anything.
   it("keeps its own cache for CACHE_MS (the 5 s poll), keyed by feed", async () => {
     const { f } = upstream();
     let t = NOW.getTime();
@@ -186,12 +189,19 @@ describe("what the live route reads and answers", () => {
     expect(f).toHaveBeenCalledTimes(2);
     expect(again.as_of).toBe(NOW.toISOString());
     expect(again.served_at).toBe(new Date(t).toISOString());
-    // Another feed never reads the cached answer.
-    await handleFeedsLive(req(), { ...d, env: { ...KEYS_ENV, ALPACA_FEED: "sip" } });
-    expect(f).toHaveBeenCalledTimes(4);
+    // An explicit sip is the same feed as unset: it is served the cached answer.
+    const sip = await (await handleFeedsLive(req(), { ...d, env: { ...KEYS_ENV, ALPACA_FEED: "sip" } })).json();
+    expect(f).toHaveBeenCalledTimes(2);
+    expect(sip.feed).toBe("sip");
+    expect(sip.as_of).toBe(NOW.toISOString());
+    // A paused feed never reads the cached answer, nor anything upstream.
+    const iex = await handleFeedsLive(req(), { ...d, env: { ...KEYS_ENV, ALPACA_FEED: "iex" } });
+    expect(iex.status).toBe(503);
+    expect(await iex.json()).toEqual({ error: "not-configured", why: "feed" });
+    expect(f).toHaveBeenCalledTimes(2);
     t += 1;
     await handleFeedsLive(req(), d);
-    expect(f).toHaveBeenCalledTimes(6);
+    expect(f).toHaveBeenCalledTimes(4);
   });
 
   it("leaves fetchQuotes' cache untouched", async () => {

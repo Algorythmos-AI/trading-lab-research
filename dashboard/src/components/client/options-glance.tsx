@@ -46,7 +46,7 @@ export function OptionsGlance({
       ? `Centred on the live price (Alpaca${source ? ` ${source}` : ""}, checked ${newYork(feed.asOf, false)} New York${source === "IEX" ? "; IEX is one exchange, so a high or low printed elsewhere can be missing" : ""}). The bar is measured in ATRs, so every name reads on one scale.${trading ? " Names that need a look come first." : ""}`
       : feed.status === "off"
         ? feed.why === "feed"
-          ? "Live prices are off (ALPACA_FEED in Vercel is not iex or sip), so each bar is centred on the close."
+          ? "Live prices are off (ALPACA_FEED in Vercel is not sip; iex is paused), so each bar is centred on the close."
           : feed.why === "plan"
             ? "Live prices are off: ALPACA_FEED asks for the full-market feed (SIP), which this Alpaca data plan does not include. Each bar is centred on the close."
             : "Live prices are off (no Alpaca keys in Vercel), so each bar is centred on the close."

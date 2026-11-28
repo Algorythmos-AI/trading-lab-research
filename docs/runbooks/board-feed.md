@@ -1,8 +1,9 @@
 # The board's stock feed: switching to SIP, checking it, and switching back
 
 This runbook covers DEC-0050. The owner's board (the live prices, the session bars and the server evaluator) reads
-the stock feed that `ALPACA_FEED` names on the production deployment (`dashboard/src/lib/alpaca-feed.ts`): `iex` when
-it is unset, or `sip`. Only the owner changes it. Automated contributors never do (AGENTS.md).
+the stock feed that `ALPACA_FEED` names on the production deployment (`dashboard/src/lib/alpaca-feed.ts`): `sip` when
+it is unset (DEC-0064). `iex` is paused and refused like any other value; going back to it is the owner's, by a dated
+note in DEC-0064 (point 2). Only the owner changes it. Automated contributors never do (AGENTS.md).
 
 What it moves: `/api/quote`, `/api/bars` and `/api/cron/desk`, so the hero, the glance, the ladders, the live dot, the
 cards, the manage card and the shadow evaluator all follow. What it does not move: paper B, the clone, the forward
@@ -47,7 +48,8 @@ Use this when SIP fails for more than a passing outage, for example Alpaca refus
 Do it after the close where you can. Once EXP-0033's window has started, a rollback ends it with no verdict
 (DEC-0050 point 4).
 
-1. In Vercel, set `ALPACA_FEED` to `iex` for Production (or remove it), then redeploy.
+1. Since DEC-0064 there is no rollback to IEX from this runbook: `iex` is refused. The way back is the owner's (a
+   dated note in DEC-0064, then the pause list emptied in code, then `ALPACA_FEED=iex` on Vercel and a redeploy).
 2. Check `/api/quote?s=SPY` answers `"feed":"iex"`.
 3. Record it: a dated note on DEC-0050 and a dated line in EXP-0033's `README.md`, with the session it took effect.
 

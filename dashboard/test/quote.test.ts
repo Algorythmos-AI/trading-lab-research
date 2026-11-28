@@ -87,15 +87,16 @@ describe("normalise", () => {
 });
 
 describe("fetchQuotes", () => {
-  it("asks the IEX feed with the keys in headers, and reports missing names", async () => {
+  // DEC-0064: unset ALPACA_FEED is sip now (iex is paused), so the default read asks sip.
+  it("asks the SIP feed (the default) with the keys in headers, and reports missing names", async () => {
     const f = okFetch({ SPY: snap(779.1) });
     const r = await fetchQuotes(["SPY", "QQQ"], KEYS, NOW, f, "https://data.example");
     const [url, init] = f.mock.calls[0]!;
-    expect(String(url)).toBe("https://data.example/v2/stocks/snapshots?symbols=SPY%2CQQQ&feed=iex");
+    expect(String(url)).toBe("https://data.example/v2/stocks/snapshots?symbols=SPY%2CQQQ&feed=sip");
     expect((init!.headers as Record<string, string>)["APCA-API-KEY-ID"]).toBe("test-key-id");
     expect(r.quotes.SPY!.price).toBe(779.1);
     expect(r.missing).toEqual(["QQQ"]);
-    expect(r.feed).toBe("iex");
+    expect(r.feed).toBe("sip");
   });
 
   it("reads the older nested shape too", async () => {
@@ -127,7 +128,7 @@ describe("fetchQuotes", () => {
     await fetchQuotes(["SPY"], KEYS, NOW, f, "https://data.example");
     const later = new Date(NOW.getTime() + 500);
     const r = await fetchQuotes(["SPY", "QQQ"], KEYS, later, f, "https://data.example");
-    expect(String(f.mock.calls[1]![0])).toBe("https://data.example/v2/stocks/snapshots?symbols=QQQ&feed=iex");
+    expect(String(f.mock.calls[1]![0])).toBe("https://data.example/v2/stocks/snapshots?symbols=QQQ&feed=sip");
     expect(r.quotes.SPY!.price).toBe(779.1);
     expect(r.quotes.QQQ!.price).toBe(751.2);
     expect(r.as_of).toBe(NOW.toISOString());
@@ -227,11 +228,18 @@ describe("GET /api/quote", () => {
     expect(await res.json()).toEqual({ error: "rate-limited" });
     expect(res.headers.get("cache-control")).toBe("no-store");
     // any other status, and a transport failure, stay 502
-    for (const status of [400, 401, 403, 404, 500, 503]) {
+    for (const status of [400, 401, 404, 500, 503]) {
       resetQuoteCache();
       vi.stubGlobal("fetch", vi.fn(async () => new Response("x", { status })));
       expect((await get("?s=SPY")).status).toBe(502);
     }
+    // DEC-0064: the default feed is sip, where a 403 is the data plan refusing it (not configured, 503), not a
+    // failure; the 403-on-iex case cannot be configured any more (iex is paused).
+    resetQuoteCache();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("x", { status: 403 })));
+    const refused = await get("?s=SPY");
+    expect(refused.status).toBe(503);
+    expect(await refused.json()).toEqual({ error: "not-configured", why: "plan" });
     resetQuoteCache();
     vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("offline"))));
     expect((await get("?s=SPY")).status).toBe(502);

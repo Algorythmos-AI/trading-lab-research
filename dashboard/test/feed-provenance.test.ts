@@ -35,21 +35,25 @@ afterEach(() => {
 });
 
 describe("ALPACA_FEED", () => {
-  it("is iex when unset or empty (or only spaces)", () => {
-    expect(DEFAULT_FEED).toBe("iex");
-    expect(feedSetting({})).toEqual({ ok: true, feed: "iex" });
-    expect(feedSetting({ ALPACA_FEED: "" })).toEqual({ ok: true, feed: "iex" });
-    expect(feedSetting({ ALPACA_FEED: "  " })).toEqual({ ok: true, feed: "iex" });
+  // DEC-0064 (SIP only): the default is sip, and iex is paused, refused like a value that is not a feed.
+  it("is sip when unset or empty (or only spaces)", () => {
+    expect(DEFAULT_FEED).toBe("sip");
+    expect(feedSetting({})).toEqual({ ok: true, feed: "sip" });
+    expect(feedSetting({ ALPACA_FEED: "" })).toEqual({ ok: true, feed: "sip" });
+    expect(feedSetting({ ALPACA_FEED: "  " })).toEqual({ ok: true, feed: "sip" });
   });
 
-  it("takes iex and sip", () => {
-    expect(feedSetting({ ALPACA_FEED: "iex" })).toEqual({ ok: true, feed: "iex" });
+  it("takes sip, and refuses iex (paused by DEC-0064) as it refuses a value that is not a feed", () => {
     expect(feedSetting({ ALPACA_FEED: "sip" })).toEqual({ ok: true, feed: "sip" });
+    expect(feedSetting({ ALPACA_FEED: "iex" })).toEqual({ ok: false, length: 3 });
+    expect(configuredFeed({ ALPACA_FEED: "iex" })).toBeNull();
+    expect(() => requireFeed({ ALPACA_FEED: "iex" })).toThrow(FeedMisconfigured);
+    expect(JSON.parse(logged[0]!)).toMatchObject({ evt: "alpaca.feed", outcome: "invalid", length: 3, allowed: "sip (iex is paused)" });
   });
 
-  it("takes them whatever their case and surrounding spaces: the choice is not ambiguous, and a pasted newline must not take the prices off", () => {
-    for (const v of ["IEX", " iex ", "Iex", "iex\n"]) expect(feedSetting({ ALPACA_FEED: v })).toEqual({ ok: true, feed: "iex" });
+  it("takes sip whatever its case and surrounding spaces: the choice is not ambiguous, and a pasted newline must not take the prices off; iex is refused in every spelling", () => {
     for (const v of ["SIP", "\tsip", "sip\r\n", " Sip "]) expect(feedSetting({ ALPACA_FEED: v })).toEqual({ ok: true, feed: "sip" });
+    for (const v of ["IEX", " iex ", "Iex", "iex\n"]) expect(feedSetting({ ALPACA_FEED: v })).toEqual({ ok: false, length: v.length });
   });
 
   it("refuses anything else, Alpaca's other feeds included, keeping only the value's length", () => {
@@ -91,7 +95,8 @@ const snapshotBody = { SPY: { latestTrade: { t: "2026-10-12T14:59:58Z", p: 780 }
 const barsBody = { bars: { SPY: [{ t: "2026-10-12T13:30:00Z", o: 1, h: 1, l: 1, c: 1 }] }, next_page_token: null };
 
 describe("the upstream URLs carry the configured feed", () => {
-  for (const feed of ["iex", "sip"] as const) {
+  // DEC-0064: only sip can be configured; ALPACA_FEED=iex is refused before any read (next test).
+  for (const feed of ["sip"] as const) {
     it(`snapshots and bars both ask ${feed}, and the answers say so`, async () => {
       vi.stubEnv("ALPACA_FEED", feed);
       const q = vi.fn<typeof fetch>(async () => Response.json(snapshotBody));
@@ -106,6 +111,14 @@ describe("the upstream URLs carry the configured feed", () => {
       expect(rb.feed).toBe(feed);
     });
   }
+
+  it("with ALPACA_FEED=iex (paused) nothing goes upstream", async () => {
+    vi.stubEnv("ALPACA_FEED", "iex");
+    const f = vi.fn<typeof fetch>();
+    await expect(fetchQuotes(["SPY"], KEYS, NOW, f, BASE)).rejects.toThrow(FeedMisconfigured);
+    await expect(fetchBars(["SPY"], KEYS, NOW, f, BASE)).rejects.toThrow(FeedMisconfigured);
+    expect(f).not.toHaveBeenCalled();
+  });
 
   it("a cached answer from the other feed is never served: the name is read again", async () => {
     const q = vi.fn<typeof fetch>(async () => Response.json(snapshotBody));
@@ -160,15 +173,20 @@ describe("the routes with a refused ALPACA_FEED", () => {
     expect((await bars()).status).toBe(503);
   });
 
-  it("with sip configured the fixture answers name sip; unset, iex", async () => {
+  it("with sip configured the fixture answers name sip; unset, sip too (DEC-0064); iex, refused", async () => {
     vi.stubEnv("DASHBOARD_FIXTURE", "1");
     vi.stubEnv("VERCEL_ENV", "");
     vi.stubEnv("ALPACA_FEED", "sip");
     expect((await (await quote()).json()).feed).toBe("sip");
     expect((await (await bars()).json()).feed).toBe("sip");
     vi.stubEnv("ALPACA_FEED", "");
-    expect((await (await quote()).json()).feed).toBe("iex");
-    expect((await (await quote("fx=focus.quotes-script")).json()).feed).toBe("iex");
+    expect((await (await quote()).json()).feed).toBe("sip");
+    expect((await (await quote("fx=focus.quotes-script")).json()).feed).toBe("sip");
+    vi.stubEnv("ALPACA_FEED", "iex");
+    for (const res of [await quote(), await bars()]) {
+      expect(res.status).toBe(503);
+      expect(await res.json()).toEqual(FEED_REFUSED);
+    }
   });
 });
 
@@ -200,10 +218,15 @@ describe("sip refused by the data plan", () => {
     expect(logged.join("\n")).not.toContain("upstream-body");
   });
 
-  it("a 403 on iex stays a failure (502), as before", async () => {
-    live("iex", 403);
-    expect((await quote()).status).toBe(502);
-    expect((await bars()).status).toBe(502);
+  // DEC-0064: a 403 on iex can no longer happen, since ALPACA_FEED=iex is refused before any read. The case now
+  // checks that iex is refused as the setting (why feed), never taken for the plan, and nothing is asked.
+  it("iex (paused) is refused as the setting (503, why feed) before any read, never as the plan", async () => {
+    const f = live("iex", 403);
+    for (const res of [await quote(), await bars()]) {
+      expect(res.status).toBe(503);
+      expect(await res.json()).toEqual(FEED_REFUSED);
+    }
+    expect(f).not.toHaveBeenCalled();
     expect(planLines()).toHaveLength(0);
   });
 
@@ -451,7 +474,7 @@ describe("FeedFacts", () => {
         .replace(/<[^>]+>/g, "")
         .trim();
     expect(pill({ status: "off" })).toBe("Live off");
-    expect(pill({ status: "off", why: "feed" })).toBe("Live off: ALPACA_FEED is not iex or sip");
+    expect(pill({ status: "off", why: "feed" })).toBe("Live off: ALPACA_FEED is not sip (iex is paused)");
     expect(pill({ status: "off", why: "plan" })).toBe("Live off: SIP is not on this data plan");
   });
 

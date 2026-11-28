@@ -1,5 +1,4 @@
 import { bearerMatches } from "@/lib/auth";
-import { runFeedReport } from "@/lib/feed-compare-report";
 import { logEvent } from "@/lib/log";
 
 // The day's feed comparison report (DEC-0050 point 5): built once after the close, create-only and private, from the
@@ -16,7 +15,8 @@ export async function GET(req: Request): Promise<Response> {
     logEvent("feed-compare.report", { outcome: "unauthorized", configured: Boolean(process.env.CRON_SECRET) });
     return Response.json({ error: "unauthorized" }, { status: 401, headers: NO_STORE });
   }
-  const r = await runFeedReport();
-  // A build to retry answers 200: the next tick tries again; only an unexpected failure is a 500.
-  return Response.json(r, { status: r.ok || r.outcome === "retry" ? 200 : 500, headers: NO_STORE });
+  // DEC-0064 point 10: the IEX comparison is paused, not deleted. It answers "paused" and asks nothing; its cron
+  // is off in vercel.json. runFeedReport (lib/feed-compare-report.ts) is kept for the way back.
+  logEvent("feed-compare.report", { outcome: "paused" });
+  return Response.json({ ok: true, outcome: "paused", why: "DEC-0064" }, { status: 200, headers: NO_STORE });
 }

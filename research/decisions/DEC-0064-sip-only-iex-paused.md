@@ -143,6 +143,18 @@ on 32.
     - On the dashboard an unset `ALPACA_FEED` means `sip`; `iex` is refused and the board says why.
     - The feed comparison sampler, its report and `make feed-agreement` are paused, not deleted. They answer
       "paused" and ask nothing.
+    - **Dated note, 2026-11-28 (New York), steps 5 and 6 built in one pull request.** Found in a code audit; no
+      result, journal or P&L was read for this note.
+      - Step 5, the dashboard: an unset `ALPACA_FEED` means `sip`, and `iex` is refused like a value that is not a
+        feed (`alpaca-feed.ts`, outside DEC-0051's frozen code). The comparison sampler and report answer `paused`
+        and ask nothing; their crons are removed from `vercel.json`.
+      - Step 6: `wt.data.feeds.PAUSED_STOCK_FEEDS` is `("iex",)`. The Radar → Options shadow (`options-select`) names
+        `opra` for its chains (point 1), where its default said `indicative`.
+      - **Not done here:** the site's option chain default (`option-feed.ts`, `indicative`) and its retry on
+        `indicative` after an OPRA 403 (`chain.ts`, `contract-quote.ts`) sit inside the signal's frozen code
+        (DEC-0051). Changing them needs a record that amends DEC-0051; until then they stay as they are.
+      - It takes effect when the release carrying it reaches the host (the Python side) and when the dashboard is
+        redeployed to production (the site side).
 11. **If the subscription lapses,** SIP answers 403 for recent data. Every job then fails its data read, takes no
     new entry, keeps managing exits, and pages. Nothing returns to IEX by itself.
 
