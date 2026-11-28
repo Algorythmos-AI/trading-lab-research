@@ -57,7 +57,7 @@ O:
   max_limit_price: 15.00       # the same cap, per share of the contract
   max_entries_per_day: 5       # filled entries, winners and scratches included
   max_attempts_per_name: 2     # filled entries in one underlying per day
-  max_orders_per_day: 40       # entries, targets, stops, exits, cancels: a runaway loop hits this
+  max_orders_per_day: 40       # entries stop here; exits go on to 2x (options_guard.EXIT_ORDER_FACTOR), a runaway backstop
   max_open_positions: 1
   day_loss_latch: 750          # US$ (DEC-0039: scaled 7.5x with the cap), realised plus marked open; entries off for the day
   week_loss_latch: 2250        # US$, Monday to Friday; entries off until the owner resets it

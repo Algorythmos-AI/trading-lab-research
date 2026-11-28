@@ -93,6 +93,19 @@ def test_protective_orders_ignore_kill_latch_and_hours_but_never_oversell():
     assert "sell within long position" in failed(g.evaluate(stop, ctx(position_qty=2, open_orders=[resting]), True))
 
 
+def test_a_protective_order_is_never_refused_for_its_size():
+    """A winner's target, a raised stop or a flatten only reduces exposure: the size caps bound entries alone. The
+    long-position check still stops a sell from opening a short."""
+    g = PreTradeGuard(L)
+    target = Order("wt-B-4", "QQQM", "sell", 9, "limit", limit_price=260.0, tif="day")        # 2340 > the 2000 cap
+    assert g.evaluate(target, ctx(position_qty=9, kill=True), True).ok
+    big = Order("wt-B-5", "QQQM", "sell", 12, "stop", stop_price=249.0, tif="gtc")           # 12 > the 10-share cap
+    assert g.evaluate(big, ctx(position_qty=12), True).ok
+    assert "sell within long position" in failed(g.evaluate(big, ctx(position_qty=11), True))
+    assert "positive quantity" in failed(g.evaluate(Order("wt-B-6", "QQQM", "sell", 0, "stop", stop_price=249.0),
+                                                    ctx(position_qty=2), True))
+
+
 def test_execution_checks_warn_but_never_block_b():
     stale = ctx(quote=(250.0, 251.0, NOW - dt.timedelta(seconds=30)))
     r = PreTradeGuard(L).evaluate(entry(limit=252.0), stale, protective=False)
