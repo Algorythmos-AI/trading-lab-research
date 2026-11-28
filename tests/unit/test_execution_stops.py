@@ -173,7 +173,7 @@ def test_a_stop_move_whose_cancel_lands_late_leaves_at_most_one_bare_poll():
 
     from wt.oms.multi import MultiOMS, MultiPlan
     b, clock = SlowCancel(), Clock()
-    oms = MultiOMS(b, sell_timeout_s=1.0, sleep=lambda s: None, strategy="S", clock=clock)
+    oms = MultiOMS(b, sell_timeout_s=1.0, sleep=lambda s: None, strategy="S", clock=clock, unguarded=True)
     p = MultiPlan(date="2026-09-30", strategy="S", symbol="AAA", qty=4, trigger=5.06, limit=5.07, stop=4.94,
                   target=0.0)
     oms.place_entry(p)

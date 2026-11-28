@@ -102,11 +102,15 @@ class PreTradeGuard:
             room = max(ctx.position_qty, 0) - resting
             add("sell within long position", order.qty <= room, True,
                 f"sell {order.qty} vs long {ctx.position_qty} minus resting sells {resting}")
-        add("hard quantity cap", 0 < order.qty <= L.max_qty, True, f"{order.qty} (cap {L.max_qty})")
-        px = order.limit_price or order.stop_price or (ctx.quote[1] if ctx.quote else None)
-        if px:
-            add("hard notional cap", order.qty * px <= L.max_notional, True, f"{order.qty * px:.2f} (cap {L.max_notional:.0f})")
+        add("positive quantity", order.qty > 0, True, str(order.qty))
         if not protective:
+            # The size caps bound new exposure. A protective order only reduces it (the long-position check above
+            # bounds a sell): a winner's target, a raised stop or a flatten is never refused for its size.
+            add("hard quantity cap", order.qty <= L.max_qty, True, f"{order.qty} (cap {L.max_qty})")
+            px = order.limit_price or order.stop_price or (ctx.quote[1] if ctx.quote else None)
+            if px:
+                add("hard notional cap", order.qty * px <= L.max_notional, True,
+                    f"{order.qty * px:.2f} (cap {L.max_notional:.0f})")
             add("kill switch off", not ctx.kill, True)
             add("loss latch clear", not ctx.latched, True)
             is_open = ctx.session_open is not None and ctx.session_close is not None and \

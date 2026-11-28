@@ -1,5 +1,5 @@
-// Each desk's kill file (no single file stops every desk): the Risk page's panel and the health banner read Gap
-// Hunter's own file (gap_hunter.kill) beside the root one (kill.on), not only the root file.
+// Each desk's kill file: the Risk page's panel and the health banner read Gap Hunter's own file (gap_hunter.kill)
+// beside the root one (kill.on), the master switch every desk reads.
 import { describe, expect, it } from "vitest";
 import { computeHealth } from "@/lib/health";
 import { anyKillOn, deskKills, killOverall } from "@/lib/kill";
@@ -15,7 +15,7 @@ describe("deskKills", () => {
     const rows = deskKills(snap(false, true));
     expect(rows.map((r) => [r.key, r.label, r.on])).toEqual([
       ["s", "Gap Hunter", true],
-      ["root", "Options clone (root KILL)", false],
+      ["root", "All desks (root KILL)", false],
     ]);
     expect(killOverall(rows)).toBe(true);
   });

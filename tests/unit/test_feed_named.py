@@ -26,7 +26,7 @@ import alpaca.data.requests as sdk_requests
 from alpaca.data.enums import DataFeed
 from feed_scan import scan
 from wt.data import alpaca as alpaca_data
-from wt.data.alpaca import AlpacaREST, HybridFeed, RateLimiter
+from wt.data.alpaca import AlpacaREST, RateLimiter
 from wt.data import feeds as feeds_mod
 from wt.data.feeds import FeedNotNamed, FeedPaused, feeds_for, require_feed
 
@@ -255,7 +255,6 @@ def sdk(k, s):
 def test_the_bars_default_is_a_named_feed() -> None:
     """`a.bars(...)` without `feed=` sends the default argument: SIP, named on the wire, whatever the plan."""
     assert inspect.signature(AlpacaREST.bars).parameters["feed"].default == "sip"
-    assert inspect.signature(HybridFeed.bars).parameters["feed"].default == "sip"
 
 
 def test_feeds_for_paths() -> None:

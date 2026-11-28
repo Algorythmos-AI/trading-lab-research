@@ -185,7 +185,7 @@ vm-deploy: ## OCI host only, through its Access tunnel (the GCP host is deployed
 	  -o ProxyCommand="$${CLOUDFLARED:-cloudflared} access ssh --hostname %h --id $$CF_ACCESS_CLIENT_ID --secret $$CF_ACCESS_CLIENT_SECRET" \
 	  "wt@$$VM_SSH_HOST" "$${VERB:-status}"
 
-kill: ## Stop new entries on a desk (exits keep being managed): make kill [DESK=s|options] REASON="..." (no DESK: the root file)
+kill: ## Stop new entries (exits keep being managed): make kill [DESK=s|options] REASON="..." (no DESK: the root file, every desk)
 	@case "$(DESK)" in \
 	  ""|stocks) f=KILL; d=root;; \
 	  s|S) f="$${WT_STATE:-var}/smallcap/KILL"; d=s;; \
@@ -195,7 +195,7 @@ kill: ## Stop new entries on a desk (exits keep being managed): make kill [DESK=
 	printf '%s\n' "$${REASON:-paused by make kill} ($$(date '+%Y-%m-%d %H:%M %Z'))" > "$$f" && echo "$$d KILL switch ON ($$f)" && cat "$$f" || exit 1; \
 	$(PY) -m wt.ops.audit kill_on "$$d" || echo "audit log not written" >&2
 
-unkill: ## Allow entries again: make unkill [DESK=s|options] (no DESK: the root file, which the options clone reads)
+unkill: ## Allow entries again: make unkill [DESK=s|options] (no DESK: the root file, which every desk reads)
 	@$(PY) -m wt.ops.control unkill $(DESK)
 
 reset-options-latch: ## OWNER: clear an options clone latch: make reset-options-latch KIND=day|week|drawdown REASON="..."

@@ -17,7 +17,7 @@ import requests
 import yaml
 
 from wt.data import tape
-from wt.data.alpaca import DATA, AlpacaREST, HybridFeed, RateLimiter
+from wt.data.alpaca import DATA, AlpacaREST, RateLimiter
 from wt.data.feeds import OPTION_FEEDS, FeedNotNamed, require_feed
 from wt.live.runner_b import LiveData
 from wt.live import runner_o
@@ -79,11 +79,6 @@ def _alpaca_py(sent: Sent) -> None:
     a = _rest(sent)
     a.bars(["SPY"], "1Min", "2026-11-12T14:30:00Z", "2026-11-12T15:00:00Z")                       # the default feed
     a.bars(["SPY"], "1Day", "2026-01-01", "2026-11-11", feed="sip", adjustment="split")
-
-
-def _hybrid(sent: Sent) -> None:
-    HybridFeed(_rest(sent), now=lambda: pd.Timestamp(T0)).bars(["SPY"], "1Min", "2026-11-12T13:00:00Z",
-                                                                  "2026-11-12T15:00:00Z", feed="hybrid")
 
 
 def _runner_b(sent: Sent) -> None:
@@ -148,7 +143,6 @@ def _options_clone_dry_run(sent: Sent) -> None:          # scripts/options_clone
 
 SITES = {
     "src/wt/data/alpaca.py": _alpaca_py,
-    "src/wt/data/alpaca.py (HybridFeed)": _hybrid,
     "src/wt/live/runner_b.py": _runner_b,
     "src/wt/live/runner_o.py": _runner_o,
     "src/wt/options/live.py": _options_live,

@@ -1,6 +1,6 @@
 import "server-only";
 import { verify } from "./hmac";
-import { DEFAULT_KEY_ID, RADAR_KEY_ID, secretFor } from "./ingest";
+import { DEFAULT_KEY_ID, RADAR_KEY_ID, REGISTRY_KEY_ID, secretFor } from "./ingest";
 import { KEY_ID_RE } from "./ingest-scope";
 import { logEvent } from "./log";
 import { loadJournal, loadOptions, loadRadar } from "./snapshot";
@@ -41,10 +41,13 @@ export async function handleEdition(req: Request, kind: string, now: Date = new 
   }
   const header = req.headers.get("x-wt-key-id");
   const keyId = header && KEY_ID_RE.test(header) ? header : DEFAULT_KEY_ID;
-  const secret = keyId === RADAR_KEY_ID ? null : secretFor(keyId);
+  // Neither the research environment's key (radar) nor the registry's CI key (it may publish its index, nothing
+  // else) reads an edition: the journal and the options and radar editions are the owner's.
+  const refused = keyId === RADAR_KEY_ID ? "radar-key" : keyId === REGISTRY_KEY_ID ? "registry-key" : null;
+  const secret = refused ? null : secretFor(keyId);
   const auth = secret
     ? verify(secret, req.headers.get("x-wt-timestamp"), req.headers.get("x-wt-signature"), editionSigned(kind as EditionKind), now)
-    : { ok: false as const, reason: keyId === RADAR_KEY_ID ? "radar-key" : "unknown-key-id" };
+    : { ok: false as const, reason: refused ?? "unknown-key-id" };
   if (!auth.ok) return done(401, "unauthorized", { error: "unauthorized" }, { reason: auth.reason });
   const r = await load(kind as EditionKind);
   if (r.status === "missing") return done(404, "missing", { error: "no edition" }, { key_id: keyId });

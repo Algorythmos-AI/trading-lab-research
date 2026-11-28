@@ -72,6 +72,8 @@ describe("the table", () => {
     const hm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
     expect(doc("options-edition").schedules).toEqual([{ zone: "UTC", times: [hm(OPTIONS_SLOT_UTC)], grace_min: DAILY_GRACE_MIN }]);
     expect(doc("radar").schedules[0]).toMatchObject({ zone: "UTC", times: [hm(RADAR_SLOT_UTC)] });
+    // a summer (EDT) build at 05:30 New York is 09:30 UTC, 102 minutes before the 11:12 UTC send: it must count
+    expect(doc("radar").schedules[0]?.early_min ?? 0).toBeGreaterThanOrEqual(102);
     expect(doc("journal").schedules[1]).toMatchObject({ zone: "UTC", times: [hm(JOURNAL_SLOT_UTC)] });
     expect(doc("journal").schedules[0]).toMatchObject({ zone: "America/New_York", grace_min: INTRADAY_MAX_AGE_MIN, in_session: true });
     expect(doc("journal").schedules[0]!.times).toEqual(["09:24", "10:24", "11:24", "12:24", "13:24", "14:24", "15:24"]);

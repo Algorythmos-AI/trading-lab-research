@@ -46,6 +46,7 @@ beforeEach(() => {
   vi.stubEnv("VERCEL_ENV", "production");
   vi.stubEnv("DASHBOARD_INGEST_SECRET", HOST);
   vi.stubEnv("RADAR_INGEST_SECRET", "test-radar-secret");
+  vi.stubEnv("REGISTRY_INGEST_SECRET", "test-registry-secret");
   blob.put("radar/latest.json", JSON.stringify(radarJson));
   blob.put("options/latest.json", JSON.stringify(optionsJson));
   blob.put("journal/latest.json", JSON.stringify(journalJson));
@@ -66,6 +67,7 @@ describe("GET /api/editions/<kind>", () => {
   it("refuses the radar's own key, wrong, stale and other-path signatures with one answer", async () => {
     const refusals = [
       get("radar", { secret: "test-radar-secret", keyId: "radar" }),
+      get("radar", { secret: "test-registry-secret", keyId: "registry" }),          // the registry CI key reads nothing
       get("radar", { secret: "wrong" }),
       get("radar", { ts: NOW_S - 301 }),
       get("radar", { signed: editionSigned("options") }),

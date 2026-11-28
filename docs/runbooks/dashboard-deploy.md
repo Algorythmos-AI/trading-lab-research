@@ -38,7 +38,7 @@ through `/api/health`, which must report the commit and `fixture: true`. One-tim
 **Manual deploy (owner).** `make dashboard-deploy` builds `origin/main` from a clean worktree on Vercel, stamped
 with its commit. Use it when Actions is unavailable.
 
-**Why the Mac deploy may refuse.** `make deploy` refuses while the live dashboard is older than the
+**Why `make deploy` may refuse.** It refuses while the live dashboard is older than the
 dashboard/contract code it would bring (`wt.ops.dashguard`), because the dashboard rejects snapshot fields it
 doesn't know. Deploy the dashboard first. To override (recorded in the deploy record):
 `WT_DASHBOARD_GUARD_OVERRIDE="why this is safe" make deploy`.
