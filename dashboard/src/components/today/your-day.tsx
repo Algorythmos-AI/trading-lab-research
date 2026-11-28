@@ -8,6 +8,7 @@ import { EnvFrame } from "@/components/ui/env-chip";
 import { Money } from "@/components/ui/money";
 import { TradeClock } from "@/components/today/trade-clock";
 import { contractLabel, fmtMinutes, holdMinutes, marketState, nyTime, sessionView, type JournalDoc } from "@/lib/journal";
+import { unreadCheck } from "@/lib/account-risk";
 import type { Tone } from "@/lib/labels";
 import { dayClock } from "@/lib/overview";
 import { DAY_LOSS_LIMIT, MAX_TRADES_PER_DAY, TIME_STOP_MINUTES, dayCheck, meterToneFor, type DayStatus } from "@/lib/trade-rules";
@@ -29,10 +30,11 @@ const RULE: Record<DayStatus, { tone: Tone; word: string }> = {
   unknown: { tone: "warn", word: "Journal not current" },
 };
 
-export function YourDay({ doc, now }: { doc: JournalDoc; now: Date }) {
+export function YourDay({ doc, now, skipped = 0 }: { doc: JournalDoc; now: Date; skipped?: number }) {
   const view = sessionView(doc, now);
   if (!view) return null;
-  const check = dayCheck(view, { asOf: doc.as_of, now });
+  // Rows left out when the journal was read withhold today's judgment (unreadCheck): never "OK to trade" on a guess.
+  const check = unreadCheck(dayCheck(view, { asOf: doc.as_of, now }), skipped);
   const market = marketState(now);
   const nowMinute = view.isToday ? nyTime(now.toISOString()).minute : null;
   const clock = dayClock(view.trades, view.isToday ? view.open : [], view.day, nowMinute, contractLabel);

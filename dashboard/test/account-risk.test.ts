@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import fixtureDoc from "./fixtures/journal.v1.json";
-import { accountRisk, drawdown, openRisk } from "@/lib/account-risk";
+import { accountRisk, drawdown, openRisk, unreadCheck } from "@/lib/account-risk";
 import { daily, type JournalDoc, type Lot, type Trade } from "@/lib/journal";
 
 let n = 0;
@@ -92,5 +92,31 @@ describe("account risk", () => {
     expect(r.limits).toHaveLength(7);
     expect(r.recent.length).toBeGreaterThan(0);
     expect(r.recent.length).toBeLessThanOrEqual(20);
+  });
+});
+
+describe("the day check with journal rows left out", () => {
+  // A current journal on 14 Oct 2026 with one small win: clear, unless rows were left out when it was read.
+  const day = "2026-10-14";
+  const now = new Date(at(day, 15, 0));
+  const doc = { trades: [quick(20, day, 0)], open: [], as_of: at(day, 14, 58) } as unknown as JournalDoc;
+
+  it("is clear with nothing left out", () => {
+    expect(accountRisk(doc, now).check).toMatchObject({ status: "clear", current: true });
+  });
+
+  it("is never OK to trade when a row was left out: it reads unknown and says why", () => {
+    const c = accountRisk(doc, now, 1).check;
+    expect(c).toMatchObject({ status: "unknown", current: false });
+    expect(c.line).toBe("1 journal row could not be read: today's count and loss may be short; check Webull.");
+    expect(unreadCheck(accountRisk(doc, now).check, 0)).toEqual(accountRisk(doc, now).check);
+  });
+
+  it("keeps a stop it already shows", () => {
+    const bad = { ...doc, trades: [quick(-300, day, 0)] } as unknown as JournalDoc;
+    const c = accountRisk(bad, now, 2).check;
+    expect(c.status).toBe("stop");
+    expect(c.current).toBe(false);
+    expect(c.line).toMatch(/2 journal rows could not be read/);
   });
 });

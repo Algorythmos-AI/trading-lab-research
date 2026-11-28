@@ -71,7 +71,8 @@ test("a bad year in the address falls back to this year", async ({ page, context
   await expect(page.getByRole("link", { name: "2026" })).toHaveAttribute("aria-current", "page");
 });
 
-for (const fx of ["empty", "error", "journal-poison"]) {
+// A journal with a row that cannot be read is read without that row (loadJournal), so it keeps its results: states.spec.ts.
+for (const fx of ["empty", "error"]) {
   test(`with the journal ${fx}, the market calendar still draws`, async ({ page, context, baseURL }) => {
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));

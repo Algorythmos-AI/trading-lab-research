@@ -76,11 +76,11 @@ export function DayReviewBody({ result, q, now }: { result: JournalResult; q: Qu
         <NoJournal status={result.status} />
       </div>
     );
-  return <ReviewBody doc={result.doc} q={q} now={now} />;
+  return <ReviewBody doc={result.doc} q={q} now={now} carried={result.skipped ?? 0} />;
 }
 
-function ReviewBody({ doc, q, now }: { doc: JournalDoc; q: Query; now: Date }) {
-  const v = reviewView(doc, q.day, now);
+function ReviewBody({ doc, q, now, carried }: { doc: JournalDoc; q: Query; now: Date; carried: number }) {
+  const v = reviewView(doc, q.day, now, carried);
   const r = v.review;
   return (
     <div data-day-review data-ready="true" className="grid gap-5">

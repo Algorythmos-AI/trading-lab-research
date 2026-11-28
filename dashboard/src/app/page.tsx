@@ -4,6 +4,7 @@ import { NoJournal } from "@/components/journal";
 import { KillNotice } from "@/components/overview/lab-panels";
 import { AccountHero, HealthLine, NextSessionPanel, PatternsPanel, PnlOverview, RobotsStrip } from "@/components/overview/home";
 import { computeHealth } from "@/lib/health";
+import { skippedLine } from "@/lib/journal";
 import { loadJournal, loadOptions, loadOptionsClone, loadRadar, loadSnapshot, pageTime } from "@/lib/snapshot";
 import { list } from "@/lib/types";
 
@@ -18,6 +19,8 @@ export default async function OverviewPage() {
   const s = snap.status === "ok" ? snap.snapshot : null;
   const health = computeHealth(s, now);
   const doc = journal.status === "ok" ? journal.doc : null;
+  // Rows of the journal that could not be read are left out of every figure here (loadJournal); say how many.
+  const unread = journal.status === "ok" ? skippedLine(journal.skipped ?? 0) : null;
   return (
     <>
       <h1 className="sr-only">Overview</h1>
@@ -25,6 +28,11 @@ export default async function OverviewPage() {
       {s ? <KillNotice s={s} /> : null}
       {doc ? (
         <>
+          {unread ? (
+            <p data-journal-skipped={journal.status === "ok" ? journal.skipped : 0} className="text-warn text-xs font-medium">
+              Your trade journal: {unread}
+            </p>
+          ) : null}
           <PaneBoundary name="Your account">
             <AccountHero doc={doc} now={now} />
           </PaneBoundary>

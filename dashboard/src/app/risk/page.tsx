@@ -40,7 +40,7 @@ export default async function RiskPage() {
         </>
       ) : (
         <PaneBoundary name="Your account">
-          <AccountSection doc={journal.doc} now={now} />
+          <AccountSection doc={journal.doc} now={now} skipped={journal.skipped ?? 0} />
         </PaneBoundary>
       )}
       {result.status !== "ok" ? (
@@ -54,8 +54,9 @@ export default async function RiskPage() {
   );
 }
 
-function AccountSection({ doc, now }: { doc: JournalDoc; now: Date }) {
-  const r = accountRisk(doc, now);
+function AccountSection({ doc, now, skipped }: { doc: JournalDoc; now: Date; skipped: number }) {
+  // Rows left out when the journal was read withhold today's judgment (unreadCheck).
+  const r = accountRisk(doc, now, skipped);
   const money = doc.money ? moneyView(doc.money, doc.trades.reduce((sum, t) => sum + t.pnl, 0)) : null;
   return (
     <>

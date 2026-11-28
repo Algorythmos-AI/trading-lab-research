@@ -38,6 +38,7 @@ import {
   type VariantFlag,
 } from "./fixture-variants";
 import type { HftSnapshot } from "./hft.types";
+import { readableJournal } from "./journal";
 import type { JournalDoc } from "./journal.types";
 import type { FunnelDoc } from "./funnel.types";
 import type { LedgerEdition } from "./ledger.types";
@@ -520,9 +521,21 @@ export const loadGapHunterLive = cache(async (): Promise<GapHunterLiveResult> =>
 });
 
 export type JournalResult =
-  | { status: "ok"; doc: JournalDoc; source: "fixture" | "blob" }
+  // `skipped`: the rows left out when it was read (readableJournal); absent means none.
+  | { status: "ok"; doc: JournalDoc; source: "fixture" | "blob"; skipped?: number }
   | { status: "missing" }
   | { status: "error" };
+
+/**
+ * The journal with only the rows every page can read, and how many were left out. The stored journal is checked only
+ * for being an object, so one row written wrong (a null trade, a piece with no closed_at) would otherwise throw in
+ * every page that reads the trades. Each page that shows the journal's record says how many rows were left out.
+ */
+function readJournal(doc: JournalDoc, source: "fixture" | "blob"): JournalResult {
+  const { doc: clean, skipped } = readableJournal(doc);
+  if (skipped > 0) logEvent("snapshot.read", { outcome: "rows-skipped", desk: "journal", count: skipped });
+  return { status: "ok", doc: clean, source, skipped };
+}
 
 /** The owner's trade journal. "missing" until it has been published once. */
 export const loadJournal = cache(async (): Promise<JournalResult> => {
@@ -544,17 +557,10 @@ export const loadJournal = cache(async (): Promise<JournalResult> => {
     // Under the stood-still clock the journal was read ten minutes earlier, as the live sync would have: a picture
     // shows a current journal, not one stamped days after the clock.
     if (flags.has("journal-poison"))
-      return { status: "ok", doc: poisonedJournal(doc), source: "fixture" };
+      return readJournal(poisonedJournal(doc), "fixture");
     if (flags.has("frozen"))
-      return {
-        status: "ok",
-        doc: {
-          ...doc,
-          as_of: new Date(Date.parse(FROZEN_NOW) - 10 * 60_000).toISOString(),
-        },
-        source: "fixture",
-      };
-    return { status: "ok", doc, source: "fixture" };
+      return readJournal({ ...doc, as_of: new Date(Date.parse(FROZEN_NOW) - 10 * 60_000).toISOString() }, "fixture");
+    return readJournal(doc, "fixture");
   }
   try {
     const stored = await readText(JOURNAL_PATHS.latest);
@@ -568,7 +574,7 @@ export const loadJournal = cache(async (): Promise<JournalResult> => {
       logEvent("snapshot.read", { outcome: "not-an-object", desk: "journal" });
       return { status: "error" };
     }
-    return { status: "ok", doc: parsed as JournalDoc, source: "blob" };
+    return readJournal(parsed as JournalDoc, "blob");
   } catch (e) {
     logEvent("snapshot.read", {
       outcome: "error",
