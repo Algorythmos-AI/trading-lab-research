@@ -5,13 +5,14 @@ undone: an unkill would re-enable entries part-way through a session, and a rese
 in-memory account at its next save. Tightening actions (`make kill`) are never refused.
 
 Since DEC-0069 (2026-11-20) the QQQ rule is retired and its job (`paper-b`) is gone, so that lock is never held by a
-scheduled run: the refusal now only catches a runner someone started by hand. The root KILL file is still read by the
-options clone (wt.live.runner_o), so `make kill` and `make unkill` keep their use. `reset-latch` clears the retired
+scheduled run: the refusal now only catches a runner someone started by hand. The root KILL file is the master switch:
+the options clone (wt.live.runner_o) and Gap Hunter (wt.live.runner_s) both read it, so `make kill` with no DESK stops
+every desk's new entries. `reset-latch` clears the retired
 rule's virtual account and has no use while nothing trades it. The lock names below are not renamed.
 
 `make kill DESK=s` / `make unkill DESK=s` act on Gap Hunter's own file (var/smallcap/KILL), `DESK=options` on the
 clone's own file; only the root file's unkill takes the lock above. An unknown DESK is refused rather than falling
-back to the root file, which would leave Gap Hunter running.
+back to the root file, so a typo never stops a different set of desks than the one named.
 
 Every action is recorded: KILL on/off for every desk's file in the hash-chained audit log (wt.ops.audit), the
 desk's name as the row's detail; a latch reset in the virtual
@@ -40,18 +41,18 @@ RUNNER_JOB = "paper-b"
 VA_PATH = DATA_DIR / "live" / "virtual_account.json"
 RUNNER_JOB_S = "paper-s"
 VA_PATH_S = STATE_DIR / "smallcap" / "virtual_account.json"     # wt.live.runner_s.VA_PATH
-KILL_S = STATE_DIR / "smallcap" / "KILL"                         # wt.live.runner_s.KILL: Gap Hunter's only kill file
+KILL_S = STATE_DIR / "smallcap" / "KILL"                         # wt.live.runner_s.KILL: Gap Hunter's own kill file
 KILL_OPTIONS = OPTIONS_DIR / "KILL"                              # wt.core.desk.DESKS["options"].kill_file
-# The desks `make kill DESK=...` / `make unkill DESK=...` name. The root file is the options clone's other file; no
-# DESK (or DESK=stocks) means the root file. The audit row's detail carries this name, which stays on the host.
+# The desks `make kill DESK=...` / `make unkill DESK=...` name. The root file stops every desk (the clone and Gap
+# Hunter both read it); no DESK (or DESK=stocks) means the root file. The audit row's detail carries this name, which stays on the host.
 DESK_KILLS = {"root": None, "options": KILL_OPTIONS, "s": KILL_S}
-# How `make status`, the forward summary and the dashboard name each file. The root file is the options clone's too.
-KILL_LABELS = {"s": "Gap Hunter", "options": "Options clone", "root": "Options clone (root KILL)"}
+# How `make status`, the forward summary and the dashboard name each file. The root file stops every desk.
+KILL_LABELS = {"s": "Gap Hunter", "options": "Options clone", "root": "All desks (root KILL)"}
 
 
 def kill_states(root: Path = ROOT) -> dict[str, bool]:
     """Is each desk's kill file on? Keys as DESK_KILLS: `s` (Gap Hunter), `options` (the clone's own file) and
-    `root` (the root KILL, which the clone also reads). A file that can't be checked counts as on: a status line
+    `root` (the root KILL, which every desk reads). A file that can't be checked counts as on: a status line
     must never say a desk can enter when it can't tell."""
     out: dict[str, bool] = {}
     for desk, f in DESK_KILLS.items():

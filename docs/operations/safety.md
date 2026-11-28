@@ -21,27 +21,28 @@ The host runs `WT_ROLE=primary` (checked 2026-11-25), where none of this applies
 
 `MODE`, `LIVE_TRADING_ENABLED` and any live key belong to the owner alone ([AGENTS.md](../../AGENTS.md), rule 1).
 
-## 2. Kill switches: one file per desk
+## 2. Kill switches: the root file and one file per desk
 
 Paths below assume `WT_STATE` is unset, as it is on the host (`STATE_DIR` defaults to `var/`, `src/wt/core/config.py`).
-A kill file stops **new entries**. While it exists, the desk keeps managing exits and protective stops. Each desk reads its
-own file, and **no single file stops every desk**.
+A kill file stops **new entries**. While it exists, the desk keeps managing exits and protective stops. **The root
+`KILL` is the master switch: every desk reads it.** Each desk also reads its own file, which stops that desk alone.
 
 | Desk | Job | File it reads (on the host, under `/home/wt/trading`) | Read by | Turn on | Turn off |
 |---|---|---|---|---|---|
-| Gap Hunter (stock desk, "sleeve S") | `paper-s` | `var/smallcap/KILL` **only** | `src/wt/live/runner_s.py` (`KILL = DIR / "KILL"`) | `make kill DESK=s REASON="…"` | `make unkill DESK=s` |
+| Gap Hunter (stock desk, "sleeve S") | `paper-s` | the root `KILL` **or** `var/smallcap/KILL` | `src/wt/live/runner_s.py` (`killed()`) | `make kill REASON="…"` (root, every desk) or `make kill DESK=s REASON="…"` | `make unkill` (root) or `make unkill DESK=s` |
 | Options clone | `paper-o` | the root `KILL` **or** `var/options/KILL` | `src/wt/live/runner_o.py` (`KILLS`) | `make kill REASON="…"` (root) or `make kill DESK=options REASON="…"` | `make unkill` (root) or `make unkill DESK=options` |
 | Retired QQQ rule (DEC-0069) | none | the root `KILL` | `src/wt/live/runner_b.py` | — | — |
 
-**The root `KILL` does not stop Gap Hunter.** `make kill` with no `DESK` (or `DESK=stocks`) writes the root file
-(`Makefile`, target `kill`). `DESK=s` writes Gap Hunter's file and `DESK=options` the clone's own file; any other value
-is refused and writes nothing. To stop Gap Hunter's entries on the host:
+`make kill` with no `DESK` (or `DESK=stocks`) writes the root file (`Makefile`, target `kill`), which stops every
+desk. `DESK=s` writes Gap Hunter's own file and `DESK=options` the clone's own file; any other value is refused and
+writes nothing. To stop every desk's entries on the host:
 
 ```bash
-sudo -u wt make -C /home/wt/trading kill DESK=s REASON="why"
+sudo -u wt make -C /home/wt/trading kill REASON="why"
 ```
 
-To stop every desk, write both files. Gap Hunter re-reads its file on every loop of its session (`runner_s.py`).
+A desk stays stopped while either file it reads exists: removing Gap Hunter's own file does not undo the root file.
+Gap Hunter re-reads both files on every loop of its session (`runner_s.py`, `killed()`).
 The clone checks its files each time it builds the pre-trade context for an entry (`runner_o.py`, `killed()`).
 Either way, a change takes effect without a restart.
 

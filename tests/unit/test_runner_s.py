@@ -91,7 +91,7 @@ def env(tmp_path, monkeypatch):
     record = tmp_path / "DEC-0066.md"
     record.write_text("# DEC-0066\n\n- **Status: ACCEPTED on 2026-12-01.**\n")
     state = tmp_path / "var" / "smallcap"
-    for name, value in (("DIR", state), ("PLANS", state / "plans"), ("KILL", state / "KILL"),
+    for name, value in (("DIR", state), ("PLANS", state / "plans"), ("KILL", state / "KILL"), ("ROOT_KILL", tmp_path / "KILL"),
                         ("VA_PATH", state / "virtual_account.json"),
                         ("JOURNAL", tmp_path / "live" / "smallcap_journal.jsonl"), ("RECORD", record),
                         ("MIN_FREE_GB", 0.0)):
@@ -246,6 +246,29 @@ def test_the_kill_file_cancels_a_resting_entry(env):
     b = session(tape_of({"ABC": day_rows(quiet)}), hook=raise_kill)
     j = journal(env)
     assert one(j, "entry_cancelled")["why"] == "kill_file" and not events(j, "entry_filled")
+    flat_and_clean(b)
+
+
+def test_the_root_kill_file_cancels_a_resting_entry(env):
+    """The root KILL is the master switch (`make kill` with no DESK): it stops Gap Hunter's entries too."""
+    def raise_kill(now, b):
+        if now >= at(10, 50, 15):
+            (env / "KILL").touch()
+
+    quiet = [(40.75, 40.90, 40.70, 40.80, 30_000)] * 4
+    b = session(tape_of({"ABC": day_rows(quiet)}), hook=raise_kill)
+    j = journal(env)
+    assert one(j, "kill_state")["on"] is True
+    assert one(j, "entry_cancelled")["why"] == "kill_file" and not events(j, "entry_filled")
+    flat_and_clean(b)
+
+
+def test_the_root_kill_file_at_arm_enters_nothing(env):
+    (env / "KILL").write_text("paused")
+    b = session(tape_of({"ABC": day_rows(TO_TARGET)}))
+    j = journal(env)
+    assert one(j, "armed")["kill"] is True
+    assert not events(j, "entry_placed") and not events(j, "entry_filled")
     flat_and_clean(b)
 
 

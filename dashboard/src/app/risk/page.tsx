@@ -114,7 +114,7 @@ function KillPanel({ s }: { s: Snapshot }) {
     <Panel
       title="Kill switches"
       icon={Power}
-      means="Each desk has its own kill file, and no single file stops every desk. Gap Hunter reads only its own; the options clone reads the root file and its own, which this site is not sent (make status on the host shows every file). A desk whose file is on opens no new trades but keeps managing open ones. They are switched on the host, never from this page."
+      means="The root kill file is the master switch: every desk reads it. Each desk also has its own file, which stops that desk alone. The options clone's own file is not sent to this site (make status on the host shows every file). A desk whose file is on opens no new trades but keeps managing open ones. They are switched on the host, never from this page."
       action={
         on === true ? (
           <StatusBadge tone="warn">On</StatusBadge>

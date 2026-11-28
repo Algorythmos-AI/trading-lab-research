@@ -341,4 +341,4 @@ def test_make_status_shows_gap_hunter_on_when_only_its_file_is(tmp_path, desk_fi
     assert out[0].startswith("KILL switches")
     assert out[1].split() == ["Gap", "Hunter", "ON", "(no", "new", "entries)"]
     assert out[2].split() == ["Options", "clone", "off"]
-    assert out[3].split() == ["Options", "clone", "(root", "KILL)", "off"]
+    assert out[3].split() == ["All", "desks", "(root", "KILL)", "off"]

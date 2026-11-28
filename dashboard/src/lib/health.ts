@@ -90,8 +90,8 @@ export function computeHealth(s: Snapshot | null, now: Date): Health {
       amber(`limit:${l.id}`, `${l.label || "A loss limit"} is close to its limit (${l.used ?? "in use"}).`);
     }
   }
-  if (s.kill?.on === true) amber("kill", "Kill switch is on: the options clone opens no new paper trades.");
-  // Gap Hunter reads only its own file, never the root one (no single file stops every desk).
+  if (s.kill?.on === true) amber("kill", "Root kill switch is on: no desk opens new paper trades.");
+  // Gap Hunter's own file stops Gap Hunter alone; the root file above stops every desk, Gap Hunter included.
   if (deskKills(s).find((r) => r.key === "s")?.on === true) amber("kill:s", "Gap Hunter's kill switch is on: it opens no new entries.");
   const last = Object.fromEntries(entries(s.jobs?.last));
   for (const key of sortJobKeys(Object.keys(last))) {
