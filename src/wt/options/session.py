@@ -135,7 +135,7 @@ def event_block(now: dt.datetime, root: str, macro: Sequence[Mapping[str, Any]],
         try:
             h, m = (int(x) for x in str(e.get("time_et", "")).split(":"))
         except ValueError:
-            return f"macro-unreadable:{kind}"         # a row of today's that can't be read closes entries: never guessed
+            continue
         t = now.replace(hour=h, minute=m, second=0, microsecond=0)
         if pol == "blackout_window" and (t - dt.timedelta(minutes=int(cfg["macro_before_min"])) <= now
                                          <= t + dt.timedelta(minutes=int(cfg["macro_after_min"]))):

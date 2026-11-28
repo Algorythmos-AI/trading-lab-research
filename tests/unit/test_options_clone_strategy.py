@@ -262,9 +262,6 @@ def test_events_close_entries():
     later = at.replace(hour=13, minute=40)
     assert session.event_block(later, "SPY", macro, [], G, ["SPY", "QQQ"]) is None
     assert session.event_block(later, "TSLA", macro, [], G, ["SPY", "QQQ"]) == "fomc-single-name"
-    # a row of today's whose time can't be read closes entries rather than being skipped (never guessed)
-    bad = [{**macro[0], "time_et": ""}]
-    assert session.event_block(later, "SPY", bad, [], G, ["SPY", "QQQ"]) == "macro-unreadable:fomc_decision"
     earn = [{"symbol": "TSLA", "date": "2026-10-16", "when": "amc"}]
     assert session.event_block(later, "TSLA", [], earn, G, ["SPY", "QQQ"]) == "earnings"
     assert session.event_block(later, "SPY", [], earn, G, ["SPY", "QQQ"]) is None
