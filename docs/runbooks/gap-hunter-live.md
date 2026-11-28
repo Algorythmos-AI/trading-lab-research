@@ -28,10 +28,11 @@ Gap Hunter's page shows what the robot is doing within a minute. The stocks snap
 ## Expired entries: did the tape reach them?
 
 Each Gap Hunter entry is a buy stop-limit that the desk cancels at its expiry. `scripts/gap_expiry_audit.py` reads the
-journal's expired, unfilled entries and the consolidated tape's trades in each order's own window (placed to
-cancelled), and counts each one as `not_reached` (no trade at the trigger: the rule's ordinary miss), `over_limit`
-(the tape jumped over the limit) or `in_band` (a trade inside trigger..limit came while it rested, and it did not
-fill). A line is a date and counts only: no symbol, no price, nothing after the order's window. It exits 1 when any
+journal's entries cancelled for expiry with nothing filled and the consolidated tape's trades in each order's own
+window (placed to the broker's confirmed cancel), and counts each one as `not_reached` (no trade at the trigger: the
+rule's ordinary miss), `over_limit` (from the first trigger trade on, every trade was over the limit) or `in_band`
+(once triggered, a trade at or under the limit came while it rested, and it did not fill). Entries cancelled for any
+other reason are counted as `other_cancel`, not judged. A line is a date and counts only: no symbol, no price, nothing after the order's window. It exits 1 when any
 order is `in_band`; then look at that order's broker record and journal rows. It places nothing.
 
 ```
