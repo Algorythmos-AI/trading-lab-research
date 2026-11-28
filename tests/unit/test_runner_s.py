@@ -215,6 +215,19 @@ def test_a_restart_after_the_close_journals_and_pages_a_position_it_finds(env, s
     assert "paper-s:not-flat" in rec.keys("fire") and len(b.placed) == placed
 
 
+def test_a_restart_after_the_close_pages_a_short_it_finds(env):
+    tape = tape_of({"ABC": day_rows(TO_TARGET)})
+    clock = ReplayClock(at(16, 1))
+    b = BarFillBroker(clock, tape, SESSIONS)
+    from wt.core.types import Position
+    b.positions = lambda: [Position("ABC", -5, 40.0)]                 # type: ignore[method-assign]
+    rec = Rec()
+    session(tape, start=(16, 1), broker=b, alerts=rec)
+    row = one(journal(env), "END_OF_DAY_NOT_FLAT")
+    assert row["short"] is True and row["qty"] == -5 and row["late_start"] is True
+    assert "paper-s:short-at-close" in rec.keys("fire") and not b.placed
+
+
 def test_a_crash_while_holding_resumes_the_plan_and_books_the_trade_once(env):
     tape = tape_of({"ABC": day_rows(TO_TARGET)})
     clock = ReplayClock(at(9, 25), crash_at=at(10, 52))
