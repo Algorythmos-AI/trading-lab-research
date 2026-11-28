@@ -411,6 +411,8 @@ class Runner:
                 self.store.save(p)
         if self.exits_only:
             self.off["exits-only"] = self.exits_only
+        if (self.state / "chain-broken").exists():    # wt.ops.backup.flag_chain: the desk's journal chain is broken
+            self.off["evidence-chain"] = "evidence chain broken"
         if str(self.cfg.get("orders")) != "paper":
             self.off["orders"] = f"orders: {self.cfg.get('orders')}"
         level = getattr(self.broker, "options_level", lambda: None)()

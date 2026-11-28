@@ -390,6 +390,20 @@ def test_unreadable_plans_never_read_as_flat_while_the_account_holds_a_position(
     assert "options-clone:not-flat-unplanned" in world["pages"]
 
 
+def test_a_broken_evidence_chain_turns_entries_off_and_exits_stay_managed(world):
+    """wt.ops.backup.flag_chain writes the desk's chain-broken flag and pages "entries off": the clone reads it."""
+    from wt.core.desk import DESKS
+    assert DESKS["options"].chain_flag.name == "chain-broken"
+    flag = world["tmp"] / "options" / "chain-broken"
+    flag.parent.mkdir(parents=True, exist_ok=True)
+    flag.write_text("line 7: hash mismatch\n")
+    r = world["make"]()
+    world["m"].now = at("09:25")
+    assert r.arm() is False and "evidence-chain" in r.off
+    run_until(r, world["m"], world["b"], at("10:27"))
+    assert not [o for o in world["b"].orders.values() if o.side == "buy"]
+
+
 # ---------------------------------------------------------------- arm, from daily bars
 def test_arm_marks_levels_from_daily_bars_and_drops_a_name_without_a_same_day_expiry(world):
     days, d = [], "2026-10-16"
