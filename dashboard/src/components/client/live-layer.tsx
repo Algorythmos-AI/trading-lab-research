@@ -200,7 +200,7 @@ export function FeedPill() {
           ? feed.why === "plan"
             ? "Live off: SIP is not on this data plan"
             : feed.why === "feed"
-              ? "Live off: ALPACA_FEED is not iex or sip"
+              ? "Live off: ALPACA_FEED is not sip (iex is paused)"
               : "Live off"
           : feed.status === "error"
             ? "Retrying"

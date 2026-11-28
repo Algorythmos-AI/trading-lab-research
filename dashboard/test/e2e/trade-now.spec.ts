@@ -540,8 +540,8 @@ test("the board names the feed the server reported, says it is fetched every 2 s
   await page.goto("/options");
   await expect(rows(page).first()).toHaveAttribute("data-board-state", "enter_zone");
   await expect(facts(page)).toBeVisible();
-  await expect(facts(page).locator("[data-feed-name]")).toHaveText("SIP");                // DEC-0064: unset is sip
-  await expect(facts(page).locator("[data-feed-source]")).toHaveText("SIP · fetched every 2 s, not streamed");
+  await expect(facts(page).locator("[data-feed-name]")).toHaveText("SIP · authoritative"); // DEC-0064: unset is sip
+  await expect(facts(page).locator("[data-feed-source]")).toHaveText("SIP · authoritative · fetched every 2 s, not streamed");
   await expect(facts(page).locator('[data-feed-age="trade"]')).toHaveText(/^last trades +\d+ s( +to +\d+ s)? +ago$/);
   await expect(facts(page).locator('[data-feed-age="checked"]')).toHaveText(/^checked +\d+ s ago$/);
   // the scripted answer comes 3 s after its trade (the page's one-second clock can read up to a second short)
@@ -553,7 +553,7 @@ test("the board names the feed the server reported, says it is fetched every 2 s
   expect(oldest ?? NaN).toBeGreaterThanOrEqual(newest ?? NaN);
   expect(await ageS(page, "checked")).toBeLessThanOrEqual(3);
   // the desk's pill names it too
-  await expect(page.getByText(/^Live \d{2}:\d{2} · SIP$/).first()).toBeVisible();
+  await expect(page.getByText(/^Live \d{2}:\d{2} · SIP( · authoritative)?$/).first()).toBeVisible();
   // never read out each second
   expect(await facts(page).getAttribute("aria-live")).toBe("off");
 });

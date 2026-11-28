@@ -474,7 +474,7 @@ describe("FeedFacts", () => {
         .replace(/<[^>]+>/g, "")
         .trim();
     expect(pill({ status: "off" })).toBe("Live off");
-    expect(pill({ status: "off", why: "feed" })).toBe("Live off: ALPACA_FEED is not iex or sip");
+    expect(pill({ status: "off", why: "feed" })).toBe("Live off: ALPACA_FEED is not sip (iex is paused)");
     expect(pill({ status: "off", why: "plan" })).toBe("Live off: SIP is not on this data plan");
   });
 
