@@ -73,20 +73,25 @@ def _prices(r: dict[str, Any]) -> tuple[float, float] | None:
         return None
 
 
-def expired_orders(rows: Iterable[dict[str, Any]], days: set[str]) -> tuple[list[Expired], dict[str, dict[str, int]]]:
-    """The expired, unfilled entries of the given sessions, and per session how many entries were placed and how many
+def expired_orders(rows: Iterable[dict[str, Any]], days: set[str],
+                   trials: Iterable[str]) -> tuple[list[Expired], dict[str, dict[str, int]]]:
+    """The expired, unfilled Gap Hunter entries of the given sessions (only entries whose row names one of `trials`;
+    the reversal rule, HYP-0070, journals to the same file), and per session how many entries were placed and how many
     were cancelled, unfilled, for another reason. The window ends at the confirmed cancel; an entry with no confirmed
     cancel row (still resting, or the journal cut short) is not judged."""
     placed: dict[str, dict[str, Any]] = {}
     why_of: dict[str, str] = {}                 # the reason on the entry's first cancel row
     tally: dict[str, dict[str, int]] = {d: {"placed": 0, "other_cancel": 0} for d in days}
     out: list[Expired] = []
+    gap = set(trials)
     for r in rows:
         ev, tid = r.get("event"), r.get("trade_id")
         if not tid or str(tid)[:10] not in days:
             continue
         tid = str(tid)
         if ev == "entry_placed":
+            if r.get("trial") not in gap:
+                continue                        # another rule's order (or a row with no trial): not Gap Hunter's
             placed[tid] = r
             tally[tid[:10]]["placed"] += 1
         elif ev == "entry_cancelled" and tid in placed:
@@ -153,7 +158,9 @@ def main(start: str, end: str) -> int:
     from wt.live import runner_s
     s, e = dt.date.fromisoformat(start), dt.date.fromisoformat(end)
     days = {str(s + dt.timedelta(days=i)) for i in range((e - s).days + 1)}
-    orders, tally = expired_orders(runner_s.journal_rows(), days)
+    from wt.live import setups_live as sl
+
+    orders, tally = expired_orders(runner_s.journal_rows(), days, sl.GAP_TRIALS)
     tally = {d: t for d, t in tally.items() if t["placed"]}
     a = AlpacaREST(per_minute=150, shared=True)
     lines = session_lines(orders, tally, lambda o: sip_trades(a, o))

@@ -29,8 +29,11 @@ def at(hh: int, mm: int, ss: int = 0) -> dt.datetime:
     return dt.datetime(2026, 11, 27, hh, mm, ss, tzinfo=UTC)
 
 
-def placed(n: int, t: dt.datetime, *, rotation: bool = True) -> dict:
-    row = {"ts": t.isoformat(), "event": "entry_placed", "trade_id": f"{DAY}-S-ABC-{n}", "symbol": "ABC",
+GAPS = ("HYP-0071", "HYP-0072")
+
+
+def placed(n: int, t: dt.datetime, *, rotation: bool = True, trial: str = "HYP-0071") -> dict:
+    row = {"ts": t.isoformat(), "event": "entry_placed", "trade_id": f"{DAY}-S-ABC-{n}", "symbol": "ABC", "trial": trial,
            "limit": 1.51, "detail": [["entry_placed", 1.49, 1.51, 22]]}
     if rotation:
         row["trigger"] = 1.49
@@ -48,7 +51,7 @@ def test_only_expired_unfilled_entries_of_the_asked_sessions_are_judged(mod):
             placed(3, at(15, 0)), cancelled(3, at(15, 1), filled=10),                   # it filled: not judged
             placed(4, at(15, 5)),                                                       # no cancel row: not judged
             {**placed(5, at(14, 40)), "trade_id": "2026-11-26-S-ABC-5"}]                # another session
-    orders, n = mod.expired_orders(rows, {DAY})
+    orders, n = mod.expired_orders(rows, {DAY}, GAPS)
     assert [o.trade_id[-1] for o in orders] == ["1", "2"] and n == {DAY: {"placed": 4, "other_cancel": 0}}
     assert all((o.trigger, o.limit) == (1.49, 1.51) for o in orders)
     assert orders[0].placed == at(14, 31, 11) and orders[0].ended == at(14, 32, 2)
@@ -57,29 +60,29 @@ def test_only_expired_unfilled_entries_of_the_asked_sessions_are_judged(mod):
 def test_an_entry_cancelled_for_another_reason_is_counted_not_judged(mod):
     rows = [placed(1, at(14, 31)), cancelled(1, at(14, 33), why="withdrawn"),
             placed(2, at(14, 35)), cancelled(2, at(14, 36), why="replaced")]
-    orders, n = mod.expired_orders(rows, {DAY})
+    orders, n = mod.expired_orders(rows, {DAY}, GAPS)
     assert orders == [] and n == {DAY: {"placed": 2, "other_cancel": 2}}
 
 
 def test_the_window_ends_at_the_confirmed_cancel_not_the_first_request(mod):
     rows = [placed(1, at(14, 35)), cancelled(1, at(14, 50), state="entry_working"),     # not confirmed: resting
             cancelled(1, at(14, 52), state="aborted")]
-    orders, _ = mod.expired_orders(rows, {DAY})
+    orders, _ = mod.expired_orders(rows, {DAY}, GAPS)
     assert len(orders) == 1 and orders[0].ended == at(14, 52)
     assert mod.classify([(at(14, 51), 1.50)], orders[0]) == "in_band"                     # while it still rested
-    only_requested, _ = mod.expired_orders(rows[:2], {DAY})
+    only_requested, _ = mod.expired_orders(rows[:2], {DAY}, GAPS)
     assert only_requested == []                                                           # no confirmed cancel yet
 
 
 def test_a_spike_before_the_order_existed_is_not_a_reach(mod):
     """Friday's shape: the opening minute printed 1.48 and higher prints came before the order was placed."""
-    orders, _ = mod.expired_orders([placed(1, at(14, 31, 11)), cancelled(1, at(14, 32, 2))], {DAY})
+    orders, _ = mod.expired_orders([placed(1, at(14, 31, 11)), cancelled(1, at(14, 32, 2))], {DAY}, GAPS)
     trades = [(at(14, 30, 5), 1.55), (at(14, 31, 10), 1.50), (at(14, 31, 30), 1.29), (at(14, 32, 5), 1.60)]
     assert mod.classify(trades, orders[0]) == "not_reached"
 
 
 def test_the_three_classes(mod):
-    orders, _ = mod.expired_orders([placed(1, at(14, 35)), cancelled(1, at(14, 50))], {DAY})
+    orders, _ = mod.expired_orders([placed(1, at(14, 35)), cancelled(1, at(14, 50))], {DAY}, GAPS)
     o = orders[0]
     assert mod.classify([(at(14, 40), 1.48)], o) == "not_reached"
     assert mod.classify([(at(14, 40), 1.48), (at(14, 41), 1.49)], o) == "in_band"            # at the trigger
@@ -92,7 +95,7 @@ def test_the_three_classes(mod):
 
 def test_a_sessions_line_carries_a_date_and_counts_and_nothing_else(mod):
     rows = [placed(1, at(14, 31, 11)), cancelled(1, at(14, 32, 2)), placed(2, at(14, 35)), cancelled(2, at(14, 50))]
-    orders, n = mod.expired_orders(rows, {DAY})
+    orders, n = mod.expired_orders(rows, {DAY}, GAPS)
     asked = []
 
     def trades_of(o):
@@ -105,3 +108,16 @@ def test_a_sessions_line_carries_a_date_and_counts_and_nothing_else(mod):
                       "in_band": 1}]
     text = json.dumps(lines)
     assert "ABC" not in text and "." not in text
+
+
+def test_the_reversal_rules_orders_are_not_counted(mod):
+    rows = [placed(1, at(14, 31), trial="HYP-0070"), cancelled(1, at(14, 40)),
+            placed(2, at(14, 41)), cancelled(2, at(14, 50))]
+    orders, n = mod.expired_orders(rows, {DAY}, GAPS)
+    assert [o.trade_id for o in orders] == [f"{DAY}-S-ABC-2"] and n[DAY]["placed"] == 1
+
+
+def test_the_trials_are_the_desks_gap_trials():
+    from wt.live import setups_live as sl
+
+    assert set(GAPS) == set(sl.GAP_TRIALS)
