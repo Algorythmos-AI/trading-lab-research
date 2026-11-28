@@ -21,7 +21,7 @@ never provisioned. `wt-install-units` enables the backup timers only when the ho
 `python -m wt.ops.backup restore-test` restores the latest snapshot's ledgers into a temp dir and verifies their
 chains. A failure means the backups can't be trusted: fix before the next session.
 
-## Pruning (the Mac, monthly)
+## Pruning (by hand, monthly; no timer runs it)
 `python -m wt.ops.backup prune` keeps 45 days. The bucket lock protects `data/` and `snapshots/` for 30 days, so
 some objects can't be removed yet; that is expected ("unable to remove" is a warning). Alert at 8 GB (R2 free is 10).
 
