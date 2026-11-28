@@ -24,3 +24,19 @@ Gap Hunter's page shows what the robot is doing within a minute. The stocks snap
   `sudo wt-install-units`. Until then nothing sends it and the page keeps reading the snapshot's block.
 - **Check it.** `python -m wt.ops.gap_live --dry-run` builds and validates the document and writes the outbox,
   sending nothing.
+
+## Expired entries: did the tape reach them?
+
+Each Gap Hunter entry is a buy stop-limit that the desk cancels at its expiry. `scripts/gap_expiry_audit.py` reads the
+journal's expired, unfilled entries and the consolidated tape's trades in each order's own window (placed to
+cancelled), and counts each one as `not_reached` (no trade at the trigger: the rule's ordinary miss), `over_limit`
+(the tape jumped over the limit) or `in_band` (a trade inside trigger..limit came while it rested, and it did not
+fill). A line is a date and counts only: no symbol, no price, nothing after the order's window. It exits 1 when any
+order is `in_band`; then look at that order's broker record and journal rows. It places nothing.
+
+```
+sudo -u wt bash -c 'cd /home/wt/trading && set -a && . /run/wt-secrets/env && set +a && PYTHONPATH=src .venv/bin/python scripts/gap_expiry_audit.py 2026-11-27'
+```
+
+A second date gives a range. On 2026-11-27 both entries were `not_reached`: the trigger was one cent over the opening
+minute's high, and nothing traded there after the orders were placed.
