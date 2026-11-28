@@ -27,6 +27,7 @@ from urllib.parse import urlparse
 PAPER_HOST = "paper-api.alpaca.markets"
 PAPER_HOSTS = (PAPER_HOST,)
 TRUE = {"1", "true", "yes", "on"}
+FALSE = {"", "0", "false", "no", "off"}     # the only values that mean "not live"; anything else fails closed
 
 
 class PaperOnlyError(RuntimeError):
@@ -61,8 +62,8 @@ def env_violations(environ: dict[str, str] | None = None) -> list[str]:
     out = []
     if e.get("MODE", "") != "paper":
         out.append(f"MODE is {e.get('MODE', '')!r}, not 'paper'")
-    if e.get("LIVE_TRADING_ENABLED", "false").strip().lower() in TRUE:
-        out.append("LIVE_TRADING_ENABLED is true")
+    if e.get("LIVE_TRADING_ENABLED", "false").strip().lower() not in FALSE:     # "y", "enabled", "TRUE!" are on too
+        out.append("LIVE_TRADING_ENABLED is set to a value that is not false")
     base = e.get("APCA_API_BASE_URL", "")
     if base and not is_paper_url(base):        # unset is allowed: the host never sets it
         out.append("APCA_API_BASE_URL is not the paper endpoint")

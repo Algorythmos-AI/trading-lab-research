@@ -25,7 +25,7 @@ reads through a variable (for example a key pair chosen per desk) are listed her
 | Name | Read by | Set in |
 |---|---|---|
 | `MODE` | `src/wt/core/safety.py`, the runners, `brokers/alpaca_read.py` | Unit (`wt.ops.jobs` sets it per job: `paper` for `paper-s` and `paper-o`, `backtest` otherwise) |
-| `LIVE_TRADING_ENABLED` | `src/wt/core/safety.py` (must not be true) | The owner alone. Never set on the host |
+| `LIVE_TRADING_ENABLED` | `src/wt/core/safety.py` (must be unset or `0`/`false`/`no`/`off`; any other value refuses) | The owner alone. Never set on the host |
 | `APCA_API_BASE_URL` | `src/wt/core/safety.py` (must be the paper endpoint if set) | Normally unset |
 | `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY` | Market-data jobs and tools (`brokers/alpaca_read.py`, `options/live.py`, `options/pipeline_check.py`, …): the "Robot B stocks" account, market data only | Host secrets, required; Mac |
 | `APCA_CLONE_KEY_ID`, `APCA_CLONE_SECRET_KEY` | The options clone (`brokers/alpaca_options_paper.py`, `options/paper_site.py`), and the rollback's account check (`ops/deploy.py`); the lab's key prefix | Host secrets |

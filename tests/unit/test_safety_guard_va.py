@@ -33,6 +33,15 @@ def test_paper_lock_refuses_anything_live(env, url, acct, why):
     assert any(why in x for x in v), v
 
 
+@pytest.mark.parametrize("value, live", [
+    ("", False), ("0", False), ("false", False), (" False ", False), ("no", False), ("OFF", False),
+    ("1", True), ("true", True), ("y", True), ("enabled", True), ("TRUE!", True), ("2", True),
+])
+def test_only_a_clearly_false_live_flag_passes(value, live):
+    v = env_violations({**OK_ENV, "LIVE_TRADING_ENABLED": value})
+    assert any("LIVE_TRADING_ENABLED" in x for x in v) is live, v
+
+
 def test_assert_paper_raises(monkeypatch):
     monkeypatch.setenv("MODE", "paper")
     monkeypatch.setenv("LIVE_TRADING_ENABLED", "1")
