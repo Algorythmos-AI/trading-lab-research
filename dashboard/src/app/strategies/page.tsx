@@ -75,7 +75,7 @@ function TrialBooks({ s }: { s: Snapshot }) {
         </span>
       }
     >
-      <Table>
+      <Table label="Trial books">
         <TableHeader>
           <TableRow>
             <TableHead>Trial</TableHead>
@@ -135,7 +135,7 @@ function ForwardTable({ s }: { s: Snapshot }) {
           once trades close.
         </Empty>
       ) : (
-        <Table>
+        <Table label="Forward test scorecard">
           <TableHeader>
             <TableRow>
               <TableHead>Strategy</TableHead>
@@ -240,7 +240,7 @@ function ForwardCharts({ s }: { s: Snapshot }) {
             })}
           </ul>
           <DataDetails>
-            <Table>
+            <Table label="Cumulative R by strategy, as numbers">
               <TableHeader>
                 <TableRow>
                   <TableHead>Strategy</TableHead>

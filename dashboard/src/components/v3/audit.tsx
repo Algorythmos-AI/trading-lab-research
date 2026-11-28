@@ -56,7 +56,7 @@ const AUDIT_MAX = 80;
 
 function AuditTable({ rows }: { rows: AuditRow[] }) {
   return (
-    <Table>
+    <Table label="Audit log">
       <TableHeader>
         <TableRow>
           <TableHead>When (Sydney)</TableHead>
@@ -101,7 +101,7 @@ export function AlertHistoryPanel({ s }: { s: Snapshot }) {
       ) : rows.length === 0 ? (
         <Empty title="No alerts recorded yet" />
       ) : (
-        <Table>
+        <Table label="Alert history">
           <TableHeader>
             <TableRow>
               <TableHead>When (Sydney)</TableHead>

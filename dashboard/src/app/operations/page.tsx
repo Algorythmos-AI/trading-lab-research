@@ -241,7 +241,7 @@ function HostPanel({ s }: { s: Snapshot }) {
         {jobs.length > 0 ? (
           <div>
             <h3 className="mb-1 text-sm font-medium">Scheduled jobs</h3>
-            <Table>
+            <Table label="Host health">
               <TableHeader>
                 <TableRow>
                   <TableHead>Job</TableHead>
@@ -453,7 +453,7 @@ function SourcesPanel({ s }: { s: Snapshot }) {
             </ul>
           ) : null}
           <DataDetails summary="Show each source">
-            <Table>
+            <Table label="Data sources">
               <TableHeader>
                 <TableRow>
                   <TableHead>Source</TableHead>

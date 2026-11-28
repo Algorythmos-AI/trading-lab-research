@@ -34,7 +34,7 @@ export function SlaPanel({ s, children }: { s: Snapshot; children?: React.ReactN
         <Empty title="No job records yet" />
       ) : (
         <div className="grid gap-3">
-          <Table>
+          <Table label="Job reliability, 14 days">
             <TableHeader>
               <TableRow>
                 <TableHead>Job</TableHead>

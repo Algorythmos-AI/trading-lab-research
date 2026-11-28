@@ -2,6 +2,7 @@
 // and the SVG pieces every diagram is drawn from. Hand-built SVG, like the rest of the site: the page CSP admits no
 // diagram library. Green is healthy, amber attention, red failed, blue the data path; a colour always comes with a
 // word (a label or a <title>).
+import { useId } from "react";
 import type { Tone } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 import { TONE_VAR } from "@/lib/wiki";
@@ -100,12 +101,14 @@ export function WikiSection({
 
 /** The diagram frame: on a phone a wide diagram pans sideways inside it, never the page. */
 export function Figure({ caption, minWidth = 760, children }: { caption: React.ReactNode; minWidth?: number; children: React.ReactNode }) {
+  const id = useId();
   return (
     <figure className="grid min-w-0 gap-2">
-      <div className="bg-card overflow-x-auto rounded-lg border">
+      {/* The panning box is a region the keyboard can reach and scroll, named by the caption. */}
+      <div className="bg-card focus-visible:outline-ring overflow-x-auto rounded-lg border focus-visible:outline-2" tabIndex={0} role="region" aria-labelledby={id}>
         <div style={{ minWidth }}>{children}</div>
       </div>
-      <figcaption className="text-muted-foreground max-w-prose text-xs">{caption}</figcaption>
+      <figcaption id={id} className="text-muted-foreground max-w-prose text-xs">{caption}</figcaption>
     </figure>
   );
 }

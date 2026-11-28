@@ -275,7 +275,7 @@ function Meter({ label, share, words, tone }: { label: string; share: number | n
         <span className="text-muted-foreground">{label}</span>
         <span className="font-medium tabular-nums">{words}</span>
       </div>
-      <div className="bg-muted h-2 overflow-hidden rounded-full" role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={share === null ? undefined : Math.round(share * 100)}>
+      <div className="bg-muted h-2 overflow-hidden rounded-full" {...(share === null ? { "aria-hidden": true } : { role: "meter", "aria-label": label, "aria-valuemin": 0, "aria-valuemax": 100, "aria-valuenow": Math.round(share * 100) })}>
         <div className={cn("h-full rounded-full", tone === "bad" ? "bg-bad-fill" : tone === "warn" ? "bg-warn-fill" : "bg-info-fill")} style={{ width: `${Math.round((share ?? 0) * 100)}%` }} />
       </div>
     </div>
