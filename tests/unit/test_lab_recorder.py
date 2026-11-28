@@ -786,6 +786,21 @@ def test_an_old_stock_quote_with_the_options_is_stock_feed_too(tmp_path: Path) -
     assert all(c["stock_quote_age_s_max"] > 30 for v in doc["stale_run_causes_by_name"].values() for c in v)
 
 
+def test_a_state_from_before_causes_gives_its_kept_runs_unknown(tmp_path: Path) -> None:
+    clock = Clock(START - dt.timedelta(seconds=30))
+    rec = make(tmp_path, clock, Alpaca(clock))
+    rec._close_run("AAA", 10, 2)
+    rec._close_run("AAA", 30, 3)
+    rec.save()
+    p = rec.folder / recorder.STATE
+    doc = json.loads(p.read_text())
+    del doc["stale_causes"], doc["run_acc"]                          # as the previous recorder wrote it
+    p.write_text(json.dumps(doc))
+    again = make(tmp_path, clock, Alpaca(clock))
+    assert again.stale_causes == {"AAA": [{"cause": "unknown"}, {"cause": "unknown"}]}
+    assert again.stale_causes_now() == {"AAA": [{"cause": "unknown"}, {"cause": "unknown"}]}
+
+
 def test_a_run_open_across_a_restart_keeps_its_reading(tmp_path: Path) -> None:
     clock = Clock(START - dt.timedelta(seconds=30))
     api = Alpaca(clock, exit_at_stock=80)

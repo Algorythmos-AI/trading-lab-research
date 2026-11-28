@@ -223,6 +223,9 @@ class Recorder:
         self.stale_runs = {str(k): [[int(a), int(b)] for a, b in v] for k, v in (s.get("stale_runs") or {}).items()}
         self.name_newest = {str(k): int(v) for k, v in (s.get("name_newest") or {}).items()}
         self.stale_causes = {str(k): [dict(c) for c in v] for k, v in (s.get("stale_causes") or {}).items()}
+        for n, runs in self.stale_runs.items():           # a state from before causes: its kept runs are unknown
+            have = self.stale_causes.setdefault(n, [])[:len(runs)]
+            self.stale_causes[n] = have + [{"cause": "unknown"}] * (len(runs) - len(have))
         self.run_acc = {str(k): dict(v) for k, v in (s.get("run_acc") or {}).items()}
         ms = s.get("min_share")
         self.min_share = float(ms) if isinstance(ms, (int, float)) and not isinstance(ms, bool) else None
