@@ -36,8 +36,9 @@ const overflow = (page: Page) => page.evaluate(() => document.documentElement.sc
 
 test("in a session: the board's feed named, the stamps counted, the live rows drawn, no comparison", async ({ page, context, baseURL }) => {
   await open(page, context, baseURL, "frozen.focus.quotes-script");
-  await expect(page.locator("[data-board-feed]")).toHaveAttribute("data-board-feed", "iex");
-  await expect(page.locator("[data-board-feed]")).toContainText("IEX — the board is not on SIP yet (DEC-0050)");
+  // DEC-0064: an unset ALPACA_FEED is sip, so the fixture board reads SIP
+  await expect(page.locator("[data-board-feed]")).toHaveAttribute("data-board-feed", "sip");
+  await expect(page.locator("[data-board-feed]")).toContainText("SIP · authoritative");
   await expect(page.locator("[data-stamp-panel]")).toHaveAttribute("data-stamp-panel", "session");
   await expect(page.locator("[data-stamp-panel]")).toContainText("over 91 minutes since the open");
   // the keys' entitlement, fixed in fixture mode and dated by the page's own clock
