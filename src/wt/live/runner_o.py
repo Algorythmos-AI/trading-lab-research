@@ -887,9 +887,24 @@ class Runner:
         self.verified = True
         own = {p.symbol for p in self.plans if p.state in ("open", "exiting", "entering")}
         held = own & self.account_holds
-        self.write("verify_flat", flat=not own, own_open=sorted(own), held=sorted(held))
+        # On the clone's own account every position is the clone's, so the broker is read too: plans that could not
+        # be loaded (or a fill no plan saw) must never read as flat. An account that can't be read is not flat.
+        account: set[str] | None = set()
+        if getattr(self.broker, "own_account", False):
+            try:
+                account = {x.symbol for x in self.broker.positions() if x.qty}
+            except Exception:  # noqa: BLE001 — unread is unknown, never "flat"
+                account = None
+        unplanned = sorted(account - own) if account is not None else []
+        flat = not own and account is not None and not unplanned
+        self.write("verify_flat", flat=flat, own_open=sorted(own), held=sorted(held), unplanned=len(unplanned),
+                   account_read=account is not None)
         if own:
             self.page("not-flat", "Options clone NOT FLAT", f"{pg.count(len(own))} open at {pg.hhmm(now)}; retrying.", 5)
+        elif not flat:
+            self.page("not-flat-unplanned", "Options clone NOT FLAT: positions no plan holds",
+                      f"{pg.count(len(unplanned))} position(s) in the account at {pg.hhmm(now)} that no loaded plan "
+                      "holds, or the account could not be read. See docs/runbooks/options-clone.md.", 5)
 
     def check_feed_fit(self) -> None:
         now = self.now()

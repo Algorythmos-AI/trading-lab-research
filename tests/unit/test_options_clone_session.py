@@ -374,6 +374,22 @@ def test_a_position_no_plan_knows_in_the_clones_own_account_turns_entries_off(wo
     assert world["b"].placed == []
 
 
+def test_unreadable_plans_never_read_as_flat_while_the_account_holds_a_position(world):
+    """A damaged plan file leaves the clone with no plans; on its own account the flat check reads the broker too."""
+    held = "SPY261019C00579000"
+    world["b"].pos[held] = Position(held, 1, 1.0)
+    plans = world["tmp"] / "options" / "plans"
+    plans.mkdir(parents=True, exist_ok=True)
+    (plans / "plan_2026-10-19-O-1.json").write_text("{not json")
+    r = world["make"]()
+    world["m"].now = at("09:25")
+    assert r.arm() is False and "options-clone:plans-unreadable" in world["pages"]
+    run_until(r, world["m"], world["b"], at("15:20", 10), step_s=60)
+    v = events(world["rows"], "verify_flat")[0]
+    assert v["flat"] is False and v["unplanned"] == 1 and v["account_read"] is True
+    assert "options-clone:not-flat-unplanned" in world["pages"]
+
+
 # ---------------------------------------------------------------- arm, from daily bars
 def test_arm_marks_levels_from_daily_bars_and_drops_a_name_without_a_same_day_expiry(world):
     days, d = [], "2026-10-16"

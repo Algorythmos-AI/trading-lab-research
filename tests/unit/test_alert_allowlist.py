@@ -301,6 +301,8 @@ site(f"{RO}.step::f'options-clone:latched-{{latched}}' | 'Options clone latched'
 site(f"{RO}.step::f'{{pg.count(len(held))}} position still open at {{pg", {"held": [T], "self": NS(ck=NS(critical=T))})
 site(f"{RO}.step::p | now", {"p": p_obj()})
 site(f"{RO}.verify::'not-flat' | 'Options clone NOT FLAT'", {"own": {T}, "now": T})
+site(f"{RO}.verify::'not-flat-unplanned' | 'Options clone NOT FLAT: positions no plan holds'",
+     {"unplanned": [T], "now": T})
 site("src/wt/live/runner_o.py::run::'options-clone:broker' | 'Options clone could not connect'", {})
 site("src/wt/ops/backup.py::flag_chain::key | title", drive_flag_chain)
 site("src/wt/ops/backup.py::nightly::'anchor' | 'Daily evidence anchor failed'", {"why": T})
