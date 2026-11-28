@@ -82,6 +82,16 @@ for (const path of ["/today", "/risk", "/radar", "/trades", "/review", "/calenda
   });
 }
 
+test("a row left out of the journal withholds today's judgment on Today and Risk", async ({ page, context, baseURL }) => {
+  await variant(context, baseURL, "frozen.journal-poison");
+  // The row may be one of today's losses, so neither page says the day is clear (unreadCheck).
+  await page.goto("/today");
+  await expect(page.locator("#your-day")).toContainText("1 journal row could not be read");
+  await expect(page.locator("#your-day")).not.toContainText("OK to trade");
+  await page.goto("/risk");
+  await expect(page.locator("#account-today")).toContainText("1 journal row could not be read");
+});
+
 test("the Trades page counts a row the journal's reading left out", async ({ page, context, baseURL }) => {
   await variant(context, baseURL, "frozen.journal-poison");
   await page.goto("/trades");

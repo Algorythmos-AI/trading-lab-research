@@ -36,7 +36,7 @@ export default async function TodayPage() {
       />
       {journal.status === "ok" ? (
         <PaneBoundary name="Your day">
-          <YourDay doc={journal.doc} now={now} />
+          <YourDay doc={journal.doc} now={now} skipped={journal.skipped ?? 0} />
         </PaneBoundary>
       ) : (
         <NoJournal status={journal.status} />

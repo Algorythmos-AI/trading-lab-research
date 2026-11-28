@@ -3,6 +3,7 @@
 import { closeDay, daily, nyTime, sessionView, type DayRow, type JournalDoc, type Lot, type Trade } from "./journal";
 import { daysWithEntries } from "./overview";
 import { tradeUnits } from "./owner-positions";
+import { unreadLine } from "./session-timeline";
 import { dayCheck, DAY_LOSS_LIMIT, entriesByDay, judgeDays, MAX_PREMIUM, MAX_TRADES_PER_DAY, PREMIUM_STOP, RISK_PER_TRADE, TIME_STOP_MINUTES, type DayCheck } from "./trade-rules";
 
 /** How many recent trading days the usage counts and the day chart cover. */
@@ -243,9 +244,21 @@ export function limitRows(trades: readonly Trade[], check: DayCheck, open: OpenR
 }
 
 /** The whole account view for the Risk page. */
-export function accountRisk(doc: Pick<JournalDoc, "trades" | "open"> & Partial<Pick<JournalDoc, "as_of">>, now: Date): AccountRisk {
+/**
+ * The day check when rows of the journal were left out because they could not be read (loadJournal's `skipped`): a
+ * left-out row may be one of today's trades or losses, so the day is judged as a journal that is not current. It
+ * reads "unknown", never "OK to trade", and a stop it already shows stands (dayCheck does the same for a stale read).
+ */
+export function unreadCheck(c: DayCheck, skipped: number): DayCheck {
+  const why = unreadLine(skipped);
+  if (why === null) return c;
+  if (c.status === "stop") return { ...c, current: false, line: `${c.line} ${why}` };
+  return { ...c, status: "unknown", current: false, line: why };
+}
+
+export function accountRisk(doc: Pick<JournalDoc, "trades" | "open"> & Partial<Pick<JournalDoc, "as_of">>, now: Date, skipped = 0): AccountRisk {
   const view = sessionView(doc, now);
-  const check = dayCheck(view, "as_of" in doc ? { asOf: doc.as_of, now } : undefined);
+  const check = unreadCheck(dayCheck(view, "as_of" in doc ? { asOf: doc.as_of, now } : undefined), skipped);
   const today = nyTime(now.toISOString()).day;
   const open = openRisk(doc.open ?? [], today);
   const todayTrades = view?.isToday ? view.trades.filter((t) => nyTime(t.opened_at).day === view.day) : [];
