@@ -196,6 +196,21 @@ def test_a_stop_the_broker_ended_unfilled_is_replaced_by_the_target(tmp_path):
     assert (s.type, s.limit_price) == ("limit", 1.5)
 
 
+def test_a_broker_that_keeps_ending_the_resting_sell_is_tried_a_bounded_number_of_times(tmp_path):
+    """Each new resting sell counts toward the day's orders; the exits need that budget, so re-resting stops."""
+    from wt.oms.options import MAX_REREST
+    b, oms, _, p = opened(tmp_path)
+    placed = []
+    for _ in range(MAX_REREST + 3):
+        oms.protect(p, 25, 50, try_stop=False)
+        if p.protect_id:
+            placed.append(p.protect_id)
+            b.cancel(p.protect_id)                               # the broker ends it, nothing sold
+        oms.sync_open(p)
+    assert len(placed) == MAX_REREST and any(n[1] == "protect-given-up" for n in p.notes)
+    assert not p.protect_id and p.state == "open"
+
+
 def test_a_resting_sell_that_fills_on_its_own_closes_the_trade(tmp_path):
     b, oms, _, p = opened(tmp_path)
     oms.protect(p, 25, 50, try_stop=False)

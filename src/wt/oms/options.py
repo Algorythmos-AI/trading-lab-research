@@ -29,6 +29,9 @@ ACTIVE = ("entering", "open", "exiting")
 DONE = ("closed", "cancelled", "rejected", "unresolved")
 
 
+MAX_REREST = 3     # resting sells the broker may end unfilled (or never receive) before protect() stops trying
+
+
 @dataclass
 class OptionPlan:
     trade_id: str                      # <date>-O-<n>
@@ -239,6 +242,8 @@ class OptionsOMS:
         """Rest the one sell: the broker-side stop when allowed and accepted, else the target limit."""
         if p.state != "open" or p.protect_id or p.fill is None:
             return
+        if any(n[1] == "protect-given-up" for n in p.notes):
+            return                                   # the broker kept ending the resting sell: exits manage the lot
         if try_stop and p.broker_stop != "refused":
             cid = self._id(p, "stop")
             p.protect_id, p.protect_kind = cid, "stop"
@@ -279,6 +284,8 @@ class OptionsOMS:
             self.note(p, "protect-gone", p.protect_kind, o.status.value if o is not None else "never-placed")
             if o is not None and p.protect_kind == "stop":
                 p.broker_stop = "refused"            # a stop the broker ended: the target rests instead, not a loop
+            if sum(1 for n in p.notes if n[1] == "protect-gone") >= MAX_REREST:
+                self.note(p, "protect-given-up", MAX_REREST)   # no more resting sells: the exits keep the order budget
             p.protect_id, p.protect_kind = "", ""
             self._save(p)
             return
