@@ -364,6 +364,17 @@ def test_main_records_the_days_desk_focus_names(tmp_path: Path, monkeypatch: pyt
     assert doc["clock_offset_ms"] == 1.5 and doc["budget_per_min"] == 400 and doc["coverage"] == 1.0
 
 
+def test_an_interrupted_after_close_pull_leaves_no_manifest_so_a_restart_redoes_it(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    real = recorder.after_close
+    monkeypatch.setattr(recorder, "after_close", lambda *a, **k: {"interrupted": "sigterm"})
+    rc, folder = run_main(tmp_path, monkeypatch, F, Clock(START - dt.timedelta(minutes=10)))
+    assert rc == 143 and not (folder / manifest.NAME).exists()
+    monkeypatch.setattr(recorder, "after_close", real)
+    rc, folder = run_main(tmp_path, monkeypatch, F, Clock(START + dt.timedelta(minutes=5)))
+    assert rc == 0 and json.loads((folder / manifest.NAME).read_text())["recorded"] is True
+
+
 @pytest.mark.parametrize("f", [None, focus.Focus("2026-11-18", ("AAA",), "b" * 64),
                                focus.Focus("2026-11-19", ("ZZZ",), "c" * 64)])
 def test_main_records_nothing_without_todays_focus_list(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
