@@ -32,6 +32,9 @@ import { SERVER_SETTLE_MS } from "./trade-state";
 
 // ---- the table ------------------------------------------------------------------------------------------------------
 
+/** How long before the radar's 11:12 UTC send its build may be stamped and still count (DST: 102 min in summer). */
+export const RADAR_EARLY_MIN = 120;
+
 export type FeedStateName = "on_time" | "waiting" | "late" | "failed" | "not_expected" | "unknown";
 /** alert: pages through ntfy when the owner has switched alerts on. display: shown on the pages only. */
 export type Severity = "alert" | "display";
@@ -251,7 +254,9 @@ export const FEEDS: readonly FeedRow[] = [
     ingest_kind: "radar",
     stamp: asOfStamp,
     want: "since-slot",
-    schedules: [{ zone: "UTC", times: [hhmm(RADAR_SLOT_UTC)], grace_min: DAILY_GRACE_MIN, early_min: 60 }],
+    // The send runs at 11:12 UTC, but the edition is stamped when it was built, 05:30 New York: 42 minutes before the
+    // send in winter, 102 in summer (EDT). 120 covers both; yesterday's stamp, a day old, still never counts.
+    schedules: [{ zone: "UTC", times: [hhmm(RADAR_SLOT_UTC)], grace_min: DAILY_GRACE_MIN, early_min: RADAR_EARLY_MIN }],
     severity: "alert",
     verified: true,
     misses_to_alert: 1,
