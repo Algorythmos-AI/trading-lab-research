@@ -45,7 +45,7 @@ class Clock:
 
 def setup(store: PlanStore | None = None) -> tuple[SlowCancel, OMS, TradePlan, Clock]:
     b, clock = SlowCancel(), Clock()
-    oms = OMS(b, sell_timeout_s=1.0, sleep=lambda s: None, strategy="B", clock=clock,
+    oms = OMS(b, sell_timeout_s=1.0, sleep=lambda s: None, strategy="B", clock=clock, unguarded=True,
               persist=store.save if store else None)
     p = TradePlan(date="2026-09-30", strategy="B", symbol="QQQM", qty=2, trigger=250.0, limit=250.2, stop=249.0,
                   target=252.0)
@@ -122,7 +122,7 @@ def test_a_restart_inside_the_hold_still_sells_and_after_it_protects(tmp_path):
     b.settle()
     q = store.load()
     assert q is not None and q.exit_hold_stop == p.stop_id
-    oms2 = OMS(b, sell_timeout_s=1.0, sleep=lambda s: None, strategy="B", clock=clock, persist=store.save)
+    oms2 = OMS(b, sell_timeout_s=1.0, sleep=lambda s: None, strategy="B", clock=clock, unguarded=True, persist=store.save)
     acts, flat = loop(oms2, q)
     assert flat and q.state == "closed" and len(stops(b)) == 1 and acts[0].startswith("held ")
     # the same restart after the hold has run out: protected first, then the exit cancels that stop as usual
