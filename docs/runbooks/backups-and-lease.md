@@ -5,8 +5,10 @@ never provisioned. `wt-install-units` enables the backup timers only when the ho
 
 ## Nightly (wt-backup.timer, 19:30 ET after the forward test)
 `python -m wt.ops.backup nightly`:
-1. Verifies the hash chains of the forward ledger and the paper journal. A break writes
-   `var/evidence/chain-broken` (paper-B entries off, exits still managed) and pages "Evidence chain broken".
+1. Verifies the hash chains of every desk's ledgers. A break in the forward ledger or the paper journal writes
+   `var/evidence/chain-broken` (paper-B entries off, exits still managed) and pages "Evidence chain broken". A break
+   in the options clone's journal writes `var/options/chain-broken`: the clone arms with entries off (`off:
+   evidence-chain`) while it exists, and exits are still managed.
 2. `restic backup` of `var/`, `data/live/`, `logs/` (Saturdays also `data/`) to R2 bucket `wt-backups`.
 3. Writes `anchors/<ET-date>.json` (line count and head hash of each chain) to R2 bucket `wt-anchors`,
    write-once. "already anchored with DIFFERENT heads" means history was rewritten after anchoring: investigate
@@ -14,8 +16,9 @@ never provisioned. `wt-install-units` enables the backup timers only when the ho
 4. Writes `var/dashboard/evidence_digest.json` for the dashboard.
 
 **Chain broken.** Compare the ledger with the last anchor and the restic snapshots (`restic snapshots`,
-`restic restore <id> --target /tmp/x --include <ledger>`). Once explained and repaired, the owner removes
-`var/evidence/chain-broken` (and records why in `research/lessons_learned/`).
+`restic restore <id> --target /tmp/x --include <ledger>`). Once explained and repaired, the owner removes the
+desk's flag, `var/evidence/chain-broken` or `var/options/chain-broken` (and records why in
+`research/lessons_learned/`). The clone reads its flag when it arms, so a removal takes effect at the next session.
 
 ## Weekly restore test (Saturday 12:00 ET)
 `python -m wt.ops.backup restore-test` restores the latest snapshot's ledgers into a temp dir and verifies their
