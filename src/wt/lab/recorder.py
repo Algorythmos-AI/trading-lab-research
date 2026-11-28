@@ -883,6 +883,11 @@ def after_close(rec: Recorder, get: Get, headers: Mapping[str, str], start: dt.d
         except Exception:  # noqa: BLE001
             pass
         return out                                   # the manifest records the error; the pull is not redone
+    why = rec.should_stop()
+    if why is not None:                              # a stop (SIGTERM, the off switch, disk) cut the pull short: the
+        out["interrupted"] = why                     # paced sender answered nothing once it was set, so the pull is
+        rec._gap(-1, "after_close", f"interrupted ({why}): redone whole at the next start")  # not marked done
+        return out
     manifest.atomic(done, json.dumps(out, sort_keys=True))
     return out
 
@@ -1054,6 +1059,11 @@ def _record(e: Mapping[str, str], ck: Clock, today: dt.date, root: Path, get: Ge
                         raise                         # systemd restarts it and it resumes
                 info.update(rec.headroom())           # the session's, before the after-close pull adds to it
                 info["after_close"] = after_close(rec, get or http_get(s), headers, at(dt.time(9, 30)), close, ck)
+                cut = info["after_close"].get("interrupted")
+                if cut and ck.now() < close + dt.timedelta(minutes=AFTER_CLOSE_MIN):
+                    print(f"{today}: after-close pull interrupted ({cut}); no manifest, a restart redoes it",
+                          file=sys.stderr)
+                    return 143                    # as a stop in the session: the day is not over yet
                 info["clock_offset_ms_end"] = clock_offset_ms()
                 doc = rec.finish(info)
         finally:

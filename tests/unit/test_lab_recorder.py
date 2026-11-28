@@ -364,6 +364,17 @@ def test_main_records_the_days_desk_focus_names(tmp_path: Path, monkeypatch: pyt
     assert doc["clock_offset_ms"] == 1.5 and doc["budget_per_min"] == 400 and doc["coverage"] == 1.0
 
 
+def test_an_interrupted_after_close_pull_leaves_no_manifest_so_a_restart_redoes_it(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    real = recorder.after_close
+    monkeypatch.setattr(recorder, "after_close", lambda *a, **k: {"interrupted": "sigterm"})
+    rc, folder = run_main(tmp_path, monkeypatch, F, Clock(START - dt.timedelta(minutes=10)))
+    assert rc == 143 and not (folder / manifest.NAME).exists()
+    monkeypatch.setattr(recorder, "after_close", real)
+    rc, folder = run_main(tmp_path, monkeypatch, F, Clock(START + dt.timedelta(minutes=5)))
+    assert rc == 0 and json.loads((folder / manifest.NAME).read_text())["recorded"] is True
+
+
 @pytest.mark.parametrize("f", [None, focus.Focus("2026-11-18", ("AAA",), "b" * 64),
                                focus.Focus("2026-11-19", ("ZZZ",), "c" * 64)])
 def test_main_records_nothing_without_todays_focus_list(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
@@ -505,6 +516,23 @@ def test_the_after_close_pull_runs_once_and_an_interrupted_one_is_redone_whole(t
     (rec.folder / recorder.AFTER_CLOSE).unlink()                                   # as if stopped mid-pull
     again = recorder.after_close(rec, api, {}, START, close, clock)
     assert len(rows(rec.folder, "print")) == n and again["redone_parts_removed"] >= 1
+
+
+def test_a_pull_a_stop_cut_short_is_not_marked_done_and_is_redone_whole(tmp_path: Path) -> None:
+    """A stop during the after-close pull (here the off switch) makes the paced sender answer nothing: the pull must
+    not be marked done, so the next start removes its parts and pulls again."""
+    clock = Clock(START - dt.timedelta(seconds=30))
+    api = Trades(clock)
+    rec = make(tmp_path, clock, api)
+    close = START + dt.timedelta(minutes=2)
+    rec.run(START, close)
+    rec.off_file.parent.mkdir(parents=True, exist_ok=True)
+    rec.off_file.touch()
+    cut = recorder.after_close(rec, api, {}, START, close, clock)
+    assert cut["interrupted"] == "off switch" and not (rec.folder / recorder.AFTER_CLOSE).exists()
+    rec.off_file.unlink()
+    again = recorder.after_close(rec, api, {}, START, close, clock)
+    assert "interrupted" not in again and (rec.folder / recorder.AFTER_CLOSE).exists()
 
 
 def test_prints_are_pulled_after_the_last_fifteen_minutes_trade(tmp_path: Path) -> None:
