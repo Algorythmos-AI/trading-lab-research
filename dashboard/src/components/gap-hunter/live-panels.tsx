@@ -5,6 +5,8 @@
 // Symbols and prices are PRIVATE and shown behind the owner's login, inside the page's paper frame. Rules are named by
 // code; no setup name, no rule text and no journal free text reaches this page.
 import { Activity, BookOpen, ClipboardList, Crosshair, History, Layers, ListChecks, ShieldCheck } from "lucide-react";
+import { CumulativeChart } from "@/components/charts/cumulative-chart";
+import { TradeBars } from "@/components/charts/trade-bars";
 import { Empty } from "@/components/empty";
 import { KeyValues } from "@/components/kv";
 import { Panel } from "@/components/panel";
@@ -12,6 +14,7 @@ import { StatusBadge } from "@/components/status";
 import { StepRail } from "@/components/step-rail";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { newYork, shortDate, sydney } from "@/lib/format";
+import { rCurve } from "@/lib/r-curve";
 import {
   dayRail,
   eventWords,
@@ -333,6 +336,11 @@ export function SafetyPanel({ live }: { live: Live | null }) {
 export function ClosedPanel({ live }: { live: Live | null }) {
   const rows = [...(live?.closed ?? [])].reverse();
   const t = results(live);
+  // The booked trades, oldest first, as a running R curve: SAFE figures only (day, rule code, R), never a symbol.
+  const curve = rCurve(
+    (live?.closed ?? []).filter((x) => x.booked !== false).map((x) => ({ day: x.day, r: x.r, code: x.code })),
+    (d) => (d ? shortDate(d) : "—"),
+  );
   return (
     <Panel
       title="Closed trades"
@@ -353,6 +361,26 @@ export function ClosedPanel({ live }: { live: Live | null }) {
               { label: "After haircut H2", value: <span className={TONE_TEXT[rTone(t.sumH2)]}>{rText(t.sumH2)}</span> },
             ]}
           />
+          {curve.points.length >= 2 ? (
+            <div className="grid gap-4 lg:grid-cols-2" data-testid="gap-r-charts">
+              <figure className="grid gap-2">
+                <figcaption className="text-muted-foreground text-xs">
+                  Running total in R, trade by trade; the shade is how far it stands below its earlier high (deepest {rText(curve.maxDd)}).
+                </figcaption>
+                <CumulativeChart compact points={curve.points.map((p) => ({ i: p.i, day: p.day, cum: p.cum, dd: p.dd }))} />
+              </figure>
+              <figure className="grid gap-2">
+                <figcaption className="text-muted-foreground text-xs">
+                  Each booked trade&apos;s result in R, oldest first: {curve.wins} up, {curve.losses} down.
+                </figcaption>
+                <TradeBars
+                  label="Gap Hunter: result of each booked trade in R, oldest first"
+                  whenLabel="Day"
+                  trades={curve.points.map((p) => ({ i: p.i, r: p.r, what: `Trade ${p.i}${p.code ? ` · rule ${p.code}` : ""}`, when: p.day }))}
+                />
+              </figure>
+            </div>
+          ) : null}
           <Table label="Gap Hunter closed trades">
             <TableHeader>
               <TableRow>
