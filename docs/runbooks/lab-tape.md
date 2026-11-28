@@ -73,6 +73,24 @@ Look at:
   up to the sum of `stale_ticks_by_name`. `stale_runs_by_name` lists each run as `[first tick, ticks]`, with the first
   200 kept per name, and `stale_runs` counts them all. These are diagnostics: no counting rule reads them. Manifests
   before 2026-11-27 do not have them;
+- why each run happened: `stale_run_causes_by_name` gives one entry per kept run, in the same order as
+  `stale_runs_by_name`. Each entry has the run's reading:
+  - `tier1_answered_share`: the share of tier-1 batches answered, over every name;
+  - `tier1_changed_per_tick`: option quotes changed per tick during the run;
+  - `tier1_changed_per_tick_before`: the median per tick over the five minutes before it;
+  - `stock_quote_age_s_max` and `stock_missing_ticks`: the name's SIP quote.
+
+  Each entry also has a `cause`, the first of these that applies:
+  - `requests_failed`: under 90 % of batches answered;
+  - `stock_feed_too`: the stock quote was over 30 s old, or missing on more than half the run's ticks;
+  - `option_quotes_stopped`: changes fell to a fifth of the rate before or less, as on 2026-11-25 at 13:55 and 14:16 ET,
+    when every request was answered and the stock quotes stayed current;
+  - `name_only`: only this name went quiet;
+  - `unknown`: no reading, or no baseline after a restart.
+
+  `stale_run_causes` counts the kept runs by cause (a name's runs past the first 200 are counted in `stale_runs`
+  but have no cause). These are diagnostics too: no counting rule reads them. Manifests before
+  the first session on this code do not have them;
 - `ticks_down`: ticks nobody ran, from a late start, a crash or a stop;
 - `opening_complete`;
 - `stopped`: empty on a normal day;

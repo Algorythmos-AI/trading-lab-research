@@ -35,6 +35,7 @@ import os
 import resource
 import shutil
 import signal
+import statistics
 import subprocess
 import sys
 import threading
@@ -63,6 +64,13 @@ STATE = "state.json"
 RUNS_KEPT = 200                                     # stale runs kept per name in the state and the manifest
 START_GRACE_S = 1.0                                 # a tick is still run when the run starts this late for it
 RECORDER_VERSION = 2                                # 2: sample and member streams, freshness by name (DEC-0067)
+# Why a stale run happened (diagnostic only: no counting rule reads it). On 2026-11-25 every tier-1 request was answered
+# and the stock quotes stayed current while option quotes all but stopped changing, for all names at once, twice; that
+# was found by hand from the tape. Each run now carries the same reading, and a cause from it.
+CAUSE_BASELINE_TICKS = 60                           # the five minutes before a run: its normal rate of quote changes
+CAUSE_ANSWERED_AT_LEAST = 0.9                       # fewer tier-1 batches answered than this share: the requests failed
+CAUSE_STOPPED_UNDER = 0.2                           # changes per tick under this share of the baseline: quotes stopped
+CAUSES = ("requests_failed", "stock_feed_too", "option_quotes_stopped", "name_only", "unknown")
 
 
 @dataclass(frozen=True)
@@ -152,6 +160,11 @@ class Recorder:
         self.first_fresh: dict[str, int] = {}                     # name: the first tick its quotes were fresh
         self.stale_by_name: dict[str, int] = {}                   # name: stale ticks after the freeze
         self.stale_runs: dict[str, list[list[int]]] = {}         # name: closed stale runs [first tick, ticks]
+        self.stale_causes: dict[str, list[dict[str, Any]]] = {}  # name: the cause of each kept run, in the same order
+        self.run_acc: dict[str, dict[str, Any]] = {}             # name: what its open stale run has seen so far
+        self.tick_t1 = {"batches": 0, "answered": 0, "changed": 0}  # this tick's tier-1 sweep, every name
+        self.stock_age: dict[str, float] = {}                    # name: this tick's SIP quote age at receipt (s)
+        self.recent_changed: collections.deque[int] = collections.deque(maxlen=CAUSE_BASELINE_TICKS)
         self.batch_syms: dict[tuple[int, int], tuple[str, ...]] = {}   # (tier, batch): the symbols last written
         self.tail_counted = False
         self.offsets: list[float] = []                 # the host clock's offset (ms), read every 30 minutes
@@ -209,6 +222,8 @@ class Recorder:
         self.first_fresh = {str(k): int(v) for k, v in (s.get("first_fresh") or {}).items()}
         self.stale_runs = {str(k): [[int(a), int(b)] for a, b in v] for k, v in (s.get("stale_runs") or {}).items()}
         self.name_newest = {str(k): int(v) for k, v in (s.get("name_newest") or {}).items()}
+        self.stale_causes = {str(k): [dict(c) for c in v] for k, v in (s.get("stale_causes") or {}).items()}
+        self.run_acc = {str(k): dict(v) for k, v in (s.get("run_acc") or {}).items()}
         ms = s.get("min_share")
         self.min_share = float(ms) if isinstance(ms, (int, float)) and not isinstance(ms, bool) else None
         self.counts.update({k: int(v) for k, v in (s.get("counts") or {}).items() if k in self.counts})
@@ -222,7 +237,8 @@ class Recorder:
                    "opening_missing": self.opening_missing, "freeze_tick": self.freeze_tick, "counts": self.counts,
                    "last_tick": self.last_tick, "refused": sorted(self.refused), "scheduled": self.scheduled,
                    "stale_from": self.stale_from, "stale_by_name": self.stale_by_name, "first_fresh": self.first_fresh,
-                   "stale_runs": self.stale_runs, "name_newest": self.name_newest, "min_share": self.min_share}
+                   "stale_runs": self.stale_runs, "name_newest": self.name_newest, "min_share": self.min_share,
+                   "stale_causes": self.stale_causes, "run_acc": self.run_acc}
             manifest.atomic(self.folder / STATE, json.dumps(doc))
 
     # ------------------------------------------------------------ requests, within the budget
@@ -347,6 +363,9 @@ class Recorder:
             row = quote_fields(snap)
             q = ts_ns(row["quote_ts"])
             newest = q if newest is None or (q is not None and q > newest) else newest
+            if q is not None:
+                with self.lock:
+                    self.stock_age[name] = (now - q) / 1e9
             bid, ask, last = row["bid"], row["ask"], row["last"]
             if isinstance(bid, float) and isinstance(ask, float) and 0 < bid <= ask:
                 self.mids[name] = ((bid + ask) / 2, t)
@@ -430,6 +449,7 @@ class Recorder:
                 go.append((i, b))
             else:
                 self._sample(tick, tier, i, b, 0, 0, 0, None, "budget", b)
+                self._tally(tier, answered=False)
         if len(go) < len(batches):
             self._gap(tick, f"tier{tier}", f"budget {len(batches) - len(go)} batches")
 
@@ -451,6 +471,7 @@ class Recorder:
             if not isinstance(snaps, Mapping):
                 self._gap(tick, f"tier{tier}", f"status {a.status} batch {i}")
                 self._sample(tick, tier, i, b, 0, 0, a.status, None, "failed", b)
+                self._tally(tier, answered=False)
                 continue
             lost, changed, bnew = [], 0, None
             for sym in b:
@@ -478,9 +499,19 @@ class Recorder:
                                                                  and a_ > 0 and b_ > a_)
             missing += len(lost)
             self._sample(tick, tier, i, b, len(b) - len(lost), changed, a.status, bnew, "ok", lost)
+            self._tally(tier, answered=True, changed=changed)
         if missing:
             self._gap(tick, f"tier{tier}", f"missing {missing}")
         return taken, newest, current
+
+    def _tally(self, tier: int, answered: bool, changed: int = 0) -> None:
+        """This tick's tier-1 batches, answered batches and changed quotes, over every name (cause diagnostics)."""
+        if tier != 1:
+            return
+        with self.lock:
+            self.tick_t1["batches"] += 1
+            self.tick_t1["answered"] += int(answered)
+            self.tick_t1["changed"] += changed
 
     def tier1_now(self) -> set[str]:
         with self.lock:
@@ -531,6 +562,9 @@ class Recorder:
 
     def one_tick(self, tick: int, pool: cf.ThreadPoolExecutor) -> None:
         ok = True
+        with self.lock:
+            self.tick_t1 = {"batches": 0, "answered": 0, "changed": 0}
+            self.stock_age = {}
         got: tuple[dict[str, int], dict[str, int], dict[str, int]] = ({}, {}, {})
         try:
             got = self.sweep(self.tier1_now(), 1, tick)
@@ -564,8 +598,67 @@ class Recorder:
         RUNS_KEPT of each name are kept, so a name that flaps all day cannot swell the state or the manifest."""
         self.counts["stale_runs"] += 1
         runs = self.stale_runs.setdefault(name, [])
+        acc = self.run_acc.pop(name, None)
         if len(runs) < RUNS_KEPT:
             runs.append([began, ticks])
+            self.stale_causes.setdefault(name, []).append(self.cause_of(acc))
+
+    def cause_of(self, acc: Mapping[str, Any] | None) -> dict[str, Any]:
+        """What a stale run saw, and its cause, first that applies: tier-1 batches went unanswered (requests_failed);
+        this name's SIP stock quote was old or missing too (stock_feed_too); option quotes across every name changed
+        at under a fifth of their rate in the five minutes before (option_quotes_stopped, as on 2026-11-25); else
+        only this name went quiet (name_only). A run with no reading, or no baseline, is unknown."""
+        if not acc or not acc.get("ticks"):
+            return {"cause": "unknown"}
+        ticks, batches = int(acc["ticks"]), int(acc.get("batches", 0))
+        answered = round(acc.get("answered", 0) / batches, 4) if batches else None
+        per_tick = round(acc.get("changed", 0) / ticks, 1)
+        before = acc.get("baseline")
+        age = acc.get("stock_age_max")
+        no_stock = int(acc.get("stock_missing", 0))
+        if answered is None or answered < CAUSE_ANSWERED_AT_LEAST:
+            cause = "requests_failed"
+        elif no_stock * 2 > ticks or (age is not None and age > self.settings.stale_after_s):
+            cause = "stock_feed_too"
+        elif before is None:
+            cause = "unknown"
+        elif per_tick <= CAUSE_STOPPED_UNDER * before:
+            cause = "option_quotes_stopped"
+        else:
+            cause = "name_only"
+        return {"cause": cause, "tier1_answered_share": answered, "tier1_changed_per_tick": per_tick,
+                "tier1_changed_per_tick_before": before, "stock_quote_age_s_max": None if age is None else round(age, 1),
+                "stock_missing_ticks": no_stock}
+
+    def _see(self, name: str, tick: int) -> None:
+        """Adds this tick's reading to the name's open stale run (under the lock). The baseline is the median of the
+        ticks before the run opened; a run whose start this run did not see (a restart) has none."""
+        acc = self.run_acc.get(name)
+        if acc is None:
+            opening = tick == self.stale_from.get(name)
+            base = statistics.median(self.recent_changed) if opening and self.recent_changed else None
+            acc = self.run_acc[name] = {"ticks": 0, "batches": 0, "answered": 0, "changed": 0,
+                                        "baseline": None if base is None else round(float(base), 1),
+                                        "stock_age_max": None, "stock_missing": 0}
+        t = self.tick_t1
+        acc["ticks"] += 1
+        acc["batches"] += t["batches"]
+        acc["answered"] += t["answered"]
+        acc["changed"] += t["changed"]
+        age = self.stock_age.get(name)
+        if age is None:
+            acc["stock_missing"] += 1
+        else:
+            acc["stock_age_max"] = age if acc["stock_age_max"] is None else max(acc["stock_age_max"], age)
+
+    def stale_causes_now(self) -> dict[str, list[dict[str, Any]]]:
+        """The causes of the runs in `stale_runs_now`, in the same order, an open run read as it stands."""
+        out = {n: [dict(c) for c in v] for n, v in self.stale_causes.items()}
+        last = self.last_tick
+        for n, began in self.stale_from.items():
+            if last is not None and last >= began and len(self.stale_runs.get(n, [])) < RUNS_KEPT:
+                out.setdefault(n, []).append(self.cause_of(self.run_acc.get(n)))
+        return dict(sorted(out.items()))
 
     def stale_runs_now(self) -> dict[str, list[list[int]]]:
         """The closed stale runs by name, with any run still open counted to the newest tick run."""
@@ -612,8 +705,10 @@ class Recorder:
                 self.counts["stale_mid_session" if n in self.first_fresh else "stale_slow_start"] += 1
                 if n not in self.stale_from:
                     self.stale_from[n] = tick
+                    self.run_acc.pop(n, None)
                     self._gap(tick, "feed", f"{n} stale: newest tier-1 quote "
                               + ("missing" if age is None else f"{age:.0f} s old"))
+                self._see(n, tick)
                 self.counts["longest_stale_ticks"] = max(self.counts["longest_stale_ticks"],
                                                          tick - self.stale_from[n] + 1)
             self.counts["taken"] += sum(taken.values())
@@ -621,6 +716,7 @@ class Recorder:
             self.counts["taken_fresh"] += sum(cur.get(n, 0) for n in taken if n not in stale_names)
             if stale_names:
                 self.counts["stale_ticks"] += 1
+            self.recent_changed.append(self.tick_t1["changed"])
 
     def run(self, start: dt.datetime, end: dt.datetime) -> None:
         tick_s = self.settings.tick_s
@@ -715,6 +811,8 @@ class Recorder:
             "first_fresh_tick_by_name": dict(sorted(self.first_fresh.items())),
             "stale_ticks_slow_start": c["stale_slow_start"], "stale_ticks_mid_session": c["stale_mid_session"],
             "stale_runs_by_name": self.stale_runs_now(),
+            "stale_run_causes_by_name": (causes := self.stale_causes_now()),
+            "stale_run_causes": {k: n for k in CAUSES if (n := sum(c["cause"] == k for v in causes.values() for c in v))},
             "stale_runs": c["stale_runs"] + sum(1 for n, b in self.stale_from.items()
                                                 if self.last_tick is not None and self.last_tick >= b),
             "tier1_crossed_share": round(c["tier1_crossed_rows"] / c["tier1_rows"], 6) if c["tier1_rows"] else 0.0,

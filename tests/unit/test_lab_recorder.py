@@ -59,6 +59,8 @@ class Alpaca:
         self.answers: list[tuple[dt.datetime, list[str], str | None]] = []     # (when, symbols, newest quote time)
         self.prior_day: dict[str, dt.datetime] = {}     # root: answered with the previous day's quotes until then
         self.prior_syms: set[str] = set()               # contracts always answered with yesterday's quote
+        self.quiet: dict[str, tuple[dt.datetime, dt.datetime]] = {}   # root: its quotes do not change in this window
+        self.stock_old: tuple[dt.datetime, dt.datetime] | None = None  # SIP answers a quote stamped at its start
 
     def stamp(self, step: int) -> str:
         if step not in self.quote_at:
@@ -85,6 +87,8 @@ class Alpaca:
             if self.n_stock in self.stock_raise:
                 raise ValueError("a malformed answer")
             qt = (self.clock.t - dt.timedelta(milliseconds=50)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            if self.stock_old is not None and self.stock_old[0] <= self.clock.t < self.stock_old[1]:
+                qt = self.stock_old[0].strftime("%Y-%m-%dT%H:%M:%S.%fZ")
             return Answer(200, h, {s: {"latestQuote": {"bp": self.mid(s) - 0.01, "ap": self.mid(s) + 0.01,
                                                         "bs": 3, "as": 4, "t": qt}}
                                    for s in params["symbols"].split(",")}, self.step)
@@ -118,6 +122,9 @@ class Alpaca:
             def q(s: str) -> dict[str, Any]:
                 if s in old:                            # yesterday's last quote, as Alpaca served it on 2026-11-19
                     return {"bp": 0.4, "ap": 0.5, "bs": 1, "as": 1, "t": "2026-11-18T20:59:58.000000Z"}
+                w = self.quiet.get(s[:-15])
+                if w is not None and w[0] <= self.clock.t < w[1]:     # this name alone stops changing
+                    return {"bp": 0.4, "ap": 0.5, "bs": 1, "as": 1, "t": w[0].strftime("%Y-%m-%dT%H:%M:%S.%fZ")}
                 return {"bp": 0.0 if s[9] == "P" else v - 0.1, "ap": v, "bs": 1, "as": 2, "t": self.stamp(step)}
             for s in syms:
                 self.served.setdefault(s, []).append((self.clock.t, q(s)["bp"], q(s)["ap"], q(s)["t"]))
@@ -727,3 +734,70 @@ def test_stale_runs_kept_per_name_are_capped_but_all_are_counted(tmp_path: Path)
     for i in range(recorder.RUNS_KEPT + 5):
         rec._close_run("AAA", 10 * i, 2)
     assert len(rec.stale_runs["AAA"]) == recorder.RUNS_KEPT and rec.counts["stale_runs"] == recorder.RUNS_KEPT + 5
+    assert rec.stale_causes["AAA"] == [{"cause": "unknown"}] * recorder.RUNS_KEPT    # no reading: kept, said unknown
+
+
+# ---------------------------------------------------------------- why a run happened (diagnostic only)
+def causes(doc: Mapping[str, Any]) -> dict[str, list[str]]:
+    runs, why = doc["stale_runs_by_name"], doc["stale_run_causes_by_name"]
+    assert {n: len(v) for n, v in why.items()} == {n: len(v) for n, v in runs.items()}   # one cause per kept run
+    assert sum(doc["stale_run_causes"].values()) == doc["stale_runs"]
+    return {n: [c["cause"] for c in v] for n, v in why.items()}
+
+
+def test_every_name_answered_but_no_quote_changing_is_option_quotes_stopped(tmp_path: Path) -> None:
+    """2026-11-25, 13:55 and 14:16 ET: every request answered and the stock quotes current, but option quotes all
+    but stopped changing, for every name at once."""
+    clock = Clock(START - dt.timedelta(seconds=30))
+    api = Alpaca(clock)
+    api.frozen = (START + dt.timedelta(minutes=5), START + dt.timedelta(minutes=7))
+    rec, doc, _ = session(tmp_path, minutes=9, api=api)
+    assert causes(doc) == {"AAA": ["option_quotes_stopped"], "BBB": ["option_quotes_stopped"]}
+    c = doc["stale_run_causes_by_name"]["AAA"][0]
+    assert c["tier1_answered_share"] == 1.0 and c["stock_missing_ticks"] == 0 and c["stock_quote_age_s_max"] < 1
+    assert c["tier1_changed_per_tick_before"] > 0 and c["tier1_changed_per_tick"] == 0
+    assert doc["stale_run_causes"] == {"option_quotes_stopped": 2}
+
+
+def test_unanswered_tier1_batches_are_requests_failed(tmp_path: Path) -> None:
+    clock = Clock(START - dt.timedelta(seconds=30))
+    api = Alpaca(clock, fail_tier1=set(range(40, 75)))
+    rec, doc, _ = session(tmp_path, minutes=9, api=api)
+    assert set(causes(doc)) == {"AAA", "BBB"}
+    assert {c for v in causes(doc).values() for c in v} == {"requests_failed"}
+    assert all(c["tier1_answered_share"] < 0.9 for v in doc["stale_run_causes_by_name"].values() for c in v)
+
+
+def test_one_name_quiet_while_the_others_move_is_name_only(tmp_path: Path) -> None:
+    clock = Clock(START - dt.timedelta(seconds=30))
+    api = Alpaca(clock)
+    api.quiet = {"AAA": (START + dt.timedelta(minutes=5), START + dt.timedelta(minutes=7))}
+    rec, doc, _ = session(tmp_path, minutes=9, api=api)
+    assert causes(doc) == {"AAA": ["name_only"]}
+
+
+def test_an_old_stock_quote_with_the_options_is_stock_feed_too(tmp_path: Path) -> None:
+    clock = Clock(START - dt.timedelta(seconds=30))
+    api = Alpaca(clock)
+    api.frozen = (START + dt.timedelta(minutes=5), START + dt.timedelta(minutes=7))
+    api.stock_old = api.frozen
+    rec, doc, _ = session(tmp_path, minutes=9, api=api)
+    assert {c for v in causes(doc).values() for c in v} == {"stock_feed_too"}
+    assert all(c["stock_quote_age_s_max"] > 30 for v in doc["stale_run_causes_by_name"].values() for c in v)
+
+
+def test_a_run_open_across_a_restart_keeps_its_reading(tmp_path: Path) -> None:
+    clock = Clock(START - dt.timedelta(seconds=30))
+    api = Alpaca(clock, exit_at_stock=80)
+    api.frozen = (START + dt.timedelta(minutes=5), START + dt.timedelta(hours=1))   # stale to the end
+    rec = make(tmp_path, clock, api)
+    rec.run(START, START + dt.timedelta(minutes=9))
+    recorder.TERM.clear()
+    rec.flush()
+    api.exit_at_stock = None
+    rec2 = make(tmp_path, clock, api)
+    rec2.run(START, START + dt.timedelta(minutes=9))
+    doc = rec2.finish({})
+    assert causes(doc) == {"AAA": ["option_quotes_stopped"], "BBB": ["option_quotes_stopped"]}
+    before = doc["stale_run_causes_by_name"]["AAA"][0]["tier1_changed_per_tick_before"]
+    assert before is not None and before > 0                              # the baseline from before the restart
