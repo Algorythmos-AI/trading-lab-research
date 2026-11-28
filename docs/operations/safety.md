@@ -10,7 +10,7 @@ Three layers keep orders away from a live account.
 | Layer | What it does | Where |
 |---|---|---|
 | Hard-coded paper client | Every Alpaca trading client is built with `paper=True` | `src/wt/brokers/alpaca_paper.py`, `alpaca_options_paper.py`, `alpaca_read.py` |
-| The paper-only lock | Refuses unless `MODE` is `paper`, `LIVE_TRADING_ENABLED` is unset or plainly false (`0`, `false`, `no`, `off`; any other value counts as on), the trading URL (and `APCA_API_BASE_URL` if set) is exactly `https://paper-api.alpaca.markets`, and the account number starts with `PA`. All four are checked when an adapter is built; before every order, `place()` checks the environment part again (`MODE`, `LIVE_TRADING_ENABLED`, `APCA_API_BASE_URL`) | `src/wt/core/safety.py` |
+| The paper-only lock | Refuses unless `MODE` is `paper`, `LIVE_TRADING_ENABLED` is unset, empty or plainly false (`0`, `false`, `no`, `off`, any case; any other value counts as on), the trading URL (and `APCA_API_BASE_URL` if set) is exactly `https://paper-api.alpaca.markets`, and the account number starts with `PA`. All four are checked when an adapter is built; before every order, `place()` checks the environment part again (`MODE`, `LIVE_TRADING_ENABLED`, `APCA_API_BASE_URL`) | `src/wt/core/safety.py` |
 | `MODE` is set per job | `wt.ops.jobs` starts each job's process with that job's `MODE`. The runners also refuse to start unless `MODE=paper` | `src/wt/ops/jobs.py` (`run_child`), `src/wt/live/runner_s.py`, `src/wt/live/runner_o.py` |
 
 On a host with `WT_ROLE=shadow`, Gap Hunter, the options clone (and the retired QQQ runner) wrap their broker in
