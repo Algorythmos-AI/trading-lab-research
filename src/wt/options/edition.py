@@ -130,9 +130,15 @@ def read_pulls(folder: Path, names: Sequence[str]) -> tuple[Pulls, Pulls, Pulls]
 
 # ---- the run
 
+def _ny_date(now: dt.datetime) -> str:
+    """New York's date at `now` (UTC, no zone attached), daylight time included: a fixed 5 h was an hour off in summer."""
+    from zoneinfo import ZoneInfo
+    return now.replace(tzinfo=dt.UTC).astimezone(ZoneInfo("America/New_York")).date().isoformat()
+
+
 def finished_session(now: dt.datetime) -> str:
     """The latest session whose close is final at `now` (UTC, no zone attached, as the engine keeps its times)."""
-    d = (now - dt.timedelta(hours=5)).date().isoformat()
+    d = _ny_date(now)
     finished = d if lv.is_session(d) else lv.prev_session(d)
     if now < lv.close_final_utc(finished):
         finished = lv.prev_session(finished)
@@ -142,7 +148,7 @@ def finished_session(now: dt.datetime) -> str:
 def nothing_new(now: dt.datetime, built: Callable[[str], bool]) -> bool:
     """True on a day with no session of its own (weekend, holiday) when the next session's levels already exist."""
     finished = finished_session(now)
-    today_ny = (now - dt.timedelta(hours=5)).date().isoformat()
+    today_ny = _ny_date(now)
     return not lv.is_session(today_ny) and finished != today_ny and built(lv.next_session(finished))
 
 
@@ -215,8 +221,12 @@ def run(names: Sequence[str], daily: Pulls, hourly: Pulls, snaps: Pulls, now: dt
                 "snap_ts": s.get("last", {}).get("ts")})
             ann = iv.get("annual_iv")
             px = got["last"]["close"]
-            entry["expected_move"] = {"annual_iv": ann, "day": round(lv.expected_move(px, ann, 1), 2),
-                                      "week": round(lv.expected_move(px, ann, 5), 2), "from": "IBKR implied vol"}
+            if isinstance(ann, (int, float)) and not isinstance(ann, bool) and isinstance(px, (int, float)):
+                entry["expected_move"] = {"annual_iv": ann, "day": round(lv.expected_move(px, ann, 1), 2),
+                                          "week": round(lv.expected_move(px, ann, 5), 2), "from": "IBKR implied vol"}
+            else:                                    # a valid snapshot with no number: this name only, not the run
+                entry["expected_move"] = None
+                out.problems.setdefault(t, []).append("implied-vol snapshot without a value (levels still written)")
         else:
             entry["expected_move"] = None
             out.problems.setdefault(t, []).append("no valid implied-vol snapshot (levels still written)")

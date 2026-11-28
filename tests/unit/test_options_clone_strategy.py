@@ -194,6 +194,7 @@ def test_the_nearest_strike_that_passes_every_check_is_chosen():
 
 @pytest.mark.parametrize("change, reason", [
     ({"age_s": 120}, "stale-quote"),
+    ({"age_s": -30}, "future-quote"),                                 # stamped ahead of the host clock
     ({"bid": 0.95, "ask": 1.15}, "spread-too-wide"),
     ({"vol": 100}, "volume-below-floor"),
     ({"bid": 1.2, "ask": 1.1}, "no-two-sided-quote"),                   # crossed

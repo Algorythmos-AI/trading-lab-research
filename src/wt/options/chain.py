@@ -20,6 +20,9 @@ from wt.options.regime import NEW_YORK
 OCC = re.compile(r"(?P<root>[A-Z]{1,6})(?P<yy>\d{2})(?P<mm>\d{2})(?P<dd>\d{2})(?P<cp>[CP])(?P<k>\d{8})")
 
 
+FUTURE_QUOTE_S = 2.0      # a quote stamped more than this ahead of the host clock is refused, not counted fresh
+
+
 @dataclass(frozen=True)
 class Contract:
     symbol: str
@@ -181,6 +184,8 @@ def pick(quotes: Sequence[Quote], root: str, side: str, expiry: dt.date, spot: f
             no("no-two-sided-quote")
         elif age is None or age > stale_s:
             no("stale-quote")
+        elif age < -FUTURE_QUOTE_S:                  # stamped ahead of this clock: its age can't be told (Stage 2 too)
+            no("future-quote")
         elif q.delta is None:
             no("no-delta")
         elif abs(q.delta) < floor:
