@@ -42,6 +42,9 @@ The table between the markers is generated from `JOBS`. If you change the schedu
 | `wt-news-archive` | Mon..Fri 20:45 New York | `python scripts/news_archive.py --catch-up 30 --publish` | backtest | no | stocks | Archive the finished days of Alpaca's news items and push them to the private archive repository |
 <!-- jobs:end -->
 
+- **Feeds.** `wt-routine` reads SIP only; a live run refuses any other `--feed` (DEC-0064 point 9, #698).
+  Before a session it asks the market calendar whether the day is a session, so a holiday exits 0 rather than
+  timing out in the 07:55 wait.
 - **`MODE`.** Only `paper-s` and `paper-o` run with `MODE=paper`, and only they place (paper) orders. Every other job
   runs with `MODE=backtest`, so the paper-only lock refuses any order it might try ([safety.md](safety.md)).
 - **Gated.** A job is gated when its `trading` flag is set. The deploy gate stays closed while a gated job runs or
