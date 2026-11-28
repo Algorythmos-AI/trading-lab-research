@@ -51,9 +51,30 @@ def _guarded_connect_ex(self: socket.socket, address: object) -> int:
     return _real_connect_ex(self, address)
 
 
+_real_getaddrinfo = socket.getaddrinfo
+
+
+def _guarded_getaddrinfo(host: object, *args: object, **kw: object) -> object:
+    """Name lookups too: resolving a real host name would already send a DNS query. Loopback names and numeric
+    addresses resolve locally and pass."""
+    name = host.decode() if isinstance(host, (bytes, bytearray)) else host
+    if name is None or name in ("localhost", "") or _loopback((name, 0)) or _numeric(name):
+        return _real_getaddrinfo(host, *args, **kw)  # type: ignore[arg-type]
+    raise NetworkBlocked(f"unit tests never reach the network: name lookup of {name!r} refused")
+
+
+def _numeric(name: object) -> bool:
+    try:
+        ipaddress.ip_address(str(name).split("%")[0])
+        return True
+    except ValueError:
+        return False
+
+
 @pytest.fixture(autouse=True)
 def _no_network(monkeypatch):
     """Every outbound connection but loopback fails the test that makes it, so an unmocked request is caught in CI
     instead of reaching Alpaca, ntfy or GitHub from a developer's machine."""
     monkeypatch.setattr(socket.socket, "connect", _guarded_connect)
     monkeypatch.setattr(socket.socket, "connect_ex", _guarded_connect_ex)
+    monkeypatch.setattr(socket, "getaddrinfo", _guarded_getaddrinfo)

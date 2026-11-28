@@ -25,3 +25,11 @@ def test_loopback_is_still_allowed() -> None:
         c.close()
     finally:
         srv.close()
+
+
+def test_a_name_lookup_is_refused_before_any_dns_query() -> None:
+    with pytest.raises(OSError, match="name lookup"):
+        socket.getaddrinfo("data.alpaca.markets", 443)
+    with pytest.raises(requests.exceptions.ConnectionError):
+        requests.get("https://data.alpaca.markets/v2/stocks/bars", timeout=1)
+    assert socket.getaddrinfo("localhost", 80)                          # local names still resolve
