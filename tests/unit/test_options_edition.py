@@ -75,6 +75,9 @@ def test_the_session_just_finished_is_the_last_whose_close_is_final():
     assert edition.finished_session(dt.datetime(2026, 10, 10, 15, 0)) == "2026-10-09"      # Saturday
     assert edition.finished_session(dt.datetime(2026, 11, 27, 18, 15)) == "2026-11-27"     # half day, final at 13:15 ET
     assert edition.finished_session(dt.datetime(2026, 11, 26, 22, 0)) == "2026-11-25"      # Thanksgiving
+    # New York's date on daylight time: 00:30 New York on Tuesday 2026-06-09 is 04:30 UTC (a fixed 5 h read Monday)
+    assert edition._ny_date(dt.datetime(2026, 6, 9, 4, 30)) == "2026-06-09"
+    assert edition._ny_date(dt.datetime(2026, 12, 9, 4, 30)) == "2026-12-08"               # standard time: still Monday
     # A weekend with Monday's levels already there is nothing new; before they exist it is still a run to make.
     sat = dt.datetime(2026, 10, 10, 15, 0)
     assert edition.nothing_new(sat, lambda s: s == "2026-10-12") and not edition.nothing_new(sat, lambda s: False)
